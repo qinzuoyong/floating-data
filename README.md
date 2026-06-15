@@ -1,7 +1,7 @@
 # 🔋 勇哥 - 电池温度悬浮窗
 
 > **实时监测电池温度与功耗的 Android 悬浮窗工具**  
-> 版本: **1.42** | 最低支持: **Android 14 (API 34)**
+> 版本: **1.43** | 最低支持: **Android 14 (API 34)**
 
 ---
 
@@ -56,6 +56,7 @@ APK 输出路径：`app/build/outputs/apk/debug/yongge.apk`
 
 | 版本 | 日期 | 变更 |
 |------|------|------|
+| v1.43 | 2026-06-15 | 修复自动更新功能（固定下载链接为 Gitee releases）；版本升级
 | v1.42 | 2026-06-15 | 双击锁定悬浮窗；UI 全面美化；代码清理优化；版本升级
 | v1.41 | 2026-06-15 | 取消悬浮窗点击；自动版本更新检测；悬浮窗开关移至顶部；UI 优化；版本升级 |
 | v1.4 | 2026-06-15 | SDK 降级至兼容安卓 14；Home/返回双键隐藏后台；版本号升级 |
@@ -70,3 +71,4 @@ APK 输出路径：`app/build/outputs/apk/debug/yongge.apk`
 
 **作者**: qinzuoyong  
 **仓库**: https://gitee.com/qinzuoyong/floating-data
+
