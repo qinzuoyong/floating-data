@@ -25,7 +25,7 @@ data class UpdateInfo(
  */
 object UpdateChecker {
     private const val TAG = "UpdateChecker"
-    private const val API_URL = "https://api.gitee.com/repos/qinzuoyong/floating-data/releases/latest"
+    private const val API_URL = "https://gitee.com/api/v5/repos/qinzuoyong/floating-data/releases/latest"
 
     /**
      * 检查是否有新版本
@@ -43,7 +43,7 @@ object UpdateChecker {
             val response = conn.inputStream.bufferedReader().readText()
             val json = JSONObject(response)
             val latestTag = json.getString("tag_name").removePrefix("v")
-            val downloadUrl = json.getString("html_url")
+            val downloadUrl = "https://gitee.com/qinzuoyong/floating-data/releases"
 
             val hasUpdate = compareVersions(latestTag, currentVersion) > 0
             Log.i(TAG, "当前版本: $currentVersion, 最新版本: $latestTag, 有更新: $hasUpdate")

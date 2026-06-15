@@ -129,7 +129,7 @@ fun MainScreen(
     var fontSliderValue by remember { mutableFloatStateOf(prefs.getFloat("font_size", 14f)) }
     var cornerSliderValue by remember { mutableFloatStateOf(prefs.getFloat("corner_radius", 30f)) }
     var bgAlphaValue by remember { mutableFloatStateOf(prefs.getFloat("bg_alpha", 0.8f)) }
-    var isServiceRunning by remember { mutableStateOf(false) }
+    var isServiceRunning by remember { mutableStateOf(FloatingWindowService.isRunning) }
     var bgColor by remember { mutableIntStateOf(prefs.getInt("bg_color", 0xFF000000.toInt())) }
     var textColor by remember { mutableIntStateOf(prefs.getInt("text_color", 0xFFFFFFFF.toInt())) }
     var showPower by remember { mutableStateOf(prefs.getBoolean("show_power", false)) }
@@ -145,7 +145,7 @@ fun MainScreen(
     LaunchedEffect(Unit) {
         if (!hasChecked) {
             hasChecked = true
-            val info = UpdateChecker.check("1.42")
+            val info = UpdateChecker.check("1.43")
             if (info.hasUpdate) {
                 updateVersion = info.latestVersion
                 updateUrl = info.downloadUrl
@@ -185,7 +185,7 @@ fun MainScreen(
                     )
                     Spacer(Modifier.height(12.dp))
                     Text(
-                        "当前版本: v1.42",
+                        "当前版本: v1.43",
                         fontSize = 13.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         textAlign = TextAlign.Center
