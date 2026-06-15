@@ -1,4 +1,4 @@
-plugins {
+﻿plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
 }
@@ -22,18 +22,14 @@ android {
             }
         }
     }
-    compileSdk {
-        version = release(36) {
-            minorApiLevel = 1
-        }
-    }
+    compileSdk = 35
 
     defaultConfig {
         applicationId = "com.yongge.batteryfloat"
-        minSdk = 36
-        targetSdk = 36
-        versionCode = 7
-        versionName = "1.33"
+        minSdk = 34
+        targetSdk = 34
+        versionCode = 9
+        versionName = "1.41"
 
         // 只保留中文资源，剪掉多语言
         resConfigs("zh")

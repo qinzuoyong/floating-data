@@ -1,4 +1,4 @@
-package com.example.batteryfloat.view
+﻿package com.example.batteryfloat.view
 
 import android.content.Context
 import android.content.SharedPreferences
@@ -18,7 +18,7 @@ import com.example.batteryfloat.R
  * Battery temperature floating window view (dual-line version)
  * - LinearLayout vertical layout: temperature + power consumption
  * - Rounded semi-transparent background with customizable appearance
- * - Full-screen drag + click to open main activity
+ * - Full-screen drag support only (click disabled)
  */
 class FloatingWindowView(context: Context) : LinearLayout(context) {
 
@@ -44,7 +44,6 @@ class FloatingWindowView(context: Context) : LinearLayout(context) {
     init {
         orientation = VERTICAL
         gravity = Gravity.CENTER
-        isClickable = true
 
         // Temperature row
         tempText.text = context.getString(R.string.temperature_loading)
@@ -161,27 +160,10 @@ class FloatingWindowView(context: Context) : LinearLayout(context) {
                 return true
             }
             MotionEvent.ACTION_UP -> {
-                val dx = Math.abs(event.rawX - initialTouchX)
-                val dy = Math.abs(event.rawY - initialTouchY)
-                if (dx < 10 && dy < 10) {
-                    performClick()
-                }
                 return true
             }
         }
         return super.onTouchEvent(event)
-    }
-
-    override fun performClick(): Boolean {
-        super.performClick()
-        val intent = android.content.Intent(
-            context,
-            com.example.batteryfloat.MainActivity::class.java
-        ).apply {
-            addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
-        }
-        context.startActivity(intent)
-        return true
     }
 
     private fun dpToPx(dp: Int): Int {

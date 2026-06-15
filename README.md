@@ -1,7 +1,7 @@
 ﻿# 🔋 勇哥 - 电池温度悬浮窗
 
 > **实时监测电池温度与功耗的 Android 悬浮窗工具**  
-> 版本: **1.33** | 最低支持: **Android 16 (API 36)**
+> 版本: **1.41** | 最低支持: **Android 14 (API 34)**
 
 ---
 
@@ -14,19 +14,21 @@
 - 👻 **隐藏后台模式** — 开启后按 Home/返回键自动移除任务卡片，防止被划掉（悬浮窗服务继续运行）
 - 📱 **开机自启** — 支持开机自动启动悬浮窗服务
 - 💪 **持久保活** — 前台 Service + AlarmManager 心跳，START_STICKY 重启策略
+- 🔄 **自动更新检测** — 打开应用自动检测 Gitee 仓库是否有新版本，可选升级或忽略
 
 ## 📦 下载
 
 | 版本 | 文件 | 大小 |
 |------|------|------|
-| v1.33 | [yongge.apk](apk/yongge.apk) | 5.4 MB |
+| v1.41 | [yongge.apk](apk/yongge.apk) | 5.4 MB |
+| v1.4 | ~~[yongge.apk](apk/yongge.apk)~~ | 5.4 MB |
 
 ## 🛠️ 构建说明
 
 ### 环境要求
 - Android Studio
 - JDK 17+
-- Android SDK 36
+- Android SDK 35+
 
 ### 构建命令
 `./gradlew.bat assembleDebug --no-configuration-cache`
@@ -38,6 +40,9 @@ APK 输出路径：`app/build/outputs/apk/debug/yongge.apk`
 |------|------|
 | Kotlin | 2.2.10 |
 | AGP | 9.2.1 |
+| Compile SDK | 35 |
+| Min SDK | 34 (Android 14) |
+| Target SDK | 34 |
 | Compose BOM | 2026.02.01 |
 | Material3 | ✅ |
 | Shizuku | 13.1.5 |
@@ -55,6 +60,8 @@ APK 输出路径：`app/build/outputs/apk/debug/yongge.apk`
 
 | 版本 | 日期 | 变更 |
 |------|------|------|
+| v1.41 | 2026-06-15 | 取消悬浮窗点击；自动版本更新检测；悬浮窗开关移至顶部；UI 优化；版本升级 |
+| v1.4 | 2026-06-15 | SDK 降级至兼容安卓 14；Home/返回双键隐藏后台；版本号升级 |
 | v1.33 | 2026-06-15 | 横→竖切换吸附；返回键隐藏后台；UI 更新 |
 | v1.32 | 2026-06-15 | 修复横屏拖拽回弹；完善隐藏后台 |
 | v1.31 | 2026-06-15 | 优化拖拽边界；隐藏后台；APK 改名 |
@@ -64,5 +71,5 @@ APK 输出路径：`app/build/outputs/apk/debug/yongge.apk`
 
 ---
 
-**作者**: qin-zuoyong  
-**仓库**: https://gitee.com/qin-zuoyong/floating-data
+**作者**: qinzuoyong  
+**仓库**: https://gitee.com/qinzuoyong/floating-data
