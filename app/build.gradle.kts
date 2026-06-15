@@ -15,6 +15,7 @@ android {
             val apkDir = layout.buildDirectory.dir("outputs/apk/debug").get().asFile
             val src = apkDir.resolve("yongge-debug.apk")
             val dst = apkDir.resolve("yongge.apk")
+            if (dst.exists()) dst.delete()
             if (src.exists() && src.renameTo(dst)) {
                 logger.lifecycle("APK renamed: yongge.apk")
             } else {
@@ -28,8 +29,8 @@ android {
         applicationId = "com.yongge.batteryfloat"
         minSdk = 34
         targetSdk = 34
-        versionCode = 12
-        versionName = "1.44"
+        versionCode = 13
+        versionName = "1.5"
 
         // 只保留中文资源，剪掉多语言
         resConfigs("zh")

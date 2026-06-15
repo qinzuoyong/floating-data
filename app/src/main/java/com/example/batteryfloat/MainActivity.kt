@@ -149,7 +149,7 @@ fun MainScreen(
     LaunchedEffect(Unit) {
         if (!hasChecked) {
             hasChecked = true
-            val info = UpdateChecker.check("1.44")
+            val info = UpdateChecker.check("1.5")
             if (info.hasUpdate) {
                 updateVersion = info.latestVersion
                 updateUrl = info.downloadUrl
@@ -189,7 +189,7 @@ fun MainScreen(
                     )
                     Spacer(Modifier.height(12.dp))
                     Text(
-                    "当前版本: v1.44",
+                    "当前版本: v1.5",
                         fontSize = 13.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         textAlign = TextAlign.Center
@@ -498,14 +498,14 @@ fun MainScreen(
                 ) {
                     Column {
                         Text("🎯 版本更新", fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
-                        Text("v1.44", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("v1.5", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     Button(
                         onClick = {
                             if (!isChecking) {
                                 isChecking = true
                                 scope.launch {
-                                    val info = UpdateChecker.check("1.44")
+            val info = UpdateChecker.check("1.5")
                                     isChecking = false
                                     if (info.hasUpdate) {
                                         updateVersion = info.latestVersion
