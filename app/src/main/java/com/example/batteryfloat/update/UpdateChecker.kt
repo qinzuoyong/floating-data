@@ -59,13 +59,9 @@ object UpdateChecker {
      * @return >0 表示 v1 > v2, <0 表示 v1 < v2, =0 表示相等
      */
     private fun compareVersions(v1: String, v2: String): Int {
-        val parts1 = v1.split(".").map { it.toIntOrNull() ?: 0 }
-        val parts2 = v2.split(".").map { it.toIntOrNull() ?: 0 }
-        for (i in 0 until maxOf(parts1.size, parts2.size)) {
-            val p1 = parts1.getOrElse(i) { 0 }
-            val p2 = parts2.getOrElse(i) { 0 }
-            if (p1 != p2) return p1 - p2
-        }
-        return 0
+        // 使用十进制浮点数比较（1.5 > 1.44）
+        val d1 = v1.toDoubleOrNull() ?: 0.0
+        val d2 = v2.toDoubleOrNull() ?: 0.0
+        return d1.compareTo(d2)
     }
 }
