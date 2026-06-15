@@ -1,4 +1,4 @@
-﻿plugins {
+plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
 }
@@ -9,17 +9,18 @@ android {
     base {
         archivesName.set("yongge")
     }
-    // assembleDebug 完成后将 APK 重命名为 yongge.apk
-    tasks.register("renameApkToYongge") {
+    // assembleDebug 完成后将 APK 复制为 yongge.apk（用 copyTo 替代不可靠的 renameTo）
+    tasks.register("copyApkToYongge") {
         doLast {
             val apkDir = layout.buildDirectory.dir("outputs/apk/debug").get().asFile
             val src = apkDir.resolve("yongge-debug.apk")
             val dst = apkDir.resolve("yongge.apk")
             if (dst.exists()) dst.delete()
-            if (src.exists() && src.renameTo(dst)) {
-                logger.lifecycle("APK renamed: yongge.apk")
+            src.copyTo(dst, overwrite = true)
+            if (dst.exists()) {
+                logger.lifecycle("APK copied: yongge.apk")
             } else {
-                logger.warn("APK rename failed: src=${src.exists()}")
+                logger.warn("APK copy failed")
             }
         }
     }
@@ -66,7 +67,7 @@ android {
 }
 
 afterEvaluate {
-    tasks.named("assembleDebug") { finalizedBy("renameApkToYongge") }
+    tasks.named("assembleDebug") { finalizedBy("copyApkToYongge") }
 }
 
 dependencies {
