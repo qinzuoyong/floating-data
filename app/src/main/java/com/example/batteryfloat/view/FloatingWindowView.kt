@@ -33,6 +33,10 @@ class FloatingWindowView(context: Context) : LinearLayout(context) {
     companion object {
         private const val TAG = "FloatingWindowView"
         private const val DOUBLE_TAP_MS = 400L
+        /** 锁定功能开关 key（由 MainScreen 开关控制） */
+        private const val PREF_LOCK_ENABLED = "lock_drag_enabled"
+        /** 实际锁定状态 key（由双击切换） */
+        private const val PREF_LOCK_ENGAGED = "lock_drag"
     }
 
     // 拖拽相关
@@ -78,16 +82,16 @@ class FloatingWindowView(context: Context) : LinearLayout(context) {
         val cornerRadius = prefs.getFloat("corner_radius", 30f)
         val textColor = prefs.getInt("text_color", Color.WHITE)
         val showPower = prefs.getBoolean("show_power", false)
-        val isLocked = prefs.getBoolean("lock_drag", false)
+        val isEngaged = prefs.getBoolean(PREF_LOCK_ENGAGED, false)
 
         val drawable = GradientDrawable().apply {
             setColor(finalBg)
             setCornerRadius(dpToPx(cornerRadius.toInt()).toFloat())
-            // 锁定状态下添加彩色边框作为指示
-            if (isLocked) {
-                setStroke(dpToPx(3), Color.rgb(255, 193, 7))  // 金黄色 3dp 边框
+            // 锁定状态添加半透明天蓝色边框，美感简洁
+            if (isEngaged) {
+                setStroke(dpToPx(2), Color.argb(180, 100, 181, 246))  // 柔光蓝 2dp
             } else {
-                setStroke(0, Color.TRANSPARENT)  // 解锁时无边框
+                setStroke(0, Color.TRANSPARENT)
             }
         }
         background = drawable
@@ -168,8 +172,8 @@ class FloatingWindowView(context: Context) : LinearLayout(context) {
                 val dy = Math.abs(event.rawY - initialTouchY)
                 if (dx > 10 || dy > 10) isDragging = true
 
-                // 锁定状态下禁止拖拽
-                if (prefs.getBoolean("lock_drag", false)) return true
+                // 实际锁定状态下禁止拖拽
+                if (prefs.getBoolean(PREF_LOCK_ENGAGED, false)) return true
 
                 params.x = initialX + (event.rawX - initialTouchX).toInt()
                 params.y = initialY + (event.rawY - initialTouchY).toInt()
@@ -182,14 +186,14 @@ class FloatingWindowView(context: Context) : LinearLayout(context) {
                     val now = System.currentTimeMillis()
                     if (now - lastTapTime < DOUBLE_TAP_MS) {
                         // 仅当锁定功能开关开启时，双击才生效
-                        if (!prefs.getBoolean("lock_drag", false)) {
+                        if (!prefs.getBoolean(PREF_LOCK_ENABLED, false)) {
                             Log.d(TAG, "双击忽略：锁定功能开关已关闭")
                             lastTapTime = 0
                             return true
                         }
-                        // 双击：切换锁定状态
-                        val newLocked = !prefs.getBoolean("lock_drag", false)
-                        prefs.edit().putBoolean("lock_drag", newLocked).apply()
+                        // 双击：切换实际锁定状态
+                        val newLocked = !prefs.getBoolean(PREF_LOCK_ENGAGED, false)
+                        prefs.edit().putBoolean(PREF_LOCK_ENGAGED, newLocked).apply()
                         Log.i(TAG, "双击切换锁定: $newLocked")
                         // 刷新外观（更新边框，不修改温度文本）
                         reloadAppearance()

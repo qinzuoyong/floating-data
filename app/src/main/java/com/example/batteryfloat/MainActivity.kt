@@ -136,7 +136,7 @@ fun MainScreen(
     var textColor by remember { mutableIntStateOf(prefs.getInt("text_color", 0xFFFFFFFF.toInt())) }
     var showPower by remember { mutableStateOf(prefs.getBoolean("show_power", false)) }
     var hideRecents by remember { mutableStateOf(prefs.getBoolean("hide_recents", false)) }
-    var lockDrag by remember { mutableStateOf(prefs.getBoolean("lock_drag", false)) }
+    var lockDrag by remember { mutableStateOf(prefs.getBoolean("lock_drag_enabled", false)) }
 
     // ===== 版本更新检测 =====
     var showUpdateDialog by remember { mutableStateOf(false) }
@@ -294,7 +294,7 @@ fun MainScreen(
                 }
                 Switch(checked = lockDrag, onCheckedChange = {
                     lockDrag = it
-                    prefs.edit().putBoolean("lock_drag", it).apply()
+                    prefs.edit().putBoolean("lock_drag_enabled", it).apply()
                 })
             }
         }
