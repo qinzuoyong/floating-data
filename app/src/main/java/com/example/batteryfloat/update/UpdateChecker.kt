@@ -25,7 +25,7 @@ data class UpdateInfo(
  */
 object UpdateChecker {
     private const val TAG = "UpdateChecker"
-    private const val API_URL = "https://api.gitee.com/repos/qinzuoyong/floating-data/releases/latest"
+    private const val API_URL = "https://gitee.com/api/v5/repos/qinzuoyong/floating-data/releases/latest"
 
     /**
      * 检查是否有新版本

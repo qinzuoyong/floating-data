@@ -175,6 +175,12 @@ class FloatingWindowView(context: Context) : LinearLayout(context) {
                 if (!isDragging) {
                     val now = System.currentTimeMillis()
                     if (now - lastTapTime < DOUBLE_TAP_MS) {
+                        // 仅当锁定功能开关开启时，双击才生效
+                        if (!prefs.getBoolean("lock_drag", false)) {
+                            Log.d(TAG, "双击忽略：锁定功能开关已关闭")
+                            lastTapTime = 0
+                            return true
+                        }
                         // 双击：切换锁定状态
                         val newLocked = !prefs.getBoolean("lock_drag", false)
                         prefs.edit().putBoolean("lock_drag", newLocked).apply()

@@ -43,6 +43,9 @@ class FloatingWindowService : Service() {
     }
 
     companion object {
+        /** 服务是否正在运行（供外部查询） */
+        @Volatile
+        var isRunning = false
         private const val TAG = "FloatingWindowService"
         const val CHANNEL_ID = "battery_temp_channel"
         const val NOTIFICATION_ID = 1001
@@ -66,6 +69,7 @@ class FloatingWindowService : Service() {
     }
 
     override fun onCreate() {
+        isRunning = true
         super.onCreate()
         createNotificationChannel()
         windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
@@ -94,6 +98,7 @@ class FloatingWindowService : Service() {
     }
 
     override fun onDestroy() {
+        isRunning = false
         cancelHeartbeat()
         stopMonitoring()
         removeFloatingWindow()

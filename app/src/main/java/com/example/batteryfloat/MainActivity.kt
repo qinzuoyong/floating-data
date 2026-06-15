@@ -129,7 +129,7 @@ fun MainScreen(
     var fontSliderValue by remember { mutableFloatStateOf(prefs.getFloat("font_size", 14f)) }
     var cornerSliderValue by remember { mutableFloatStateOf(prefs.getFloat("corner_radius", 30f)) }
     var bgAlphaValue by remember { mutableFloatStateOf(prefs.getFloat("bg_alpha", 0.8f)) }
-    var isServiceRunning by remember { mutableStateOf(false) }
+    var isServiceRunning by remember { mutableStateOf(FloatingWindowService.isRunning) }
     var bgColor by remember { mutableIntStateOf(prefs.getInt("bg_color", 0xFF000000.toInt())) }
     var textColor by remember { mutableIntStateOf(prefs.getInt("text_color", 0xFFFFFFFF.toInt())) }
     var showPower by remember { mutableStateOf(prefs.getBoolean("show_power", false)) }
