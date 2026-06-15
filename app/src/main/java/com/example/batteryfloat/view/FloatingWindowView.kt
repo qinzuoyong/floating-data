@@ -2,7 +2,6 @@
 
 import android.content.Context
 import android.content.SharedPreferences
-import android.content.res.Configuration
 import android.util.Log
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
@@ -15,10 +14,10 @@ import android.widget.TextView
 import com.example.batteryfloat.R
 
 /**
- * Battery temperature floating window view (dual-line version)
- * - LinearLayout vertical layout: temperature + power consumption
- * - Rounded semi-transparent background with customizable appearance
- * - Full-screen drag support only (click disabled)
+ * 电池温度悬浮窗视图（双行版）
+ * - 竖向 LinearLayout：温度 + 功耗
+ * - 圆角半透明背景，支持外观自定义
+ * - 全屏拖拽，双击可锁定/解锁位置
  */
 class FloatingWindowView(context: Context) : LinearLayout(context) {
 
@@ -26,31 +25,36 @@ class FloatingWindowView(context: Context) : LinearLayout(context) {
     private val prefs: SharedPreferences =
         context.getSharedPreferences("floating_prefs", Context.MODE_PRIVATE)
 
-    /** Temperature text view */
+    /** 温度文本 */
     val tempText: TextView = TextView(context)
-    /** Power consumption text view */
+    /** 功耗文本 */
     val powerText: TextView = TextView(context)
 
     companion object {
         private const val TAG = "FloatingWindowView"
+        private const val DOUBLE_TAP_MS = 400L
     }
 
-    // Drag related
+    // 拖拽相关
     private var initialX = 0
     private var initialY = 0
     private var initialTouchX = 0f
     private var initialTouchY = 0f
 
+    // 双击锁定相关
+    private var lastTapTime = 0L
+    private var isDragging = false
+
     init {
         orientation = VERTICAL
         gravity = Gravity.CENTER
 
-        // Temperature row
+        // 温度行
         tempText.text = context.getString(R.string.temperature_loading)
         tempText.gravity = Gravity.CENTER
         addView(tempText)
 
-        // Power row
+        // 功耗行
         powerText.text = "--W"
         powerText.gravity = Gravity.CENTER
         addView(powerText)
@@ -94,7 +98,9 @@ class FloatingWindowView(context: Context) : LinearLayout(context) {
     }
 
     fun updateTemperature(celsius: Float) {
-        tempText.text = String.format("%.1f°C", celsius)
+        val isLocked = prefs.getBoolean("lock_drag", false)
+        tempText.text = if (isLocked) "🔒 ${String.format("%.1f", celsius)}°C"
+                        else String.format("%.1f°C", celsius)
     }
 
     fun updatePower(watts: Float) {
@@ -103,7 +109,6 @@ class FloatingWindowView(context: Context) : LinearLayout(context) {
 
     /**
      * 将悬浮窗钳位到当前屏幕有效范围内
-     * 横屏切竖屏时可自动吸附回屏幕内
      */
     fun clampToScreenBounds() {
         val params = layoutParams ?: return
@@ -113,7 +118,6 @@ class FloatingWindowView(context: Context) : LinearLayout(context) {
         wm.defaultDisplay?.getRealMetrics(displayMetrics)
         val screenW = displayMetrics.widthPixels
         val screenH = displayMetrics.heightPixels
-        // 测量悬浮窗自身宽高
         measure(
             View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED),
             View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
@@ -146,6 +150,7 @@ class FloatingWindowView(context: Context) : LinearLayout(context) {
         val params = layoutParams ?: return super.onTouchEvent(event)
         when (event.action) {
             MotionEvent.ACTION_DOWN -> {
+                isDragging = false
                 initialX = params.x
                 initialY = params.y
                 initialTouchX = event.rawX
@@ -153,13 +158,35 @@ class FloatingWindowView(context: Context) : LinearLayout(context) {
                 return true
             }
             MotionEvent.ACTION_MOVE -> {
+                val dx = Math.abs(event.rawX - initialTouchX)
+                val dy = Math.abs(event.rawY - initialTouchY)
+                if (dx > 10 || dy > 10) isDragging = true
+
+                // 锁定状态下禁止拖拽
+                if (prefs.getBoolean("lock_drag", false)) return true
+
                 params.x = initialX + (event.rawX - initialTouchX).toInt()
                 params.y = initialY + (event.rawY - initialTouchY).toInt()
-                // 调用公用钳位方法，按当前屏幕方向重新定位
                 clampToScreenBounds()
                 return true
             }
             MotionEvent.ACTION_UP -> {
+                // 仅在非拖拽时检测双击
+                if (!isDragging) {
+                    val now = System.currentTimeMillis()
+                    if (now - lastTapTime < DOUBLE_TAP_MS) {
+                        // 双击：切换锁定状态
+                        val newLocked = !prefs.getBoolean("lock_drag", false)
+                        prefs.edit().putBoolean("lock_drag", newLocked).apply()
+                        Log.i(TAG, "双击切换锁定: $newLocked")
+                        // 如果温度已显示，立即更新锁图标
+                        tempText.text = tempText.text?.let {
+                            val temp = it.toString().replace("🔒 ", "").replace("°C", "")
+                            if (newLocked) "🔒 ${temp}°C" else "${temp}°C"
+                        }
+                    }
+                    lastTapTime = now
+                }
                 return true
             }
         }

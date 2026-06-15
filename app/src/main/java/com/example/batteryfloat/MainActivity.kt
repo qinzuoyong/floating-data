@@ -34,9 +34,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.batteryfloat.service.FloatingWindowService
 import com.example.batteryfloat.ui.theme.BatteryFloatingTheme
-
 import com.example.batteryfloat.update.UpdateChecker
-
 
 class MainActivity : ComponentActivity() {
 
@@ -73,10 +71,6 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    /**
-     * 隐藏后台：用户按 Home 键返回桌面时自动移除最近任务卡片
-     * 防止通过任务管理器杀掉进程（悬浮窗服务仍可独立运行）
-     */
     override fun onUserLeaveHint() {
         super.onUserLeaveHint()
         if (prefs.getBoolean("hide_recents", false)) {
@@ -87,9 +81,6 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    /**
-     * 返回键：显式拦截 KEYCODE_BACK，调用 finishAndRemoveTask 移除任务卡片
-     */
     override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
         if (keyCode == KeyEvent.KEYCODE_BACK && prefs.getBoolean("hide_recents", false)) {
             Log.i("MainActivity", "隐藏后台(返回键): finishAndRemoveTask")
@@ -102,25 +93,26 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-// 预设颜色方案
+// 预设背景颜色方案（带中文名）
 private val BG_COLORS = listOf(
-    "黑" to 0xFF000000.toInt(),
+    "黑色" to 0xFF000000.toInt(),
     "深灰" to 0xFF333333.toInt(),
-    "灰" to 0xFF666666.toInt(),
-    "白" to 0xFFFFFFFF.toInt(),
-    "蓝" to 0xFF1565C0.toInt(),
-    "绿" to 0xFF2E7D32.toInt(),
-    "红" to 0xFFC62828.toInt(),
+    "灰色" to 0xFF666666.toInt(),
+    "白色" to 0xFFFFFFFF.toInt(),
+    "蓝色" to 0xFF1565C0.toInt(),
+    "绿色" to 0xFF2E7D32.toInt(),
+    "红色" to 0xFFC62828.toInt(),
 )
 
+// 预设字体颜色方案（带中文名）
 private val TEXT_COLORS = listOf(
-    "白" to 0xFFFFFFFF.toInt(),
-    "黑" to 0xFF000000.toInt(),
-    "黄" to 0xFFFFEB3B.toInt(),
-    "青" to 0xFF00BCD4.toInt(),
-    "橙" to 0xFFFF9800.toInt(),
-    "红" to 0xFFF44336.toInt(),
-    "绿" to 0xFF4CAF50.toInt(),
+    "白色" to 0xFFFFFFFF.toInt(),
+    "黑色" to 0xFF000000.toInt(),
+    "黄色" to 0xFFFFEB3B.toInt(),
+    "青色" to 0xFF00BCD4.toInt(),
+    "橙色" to 0xFFFF9800.toInt(),
+    "红色" to 0xFFF44336.toInt(),
+    "绿色" to 0xFF4CAF50.toInt(),
 )
 
 @Composable
@@ -142,18 +134,18 @@ fun MainScreen(
     var textColor by remember { mutableIntStateOf(prefs.getInt("text_color", 0xFFFFFFFF.toInt())) }
     var showPower by remember { mutableStateOf(prefs.getBoolean("show_power", false)) }
     var hideRecents by remember { mutableStateOf(prefs.getBoolean("hide_recents", false)) }
+    var lockDrag by remember { mutableStateOf(prefs.getBoolean("lock_drag", false)) }
 
-    // ===== 版本更新检测状态 =====
+    // ===== 版本更新检测 =====
     var showUpdateDialog by remember { mutableStateOf(false) }
     var updateVersion by remember { mutableStateOf("") }
     var updateUrl by remember { mutableStateOf("") }
     var hasChecked by remember { mutableStateOf(false) }
 
-    // 启动时检测更新（仅一次）
     LaunchedEffect(Unit) {
         if (!hasChecked) {
             hasChecked = true
-            val info = UpdateChecker.check("1.41")
+            val info = UpdateChecker.check("1.42")
             if (info.hasUpdate) {
                 updateVersion = info.latestVersion
                 updateUrl = info.downloadUrl
@@ -168,24 +160,15 @@ fun MainScreen(
             onDismissRequest = { showUpdateDialog = false },
             shape = RoundedCornerShape(20.dp),
             containerColor = MaterialTheme.colorScheme.surface,
-            titleContentColor = MaterialTheme.colorScheme.onSurface,
-            textContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
             title = {
                 Column(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Spacer(Modifier.height(8.dp))
-                    Text(
-                        text = "🎉",
-                        fontSize = 36.sp
-                    )
+                    Text(text = "🎉", fontSize = 36.sp)
                     Spacer(Modifier.height(8.dp))
-                    Text(
-                        text = "发现新版本",
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 20.sp
-                    )
+                    Text("发现新版本", fontWeight = FontWeight.Bold, fontSize = 20.sp)
                 }
             },
             text = {
@@ -194,7 +177,7 @@ fun MainScreen(
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Text(
-                        text = "v${updateVersion} 现已发布",
+                        "v${updateVersion} 现已发布",
                         fontWeight = FontWeight.SemiBold,
                         fontSize = 16.sp,
                         color = MaterialTheme.colorScheme.primary,
@@ -202,14 +185,14 @@ fun MainScreen(
                     )
                     Spacer(Modifier.height(12.dp))
                     Text(
-                        text = "当前版本: v${"1.41"}",
+                        "当前版本: v1.42",
                         fontSize = 13.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         textAlign = TextAlign.Center
                     )
                     Spacer(Modifier.height(4.dp))
                     Text(
-                        text = "是否前往下载页面更新？",
+                        "是否前往下载页面更新？",
                         fontSize = 14.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         textAlign = TextAlign.Center
@@ -218,23 +201,16 @@ fun MainScreen(
             },
             confirmButton = {
                 Button(
-                    onClick = {
-                        showUpdateDialog = false
-                        onOpenUrl(updateUrl)
-                    },
+                    onClick = { showUpdateDialog = false; onOpenUrl(updateUrl) },
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
                     shape = RoundedCornerShape(12.dp)
-                ) {
-                    Text("立即升级", fontWeight = FontWeight.SemiBold)
-                }
+                ) { Text("立即升级", fontWeight = FontWeight.SemiBold) }
             },
             dismissButton = {
                 TextButton(
                     onClick = { showUpdateDialog = false },
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 2.dp)
-                ) {
-                    Text("以后再说", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
+                ) { Text("以后再说", color = MaterialTheme.colorScheme.onSurfaceVariant) }
             }
         )
     }
@@ -244,40 +220,88 @@ fun MainScreen(
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
             .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+        verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Text("电池温度悬浮窗", fontSize = 24.sp, fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(top = 24.dp, bottom = 8.dp))
+        // ===== 标题 =====
+        Text(
+            text = "🔋 电池温度悬浮窗",
+            fontSize = 24.sp,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 16.dp, bottom = 8.dp),
+            textAlign = TextAlign.Center
+        )
 
-        // ===== 悬浮窗开关（移至最上方） =====
-        Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp)) {
-            Row(Modifier.fillMaxWidth().padding(16.dp),
+        // ===== 悬浮窗开关 =====
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+        ) {
+            Row(
+                Modifier.fillMaxWidth().padding(16.dp),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween) {
-                Text("悬浮窗", fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
-                Button(onClick = {
-                    if (isServiceRunning) { onStopService(); isServiceRunning = false }
-                    else {
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(context)) {
-                            Toast.makeText(context, "请先开启悬浮窗权限", Toast.LENGTH_SHORT).show()
-                            onOpenOverlaySettings()
-                        } else { onStartService(); isServiceRunning = true }
-                    }
-                }, colors = ButtonDefaults.buttonColors(
-                    containerColor = if (isServiceRunning) MaterialTheme.colorScheme.error
-                    else MaterialTheme.colorScheme.primary)) {
-                    Text(if (isServiceRunning) "关闭悬浮窗" else "启动悬浮窗")
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("🪟", fontSize = 20.sp)
+                    Spacer(Modifier.width(8.dp))
+                    Text("悬浮窗", fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
                 }
+                Button(
+                    onClick = {
+                        if (isServiceRunning) { onStopService(); isServiceRunning = false }
+                        else {
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(context)) {
+                                Toast.makeText(context, "请先开启悬浮窗权限", Toast.LENGTH_SHORT).show()
+                                onOpenOverlaySettings()
+                            } else { onStartService(); isServiceRunning = true }
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (isServiceRunning) MaterialTheme.colorScheme.error
+                        else MaterialTheme.colorScheme.primary
+                    ),
+                    shape = RoundedCornerShape(12.dp)
+                ) { Text(if (isServiceRunning) "关闭" else "启动") }
             }
         }
 
-        // ===== 功耗显示开关 =====
-        Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp)) {
+        // ===== 锁定悬浮窗 =====
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+        ) {
+            Row(
+                Modifier.fillMaxWidth().padding(16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("🔒", fontSize = 20.sp)
+                        Spacer(Modifier.width(8.dp))
+                        Text("锁定悬浮窗", fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
+                    }
+                    Text("双击悬浮窗可锁定/解锁位置", fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                Switch(checked = lockDrag, onCheckedChange = {
+                    lockDrag = it
+                    prefs.edit().putBoolean("lock_drag", it).apply()
+                })
+            }
+        }
+
+        // ===== 功耗显示 =====
+        Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) {
             Row(Modifier.fillMaxWidth().padding(16.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween) {
                 Column {
-                    Text("功耗显示", fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
+                    Text("⚡ 功耗显示", fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
                     Text("开启后悬浮窗显示整机功耗", fontSize = 12.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
@@ -288,14 +312,14 @@ fun MainScreen(
             }
         }
 
-        // ===== 隐藏后台开关 =====
-        Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp)) {
+        // ===== 隐藏后台 =====
+        Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) {
             Row(Modifier.fillMaxWidth().padding(16.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween) {
                 Column {
-                    Text("隐藏后台", fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
-                    Text("返回桌面后自动隐藏任务卡片，防止被划掉", fontSize = 12.sp,
+                    Text("👻 隐藏后台", fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
+                    Text("返回桌面后自动隐藏任务卡片", fontSize = 12.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 Switch(checked = hideRecents, onCheckedChange = {
@@ -305,106 +329,127 @@ fun MainScreen(
             }
         }
 
-        // ===== 字体大小（去掉预览框） =====
-        Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp)) {
+        // ===== 字体大小 =====
+        Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) {
             Column(modifier = Modifier.padding(16.dp)) {
-                Text("字体大小", fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
+                Text("🔤 字体大小", fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
                 Spacer(Modifier.height(4.dp))
                 Text("${fontSliderValue.toInt()} sp", fontSize = 13.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    color = MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.Medium)
                 Slider(value = fontSliderValue, onValueChange = {
                     fontSliderValue = it; prefs.edit().putFloat("font_size", it).apply()
                 }, valueRange = 1f..30f, modifier = Modifier.fillMaxWidth())
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     Text("1", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text("15", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("15", fontSize = 11.sp, color = MaterialTheme.colorScheme.outline)
                     Text("30", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
         }
 
         // ===== 圆角曲率 =====
-        Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp)) {
+        Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) {
             Column(modifier = Modifier.padding(16.dp)) {
-                Text("圆角曲率", fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
+                Text("⬟ 圆角曲率", fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
+                Spacer(Modifier.height(4.dp))
                 Text("${cornerSliderValue.toInt()} dp", fontSize = 13.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    color = MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.Medium)
                 Slider(value = cornerSliderValue, onValueChange = {
                     cornerSliderValue = it; prefs.edit().putFloat("corner_radius", it).apply()
                 }, valueRange = 0f..50f, modifier = Modifier.fillMaxWidth())
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     Text("0", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text("25", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("25", fontSize = 11.sp, color = MaterialTheme.colorScheme.outline)
                     Text("50", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
         }
 
         // ===== 背景颜色 =====
-        Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp)) {
+        Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) {
             Column(modifier = Modifier.padding(16.dp)) {
-                Text("背景颜色", fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
+                Text("🎨 背景颜色", fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
                 Spacer(Modifier.height(8.dp))
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    BG_COLORS.forEach { (_, colorInt) ->
+                    BG_COLORS.forEach { (name, colorInt) ->
                         val selected = bgColor == colorInt
-                        Box(
-                            modifier = Modifier.size(36.dp).clip(CircleShape)
-                                .background(Color(colorInt))
-                                .let { if (selected) it.border(3.dp, MaterialTheme.colorScheme.primary, CircleShape) else it }
-                                .clickable {
-                                    bgColor = colorInt
-                                    prefs.edit().putInt("bg_color", colorInt).apply()
-                                }
-                        )
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            modifier = Modifier.width(IntrinsicSize.Min)
+                        ) {
+                            Box(
+                                modifier = Modifier.size(36.dp).clip(CircleShape)
+                                    .background(Color(colorInt))
+                                    .let { if (selected) it.border(3.dp, MaterialTheme.colorScheme.primary, CircleShape) else it }
+                                    .clickable {
+                                        bgColor = colorInt
+                                        prefs.edit().putInt("bg_color", colorInt).apply()
+                                    }
+                            )
+                            Spacer(Modifier.height(4.dp))
+                            Text(name, fontSize = 9.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
                     }
                 }
             }
         }
 
         // ===== 字体颜色 =====
-        Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp)) {
+        Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) {
             Column(modifier = Modifier.padding(16.dp)) {
-                Text("字体颜色", fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
+                Text("✏️ 字体颜色", fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
                 Spacer(Modifier.height(8.dp))
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    TEXT_COLORS.forEach { (_, colorInt) ->
+                    TEXT_COLORS.forEach { (name, colorInt) ->
                         val selected = textColor == colorInt
-                        Box(
-                            modifier = Modifier.size(36.dp).clip(CircleShape)
-                                .background(Color(colorInt))
-                                .let { if (selected) it.border(3.dp, MaterialTheme.colorScheme.primary, CircleShape) else it }
-                                .clickable {
-                                    textColor = colorInt
-                                    prefs.edit().putInt("text_color", colorInt).apply()
-                                }
-                        )
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            modifier = Modifier.width(IntrinsicSize.Min)
+                        ) {
+                            Box(
+                                modifier = Modifier.size(36.dp).clip(CircleShape)
+                                    .background(Color(colorInt))
+                                    .let { if (selected) it.border(3.dp, MaterialTheme.colorScheme.primary, CircleShape) else it }
+                                    .clickable {
+                                        textColor = colorInt
+                                        prefs.edit().putInt("text_color", colorInt).apply()
+                                    }
+                            )
+                            Spacer(Modifier.height(4.dp))
+                            Text(name, fontSize = 9.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
                     }
                 }
             }
         }
 
         // ===== 透明度 =====
-        Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp)) {
+        Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) {
             Column(modifier = Modifier.padding(16.dp)) {
-                Text("透明度", fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
+                Text("👁️ 透明度", fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
                 Spacer(Modifier.height(4.dp))
                 Text("${(bgAlphaValue * 100).toInt()}%", fontSize = 13.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    color = MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.Medium)
                 Slider(value = bgAlphaValue, onValueChange = {
                     bgAlphaValue = it; prefs.edit().putFloat("bg_alpha", it).apply()
                 }, valueRange = 0.1f..1f, modifier = Modifier.fillMaxWidth())
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     Text("10%", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text("50%", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("50%", fontSize = 11.sp, color = MaterialTheme.colorScheme.outline)
                     Text("100%", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
         }
 
         // ===== 用户提示 =====
-        Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer)) {
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer)
+        ) {
             Column(modifier = Modifier.padding(16.dp)) {
                 Text("⚠️ 用户必读", fontWeight = FontWeight.SemiBold, fontSize = 14.sp,
                     color = MaterialTheme.colorScheme.onTertiaryContainer)
@@ -418,21 +463,24 @@ fun MainScreen(
         }
 
         // ===== 权限引导 =====
-        Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp)) {
+        Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) {
             Column(modifier = Modifier.padding(16.dp)) {
-                Text("权限引导", fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
+                Text("🔐 权限引导", fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
                 Spacer(Modifier.height(8.dp))
-                OutlinedButton(onClick = onOpenOverlaySettings, modifier = Modifier.fillMaxWidth()) {
-                    Text("开启悬浮窗权限")
-                }
+                FilledTonalButton(
+                    onClick = onOpenOverlaySettings,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp)
+                ) { Text("开启悬浮窗权限") }
                 Spacer(Modifier.height(8.dp))
-                OutlinedButton(onClick = onOpenBatterySettings, modifier = Modifier.fillMaxWidth()) {
-                    Text("忽略电池优化")
-                }
+                FilledTonalButton(
+                    onClick = onOpenBatterySettings,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp)
+                ) { Text("忽略电池优化") }
             }
         }
 
         Spacer(Modifier.height(32.dp))
     }
 }
-
