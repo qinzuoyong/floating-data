@@ -29,10 +29,14 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.batteryfloat.service.FloatingWindowService
 import com.example.batteryfloat.ui.theme.BatteryFloatingTheme
+
+import com.example.batteryfloat.update.UpdateChecker
+
 
 class MainActivity : ComponentActivity() {
 
@@ -50,7 +54,8 @@ class MainActivity : ComponentActivity() {
                     onStartService = { FloatingWindowService.start(this) },
                     onStopService = { FloatingWindowService.stop(this) },
                     onOpenOverlaySettings = { openOverlaySettings() },
-                    onOpenBatterySettings = { openBatteryOptimizationSettings() }
+                    onOpenBatterySettings = { openBatteryOptimizationSettings() },
+                    onOpenUrl = { url -> startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) }
                 )
             }
         }
@@ -74,7 +79,6 @@ class MainActivity : ComponentActivity() {
      */
     override fun onUserLeaveHint() {
         super.onUserLeaveHint()
-        // Home 键：系统通过此回调通知用户即将离开
         if (prefs.getBoolean("hide_recents", false)) {
             Log.i("MainActivity", "隐藏后台(Home键): finishAndRemoveTask")
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
@@ -125,7 +129,8 @@ fun MainScreen(
     onStartService: () -> Unit,
     onStopService: () -> Unit,
     onOpenOverlaySettings: () -> Unit,
-    onOpenBatterySettings: () -> Unit
+    onOpenBatterySettings: () -> Unit,
+    onOpenUrl: (String) -> Unit = {}
 ) {
     val context = LocalContext.current
 
@@ -138,6 +143,102 @@ fun MainScreen(
     var showPower by remember { mutableStateOf(prefs.getBoolean("show_power", false)) }
     var hideRecents by remember { mutableStateOf(prefs.getBoolean("hide_recents", false)) }
 
+    // ===== 版本更新检测状态 =====
+    var showUpdateDialog by remember { mutableStateOf(false) }
+    var updateVersion by remember { mutableStateOf("") }
+    var updateUrl by remember { mutableStateOf("") }
+    var hasChecked by remember { mutableStateOf(false) }
+
+    // 启动时检测更新（仅一次）
+    LaunchedEffect(Unit) {
+        if (!hasChecked) {
+            hasChecked = true
+            val info = UpdateChecker.check("1.41")
+            if (info.hasUpdate) {
+                updateVersion = info.latestVersion
+                updateUrl = info.downloadUrl
+                showUpdateDialog = true
+            }
+        }
+    }
+
+    // ===== 版本更新弹窗 =====
+    if (showUpdateDialog) {
+        AlertDialog(
+            onDismissRequest = { showUpdateDialog = false },
+            shape = RoundedCornerShape(20.dp),
+            containerColor = MaterialTheme.colorScheme.surface,
+            titleContentColor = MaterialTheme.colorScheme.onSurface,
+            textContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+            title = {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        text = "🎉",
+                        fontSize = 36.sp
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        text = "发现新版本",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 20.sp
+                    )
+                }
+            },
+            text = {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        text = "v${updateVersion} 现已发布",
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 16.sp,
+                        color = MaterialTheme.colorScheme.primary,
+                        textAlign = TextAlign.Center
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    Text(
+                        text = "当前版本: v${"1.41"}",
+                        fontSize = 13.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        text = "是否前往下载页面更新？",
+                        fontSize = 14.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showUpdateDialog = false
+                        onOpenUrl(updateUrl)
+                    },
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Text("立即升级", fontWeight = FontWeight.SemiBold)
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { showUpdateDialog = false },
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 2.dp)
+                ) {
+                    Text("以后再说", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        )
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -147,6 +248,28 @@ fun MainScreen(
     ) {
         Text("电池温度悬浮窗", fontSize = 24.sp, fontWeight = FontWeight.Bold,
             modifier = Modifier.padding(top = 24.dp, bottom = 8.dp))
+
+        // ===== 悬浮窗开关（移至最上方） =====
+        Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp)) {
+            Row(Modifier.fillMaxWidth().padding(16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween) {
+                Text("悬浮窗", fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
+                Button(onClick = {
+                    if (isServiceRunning) { onStopService(); isServiceRunning = false }
+                    else {
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(context)) {
+                            Toast.makeText(context, "请先开启悬浮窗权限", Toast.LENGTH_SHORT).show()
+                            onOpenOverlaySettings()
+                        } else { onStartService(); isServiceRunning = true }
+                    }
+                }, colors = ButtonDefaults.buttonColors(
+                    containerColor = if (isServiceRunning) MaterialTheme.colorScheme.error
+                    else MaterialTheme.colorScheme.primary)) {
+                    Text(if (isServiceRunning) "关闭悬浮窗" else "启动悬浮窗")
+                }
+            }
+        }
 
         // ===== 功耗显示开关 =====
         Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp)) {
@@ -182,17 +305,10 @@ fun MainScreen(
             }
         }
 
-        // ===== 字体大小 =====
+        // ===== 字体大小（去掉预览框） =====
         Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp)) {
             Column(modifier = Modifier.padding(16.dp)) {
                 Text("字体大小", fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
-                Spacer(Modifier.height(4.dp))
-                Box(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp))
-                    .background(MaterialTheme.colorScheme.surfaceVariant).padding(12.dp),
-                    contentAlignment = Alignment.Center) {
-                    Text("预览: 38.5°C", fontSize = fontSliderValue.sp, fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
                 Spacer(Modifier.height(4.dp))
                 Text("${fontSliderValue.toInt()} sp", fontSize = 13.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -286,28 +402,6 @@ fun MainScreen(
             }
         }
 
-        // ===== 悬浮窗开关 =====
-        Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp)) {
-            Row(Modifier.fillMaxWidth().padding(16.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween) {
-                Text("悬浮窗", fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
-                Button(onClick = {
-                    if (isServiceRunning) { onStopService(); isServiceRunning = false }
-                    else {
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(context)) {
-                            Toast.makeText(context, "请先开启悬浮窗权限", Toast.LENGTH_SHORT).show()
-                            onOpenOverlaySettings()
-                        } else { onStartService(); isServiceRunning = true }
-                    }
-                }, colors = ButtonDefaults.buttonColors(
-                    containerColor = if (isServiceRunning) MaterialTheme.colorScheme.error
-                    else MaterialTheme.colorScheme.primary)) {
-                    Text(if (isServiceRunning) "关闭悬浮窗" else "启动悬浮窗")
-                }
-            }
-        }
-
         // ===== 用户提示 =====
         Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer)) {
@@ -341,3 +435,4 @@ fun MainScreen(
         Spacer(Modifier.height(32.dp))
     }
 }
+
