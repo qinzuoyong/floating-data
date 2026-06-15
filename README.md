@@ -1,7 +1,7 @@
 ﻿# 🔋 勇哥 - 电池温度悬浮窗
 
 > **实时监测电池温度与功耗的 Android 悬浮窗工具**  
-> 版本: **1.33** | 最低支持: **Android 16 (API 36)**
+> 版本: **1.4** | 最低支持: **Android 14 (API 34)**
 
 ---
 
@@ -19,14 +19,15 @@
 
 | 版本 | 文件 | 大小 |
 |------|------|------|
-| v1.33 | [yongge.apk](apk/yongge.apk) | 5.4 MB |
+| v1.4 | [yongge.apk](apk/yongge.apk) | 5.4 MB |
+| v1.33 | ~~[yongge.apk](apk/yongge.apk)~~ | 5.4 MB |
 
 ## 🛠️ 构建说明
 
 ### 环境要求
 - Android Studio
 - JDK 17+
-- Android SDK 36
+- Android SDK 35+
 
 ### 构建命令
 `./gradlew.bat assembleDebug --no-configuration-cache`
@@ -38,6 +39,9 @@ APK 输出路径：`app/build/outputs/apk/debug/yongge.apk`
 |------|------|
 | Kotlin | 2.2.10 |
 | AGP | 9.2.1 |
+| Compile SDK | 35 |
+| Min SDK | 34 (Android 14) |
+| Target SDK | 34 |
 | Compose BOM | 2026.02.01 |
 | Material3 | ✅ |
 | Shizuku | 13.1.5 |
@@ -55,6 +59,7 @@ APK 输出路径：`app/build/outputs/apk/debug/yongge.apk`
 
 | 版本 | 日期 | 变更 |
 |------|------|------|
+| v1.4 | 2026-06-15 | SDK 降级至兼容安卓 14；Home/返回双键隐藏后台；版本号升级 |
 | v1.33 | 2026-06-15 | 横→竖切换吸附；返回键隐藏后台；UI 更新 |
 | v1.32 | 2026-06-15 | 修复横屏拖拽回弹；完善隐藏后台 |
 | v1.31 | 2026-06-15 | 优化拖拽边界；隐藏后台；APK 改名 |
@@ -64,5 +69,5 @@ APK 输出路径：`app/build/outputs/apk/debug/yongge.apk`
 
 ---
 
-**作者**: qin-zuoyong  
-**仓库**: https://gitee.com/qin-zuoyong/floating-data
+**作者**: qinzuoyong  
+**仓库**: https://gitee.com/qinzuoyong/floating-data
