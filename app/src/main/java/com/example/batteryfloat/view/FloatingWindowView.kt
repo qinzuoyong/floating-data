@@ -1,4 +1,4 @@
-﻿package com.example.batteryfloat.view
+package com.example.batteryfloat.view
 
 import android.content.Context
 import android.content.SharedPreferences
@@ -78,10 +78,17 @@ class FloatingWindowView(context: Context) : LinearLayout(context) {
         val cornerRadius = prefs.getFloat("corner_radius", 30f)
         val textColor = prefs.getInt("text_color", Color.WHITE)
         val showPower = prefs.getBoolean("show_power", false)
+        val isLocked = prefs.getBoolean("lock_drag", false)
 
         val drawable = GradientDrawable().apply {
             setColor(finalBg)
             setCornerRadius(dpToPx(cornerRadius.toInt()).toFloat())
+            // 锁定状态下添加彩色边框作为指示
+            if (isLocked) {
+                setStroke(dpToPx(3), Color.rgb(255, 193, 7))  // 金黄色 3dp 边框
+            } else {
+                setStroke(0, Color.TRANSPARENT)  // 解锁时无边框
+            }
         }
         background = drawable
 
@@ -98,9 +105,8 @@ class FloatingWindowView(context: Context) : LinearLayout(context) {
     }
 
     fun updateTemperature(celsius: Float) {
-        val isLocked = prefs.getBoolean("lock_drag", false)
-        tempText.text = if (isLocked) "🔒 ${String.format("%.1f", celsius)}°C"
-                        else String.format("%.1f°C", celsius)
+        // 锁定状态通过边框指示，温度文本保持不变，与功耗文本对齐
+        tempText.text = String.format("%.1f\u00b0C", celsius)
     }
 
     fun updatePower(watts: Float) {
@@ -185,11 +191,8 @@ class FloatingWindowView(context: Context) : LinearLayout(context) {
                         val newLocked = !prefs.getBoolean("lock_drag", false)
                         prefs.edit().putBoolean("lock_drag", newLocked).apply()
                         Log.i(TAG, "双击切换锁定: $newLocked")
-                        // 如果温度已显示，立即更新锁图标
-                        tempText.text = tempText.text?.let {
-                            val temp = it.toString().replace("🔒 ", "").replace("°C", "")
-                            if (newLocked) "🔒 ${temp}°C" else "${temp}°C"
-                        }
+                        // 刷新外观（更新边框，不修改温度文本）
+                        reloadAppearance()
                     }
                     lastTapTime = now
                 }

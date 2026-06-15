@@ -32,6 +32,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import com.example.batteryfloat.service.FloatingWindowService
 import com.example.batteryfloat.ui.theme.BatteryFloatingTheme
 import com.example.batteryfloat.update.UpdateChecker
@@ -140,12 +142,14 @@ fun MainScreen(
     var showUpdateDialog by remember { mutableStateOf(false) }
     var updateVersion by remember { mutableStateOf("") }
     var updateUrl by remember { mutableStateOf("") }
+    var isChecking by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
     var hasChecked by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         if (!hasChecked) {
             hasChecked = true
-            val info = UpdateChecker.check("1.43")
+            val info = UpdateChecker.check("1.44")
             if (info.hasUpdate) {
                 updateVersion = info.latestVersion
                 updateUrl = info.downloadUrl
@@ -185,7 +189,7 @@ fun MainScreen(
                     )
                     Spacer(Modifier.height(12.dp))
                     Text(
-                        "当前版本: v1.43",
+                    "当前版本: v1.44",
                         fontSize = 13.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         textAlign = TextAlign.Center
@@ -478,6 +482,50 @@ fun MainScreen(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(12.dp)
                 ) { Text("忽略电池优化") }
+            }
+        }
+
+        // ===== 检查更新 =====
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(16.dp)
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column {
+                        Text("🎯 版本更新", fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
+                        Text("v1.44", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    Button(
+                        onClick = {
+                            if (!isChecking) {
+                                isChecking = true
+                                scope.launch {
+                                    val info = UpdateChecker.check("1.44")
+                                    isChecking = false
+                                    if (info.hasUpdate) {
+                                        updateVersion = info.latestVersion
+                                        updateUrl = info.downloadUrl
+                                        showUpdateDialog = true
+                                    } else {
+                                        Toast.makeText(context, "已是最新版本", Toast.LENGTH_SHORT).show()
+                                    }
+                                }
+                            }
+                        },
+                        enabled = !isChecking,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.primary
+                        ),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Text(if (isChecking) "检查中…" else "检查更新", fontWeight = FontWeight.SemiBold)
+                    }
+                }
             }
         }
 
