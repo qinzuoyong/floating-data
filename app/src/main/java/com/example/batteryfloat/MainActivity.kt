@@ -145,7 +145,7 @@ fun MainScreen(
     LaunchedEffect(Unit) {
         if (!hasChecked) {
             hasChecked = true
-            val info = UpdateChecker.check("1.42")
+            val info = UpdateChecker.check("1.43")
             if (info.hasUpdate) {
                 updateVersion = info.latestVersion
                 updateUrl = info.downloadUrl
@@ -185,7 +185,7 @@ fun MainScreen(
                     )
                     Spacer(Modifier.height(12.dp))
                     Text(
-                        "当前版本: v1.42",
+                        "当前版本: v1.43",
                         fontSize = 13.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         textAlign = TextAlign.Center
