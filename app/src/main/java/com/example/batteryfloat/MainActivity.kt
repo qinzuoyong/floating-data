@@ -1,4 +1,4 @@
-package com.example.batteryfloat
+﻿package com.example.batteryfloat
 
 import android.content.Context
 import android.content.Intent
@@ -8,6 +8,7 @@ import android.os.Build
 import android.os.Bundle
 import android.util.Log
 import android.provider.Settings
+import android.view.KeyEvent
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -68,31 +69,32 @@ class MainActivity : ComponentActivity() {
     }
 
     /**
-     * 隐藏后台：用户返回桌面时自动移除此 Activity 的最近任务卡片
+     * 隐藏后台：用户按 Home 键返回桌面时自动移除最近任务卡片
      * 防止通过任务管理器杀掉进程（悬浮窗服务仍可独立运行）
-     * onUserLeaveHint 覆盖 上滑/Home 键；
-     * onPause + isFinishing 覆盖返回键。
      */
     override fun onUserLeaveHint() {
         super.onUserLeaveHint()
-        // 上滑/Home 键：系统通过此回调通知用户即将离开
+        // Home 键：系统通过此回调通知用户即将离开
         if (prefs.getBoolean("hide_recents", false)) {
-            Log.i("MainActivity", "隐藏后台(上滑/Home): finishAndRemoveTask")
+            Log.i("MainActivity", "隐藏后台(Home键): finishAndRemoveTask")
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
                 finishAndRemoveTask()
             }
         }
     }
 
-    override fun onStop() {
-        super.onStop()
-        // 返回键：isFinishing=true 时触发（onStop 时序更可靠）
-        if (prefs.getBoolean("hide_recents", false) && isFinishing) {
-            Log.i("MainActivity", "隐藏后台(返回): finishAndRemoveTask")
+    /**
+     * 返回键：显式拦截 KEYCODE_BACK，调用 finishAndRemoveTask 移除任务卡片
+     */
+    override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
+        if (keyCode == KeyEvent.KEYCODE_BACK && prefs.getBoolean("hide_recents", false)) {
+            Log.i("MainActivity", "隐藏后台(返回键): finishAndRemoveTask")
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
                 finishAndRemoveTask()
             }
+            return true
         }
+        return super.onKeyDown(keyCode, event)
     }
 }
 
