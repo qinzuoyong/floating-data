@@ -28,8 +28,8 @@ if ($AutoCommit -eq "true" -or $AutoCommit -eq "True" -or $AutoCommit -eq "1") {
     $AutoCommitBool = $false
 }
 
-# Git 路径
-$GitPath = "D:\Git\cmd\git.exe"
+# 自动检测 git 路径（优先 PATH，回退到原安装路径）
+$GitPath = try { (Get-Command git -ErrorAction Stop).Source } catch { "D:\Git\cmd\git.exe" }
 
 # 获取项目根目录
 $ProjectRoot = Split-Path -Parent $PSScriptRoot
@@ -59,7 +59,7 @@ if (-not (Test-Path $ReadmePath)) {
     exit 1
 }
 
-$ReadmeContent = Get-Content $ReadmePath -Raw
+$ReadmeContent = Get-Content $ReadmePath -Raw -Encoding UTF8
 $OldVersionPattern = '(?<=版本:\s*\*\*)[^\*]+(?=\*\*)'
 
 if ($ReadmeContent -match $OldVersionPattern) {
@@ -70,7 +70,7 @@ if ($ReadmeContent -match $OldVersionPattern) {
     }
     
     $NewContent = $ReadmeContent -replace $OldVersionPattern, $Version
-    Set-Content -Path $ReadmePath -Value $NewContent -NoNewline
+    Set-Content -Path $ReadmePath -Value $NewContent -NoNewline -Encoding UTF8
     Write-Host "README.md 已更新: $OldVersion -> $Version" -ForegroundColor Green
 } else {
     Write-Error "README.md 中未找到版本号标记 (格式: 版本: **X.XX**)"

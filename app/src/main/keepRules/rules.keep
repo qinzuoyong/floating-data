@@ -9,6 +9,10 @@
 # 前台 Service 不被混淆
 -keep class com.example.batteryfloat.service.FloatingWindowService { *; }
 
+# 无障碍保活服务不被混淆
+-keep class com.example.batteryfloat.service.KeepliveA11yService { *; }
+-keep class com.example.batteryfloat.service.KeepliveA11yService$* { *; }
+
 # 开机广播接收器不被混淆
 -keep class com.example.batteryfloat.receiver.BootReceiver { *; }
 

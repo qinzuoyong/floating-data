@@ -15,6 +15,7 @@ import android.os.IBinder
 import android.os.SystemClock
 import android.util.Log
 import android.view.Gravity
+import android.view.View
 import android.view.WindowManager
 import androidx.core.app.NotificationCompat
 import com.example.batteryfloat.MainActivity
@@ -42,6 +43,9 @@ class FloatingWindowService : Service() {
         getSharedPreferences("floating_prefs", Context.MODE_PRIVATE)
     }
 
+    /** 保活用 1x1 不可见覆盖层 (TYPE_APPLICATION_OVERLAY) */
+    private var aliveView: View? = null
+
     companion object {
         /** 服务是否正在运行（供外部查询） */
         @Volatile
@@ -50,6 +54,7 @@ class FloatingWindowService : Service() {
         const val CHANNEL_ID = "battery_temp_channel"
         const val NOTIFICATION_ID = 1001
         private const val HEARTBEAT_INTERVAL_MS = 5 * 60 * 1000L  // 5分钟心跳
+        const val PREF_FLOATING_RUNNING = "floating_was_running"
 
         /** 启动悬浮窗服务 */
         fun start(context: Context) {
@@ -71,6 +76,8 @@ class FloatingWindowService : Service() {
     override fun onCreate() {
         isRunning = true
         super.onCreate()
+        // 记录悬浮窗运行状态（供开机自启判断）
+        prefs.edit().putBoolean(PREF_FLOATING_RUNNING, true).apply()
         createNotificationChannel()
         windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
         scheduleHeartbeat()
@@ -81,6 +88,8 @@ class FloatingWindowService : Service() {
         startForeground(NOTIFICATION_ID, notification)
 
         showFloatingWindow()
+        // 每次启动都添加 1x1 保活覆盖层
+        addAliveOverlay()
 
         return START_STICKY
     }
@@ -99,9 +108,12 @@ class FloatingWindowService : Service() {
 
     override fun onDestroy() {
         isRunning = false
+        // 记录悬浮窗停止状态
+        prefs.edit().putBoolean(PREF_FLOATING_RUNNING, false).apply()
         cancelHeartbeat()
         stopMonitoring()
         removeFloatingWindow()
+        removeAliveOverlay()
         // 取消注册 SharedPreferences 监听器
         prefsListener?.let { prefs.unregisterOnSharedPreferenceChangeListener(it) }
         prefsListener = null
@@ -227,6 +239,60 @@ class FloatingWindowService : Service() {
     private fun stopMonitoring() {
         batteryMonitor?.stop()
         batteryMonitor = null
+    }
+
+    // ===== 1x1 保活覆盖层（极低功耗，参考 GKD 方案） =====
+
+    /**
+     * 添加 1x1 不可见的 TYPE_APPLICATION_OVERLAY 覆盖层
+     *
+     * 原理（参考 GKD 的保活机制）：
+     * 在 WindowManager 中添加一个极小不可触摸的覆盖层窗口，
+     * 让系统认为该进程正在提供重要的 UI 覆盖服务，
+     * 从而提高 OOM 杀进程时的优先级，降低被回收概率。
+     * 窗口仅 1x1 像素且不可触摸，CPU/GPU 消耗接近于零。
+     *
+     * 使用已授权的 SYSTEM_ALERT_WINDOW 权限和 TYPE_APPLICATION_OVERLAY 类型，
+     * 无需额外权限。
+     */
+    private fun addAliveOverlay() {
+        if (aliveView != null) return
+        val wm = getSystemService(WINDOW_SERVICE) as WindowManager
+        val view = View(this)
+        val lp = WindowManager.LayoutParams(
+            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+            WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
+                    WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                    WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+            PixelFormat.TRANSLUCENT
+        ).apply {
+            gravity = Gravity.START or Gravity.TOP
+            width = 1
+            height = 1
+            x = 0
+            y = 0
+        }
+        try {
+            wm.addView(view, lp)
+            aliveView = view
+            Log.d(TAG, "1x1 保活覆盖层添加成功")
+        } catch (e: Exception) {
+            Log.w(TAG, "添加保活覆盖层失败: ${e.message}")
+        }
+    }
+
+    /** 移除 1x1 保活覆盖层 */
+    private fun removeAliveOverlay() {
+        aliveView?.let { view ->
+            try {
+                val wm = getSystemService(WINDOW_SERVICE) as WindowManager
+                wm.removeView(view)
+                Log.d(TAG, "保活覆盖层已移除")
+            } catch (e: Exception) {
+                Log.w(TAG, "移除保活覆盖层失败: ${e.message}")
+            }
+            aliveView = null
+        }
     }
 
     // ===== 通知管理 =====

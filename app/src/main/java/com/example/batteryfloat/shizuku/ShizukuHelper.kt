@@ -106,4 +106,45 @@ object ShizukuHelper {
             listener.onError(e.message ?: "未知错误")
         }
     }
+
+    // ===== 通用命令执行 =====
+
+    /**
+     * 通过 Shizuku 执行任意 shell 命令并返回结果
+     * 用于 KeepaliveManager 等模块执行 settings 命令
+     *
+     * @param command 要执行的 shell 命令
+     * @return 命令输出文本，失败返回 null
+     */
+    fun executeCommand(command: String): String? {
+        try {
+            ensureReflectionCache()
+            val newProcess = _newProcessMethod!!
+            val process = newProcess.invoke(null, arrayOf("sh"), null, null)
+            val processClass = process.javaClass
+
+            if (_getOutputMethod == null) {
+                _getOutputMethod = processClass.getMethod("getOutputStream")
+                _getInputMethod = processClass.getMethod("getInputStream")
+                _waitForMethod = processClass.getMethod("waitFor")
+            }
+
+            val outputStream = _getOutputMethod!!.invoke(process) as java.io.OutputStream
+            val inputStream = _getInputMethod!!.invoke(process) as java.io.InputStream
+
+            outputStream.write("$command\n".toByteArray())
+            outputStream.flush()
+            outputStream.close()
+
+            val reader = BufferedReader(InputStreamReader(inputStream))
+            val result = reader.readText()
+            reader.close()
+            _waitForMethod!!.invoke(process)
+
+            return result.trim().ifEmpty { null }
+        } catch (e: Exception) {
+            Log.e(TAG, "Shizuku 执行命令失败: $command", e)
+            return null
+        }
+    }
 }

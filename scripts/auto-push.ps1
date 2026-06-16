@@ -25,8 +25,8 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-# Git 路径
-$GitPath = "D:\Git\cmd\git.exe"
+# 自动检测 git 路径（优先 PATH，回退到原安装路径）
+$GitPath = try { (Get-Command git -ErrorAction Stop).Source } catch { "D:\Git\cmd\git.exe" }
 
 Write-Host "开始自动推送到远程仓库..." -ForegroundColor Cyan
 

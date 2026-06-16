@@ -28,8 +28,8 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-# Git path
-$GitPath = "D:\Git\cmd\git.exe"
+# 自动检测 git 路径（优先 PATH，回退到原安装路径）
+$GitPath = try { (Get-Command git -ErrorAction Stop).Source } catch { "D:\Git\cmd\git.exe" }
 
 # Gitee API configuration
 $Owner = "qinzuoyong"
