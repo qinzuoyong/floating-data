@@ -5,22 +5,37 @@ plugins {
 
 android {
     namespace = "com.example.batteryfloat"
-    // APK 输出文件名设为 yongge (<module>-<variant>.apk -> yongge-debug.apk)
+    // APK 输出文件名设为 yongge (<module>-<variant>.apk -> yongge-release.apk)
     base {
         archivesName.set("yongge")
     }
-    // assembleDebug 完成后将 APK 复制为 yongge.apk（用 copyTo 替代不可靠的 renameTo）
+
+    // 使用 Android SDK 自带的 debug 密钥签名，无需自己创建密钥库
+    signingConfigs {
+        create("debugKey") {
+            storeFile = file(System.getProperty("user.home") + "/.android/debug.keystore")
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+        }
+    }
+
+    // assembleRelease 完成后将 APK 复制为 yongge.apk
     tasks.register("copyApkToYongge") {
         doLast {
-            val apkDir = layout.buildDirectory.dir("outputs/apk/debug").get().asFile
-            val src = apkDir.resolve("yongge-debug.apk")
+            val apkDir = layout.buildDirectory.dir("outputs/apk/release").get().asFile
+            val src = apkDir.resolve("yongge-release.apk")
             val dst = apkDir.resolve("yongge.apk")
-            if (dst.exists()) dst.delete()
-            src.copyTo(dst, overwrite = true)
-            if (dst.exists()) {
-                logger.lifecycle("APK copied: yongge.apk")
+            if (src.exists()) {
+                if (dst.exists()) dst.delete()
+                src.copyTo(dst, overwrite = true)
+                if (dst.exists()) {
+                    logger.lifecycle("APK copied: yongge.apk (release, signed with debug key)")
+                } else {
+                    logger.warn("APK copy failed")
+                }
             } else {
-                logger.warn("APK copy failed")
+                logger.warn("未找到 release APK 输出")
             }
         }
     }
@@ -30,8 +45,8 @@ android {
         applicationId = "com.yongge.batteryfloat"
         minSdk = 34
         targetSdk = 34
-        versionCode = 13
-        versionName = "1.5"
+        versionCode = 15
+        versionName = "1.52"
 
         // 只保留中文资源，剪掉多语言
         resConfigs("zh")
@@ -49,6 +64,7 @@ android {
         release {
             isMinifyEnabled = true
             isShrinkResources = true
+            signingConfig = signingConfigs.getByName("debugKey")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "src/main/keepRules/rules.keep"
@@ -67,7 +83,7 @@ android {
 }
 
 afterEvaluate {
-    tasks.named("assembleDebug") { finalizedBy("copyApkToYongge") }
+    tasks.named("assembleRelease") { finalizedBy("copyApkToYongge") }
 }
 
 dependencies {

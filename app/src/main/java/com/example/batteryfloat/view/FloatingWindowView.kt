@@ -18,6 +18,7 @@ import com.example.batteryfloat.R
  * - 竖向 LinearLayout：温度 + 功耗
  * - 圆角半透明背景，支持外观自定义
  * - 全屏拖拽，双击可锁定/解锁位置
+ * - 内存缓存锁定状态和视图尺寸，减少每帧 SharedPreferences 读取和 measure 开销
  */
 class FloatingWindowView(context: Context) : LinearLayout(context) {
 
@@ -48,6 +49,18 @@ class FloatingWindowView(context: Context) : LinearLayout(context) {
     // 双击锁定相关
     private var lastTapTime = 0L
     private var isDragging = false
+
+    // ===== 内存缓存（避免每帧读 SharedPreferences / measure） =====
+    /** 内存缓存的实际锁定状态 */
+    private var lockEngaged = false
+    /** 内存缓存的锁定功能开关 */
+    private var lockEnabled = false
+    /** 缓存尺寸标记（外观变更时置 true，clamp 时重新 measure） */
+    private var sizeCacheDirty = true
+    /** 缓存视图宽度 */
+    private var cachedWidth = 0
+    /** 缓存视图高度 */
+    private var cachedHeight = 0
 
     init {
         orientation = VERTICAL
@@ -82,13 +95,15 @@ class FloatingWindowView(context: Context) : LinearLayout(context) {
         val cornerRadius = prefs.getFloat("corner_radius", 30f)
         val textColor = prefs.getInt("text_color", Color.WHITE)
         val showPower = prefs.getBoolean("show_power", false)
-        val isEngaged = prefs.getBoolean(PREF_LOCK_ENGAGED, false)
+        // 同步内存缓存，后续触摸事件直接读取缓存变量
+        lockEngaged = prefs.getBoolean(PREF_LOCK_ENGAGED, false)
+        lockEnabled = prefs.getBoolean(PREF_LOCK_ENABLED, false)
 
         val drawable = GradientDrawable().apply {
             setColor(finalBg)
             setCornerRadius(dpToPx(cornerRadius.toInt()).toFloat())
             // 锁定状态添加半透明天蓝色边框，美感简洁
-            if (isEngaged) {
+            if (lockEngaged) {
                 setStroke(dpToPx(2), Color.argb(180, 100, 181, 246))  // 柔光蓝 2dp
             } else {
                 setStroke(0, Color.TRANSPARENT)
@@ -106,6 +121,9 @@ class FloatingWindowView(context: Context) : LinearLayout(context) {
 
         val padding = dpToPx(8)
         setPadding(padding, padding / 2, padding, padding / 2)
+
+        // 外观变更后尺寸缓存失效，下次 clamp 需重新 measure
+        sizeCacheDirty = true
     }
 
     fun updateTemperature(celsius: Float) {
@@ -119,6 +137,7 @@ class FloatingWindowView(context: Context) : LinearLayout(context) {
 
     /**
      * 将悬浮窗钳位到当前屏幕有效范围内
+     * - 使用缓存尺寸（外观未变更时避免重复 measure）
      */
     fun clampToScreenBounds() {
         val params = layoutParams ?: return
@@ -128,12 +147,20 @@ class FloatingWindowView(context: Context) : LinearLayout(context) {
         wm.defaultDisplay?.getRealMetrics(displayMetrics)
         val screenW = displayMetrics.widthPixels
         val screenH = displayMetrics.heightPixels
-        measure(
-            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED),
-            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
-        )
-        val viewW = measuredWidth
-        val viewH = measuredHeight
+
+        // 只在尺寸缓存脏（外观变更/首次）时重新 measure
+        if (sizeCacheDirty || cachedWidth <= 0 || cachedHeight <= 0) {
+            measure(
+                View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED),
+                View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
+            )
+            cachedWidth = measuredWidth
+            cachedHeight = measuredHeight
+            sizeCacheDirty = false
+        }
+        val viewW = cachedWidth
+        val viewH = cachedHeight
+
         val isLandscape = screenW > screenH
         @Suppress("DEPRECATION")
         val displayCutout = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
@@ -172,8 +199,8 @@ class FloatingWindowView(context: Context) : LinearLayout(context) {
                 val dy = Math.abs(event.rawY - initialTouchY)
                 if (dx > 10 || dy > 10) isDragging = true
 
-                // 实际锁定状态下禁止拖拽
-                if (prefs.getBoolean(PREF_LOCK_ENGAGED, false)) return true
+                // 实际锁定状态下禁止拖拽（使用内存缓存，避免每帧读 SharedPreferences）
+                if (lockEngaged) return true
 
                 params.x = initialX + (event.rawX - initialTouchX).toInt()
                 params.y = initialY + (event.rawY - initialTouchY).toInt()
@@ -185,16 +212,16 @@ class FloatingWindowView(context: Context) : LinearLayout(context) {
                 if (!isDragging) {
                     val now = System.currentTimeMillis()
                     if (now - lastTapTime < DOUBLE_TAP_MS) {
-                        // 仅当锁定功能开关开启时，双击才生效
-                        if (!prefs.getBoolean(PREF_LOCK_ENABLED, false)) {
+                        // 仅当锁定功能开关开启时，双击才生效（使用内存缓存）
+                        if (!lockEnabled) {
                             Log.d(TAG, "双击忽略：锁定功能开关已关闭")
                             lastTapTime = 0
                             return true
                         }
                         // 双击：切换实际锁定状态
-                        val newLocked = !prefs.getBoolean(PREF_LOCK_ENGAGED, false)
-                        prefs.edit().putBoolean(PREF_LOCK_ENGAGED, newLocked).apply()
-                        Log.i(TAG, "双击切换锁定: $newLocked")
+                        lockEngaged = !lockEngaged
+                        prefs.edit().putBoolean(PREF_LOCK_ENGAGED, lockEngaged).apply()
+                        Log.i(TAG, "双击切换锁定: $lockEngaged")
                         // 刷新外观（更新边框，不修改温度文本）
                         reloadAppearance()
                     }

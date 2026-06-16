@@ -12,6 +12,7 @@ import com.example.batteryfloat.service.FloatingWindowService
 import com.example.batteryfloat.shizuku.ShizukuHelper
 import com.example.batteryfloat.view.FloatingWindowView
 import kotlinx.coroutines.*
+import kotlin.math.abs
 
 /**
  * 电池监控器
@@ -25,11 +26,19 @@ class BatteryMonitor(
     private val floatingView: FloatingWindowView
 ) {
     private val TAG = "BatteryMonitor"
-    private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
+    private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
     private var isRunning = false
+
+    // ===== 缓存上次通知值，非显著变化时不更新通知 =====
+    private var lastNotifiedTemp = -100f
+    private var lastNotifiedPower = -100f
 
     companion object {
         private const val POLL_INTERVAL_MS = 2000L
+        /** 温度变化超过此阈值才更新通知 */
+        private const val TEMP_THRESHOLD = 0.1f
+        /** 功耗变化超过此阈值才更新通知 */
+        private const val POWER_THRESHOLD = 0.1f
     }
 
     fun start() {
@@ -48,21 +57,26 @@ class BatteryMonitor(
         scope.cancel()
     }
 
-    /** 获取温度+功耗双数据 */
+    /** 获取温度+功耗双数据（一次注册 Intent，共享数据） */
     private suspend fun fetchBatteryData() {
+        // 只注册一次 ACTION_BATTERY_CHANGED，温度/功耗共享同一份 intent 数据
+        val batteryIntent = context.registerReceiver(
+            null, IntentFilter(Intent.ACTION_BATTERY_CHANGED)
+        )
+
         val temperature = if (ShizukuHelper.isRunning() && ShizukuHelper.hasPermission()) {
-            readViaShizuku()
+            readViaShizuku(batteryIntent)
         } else {
-            getBatteryManagerTemperature()
+            getTemperatureFromIntent(batteryIntent)
         }
-        val power = getBatteryPower()
+        val power = getPowerFromIntent(batteryIntent)
         if (temperature >= 0) {
             updateDisplay(temperature, power)
         }
     }
 
     /** Shizuku 读温度，失败降级 */
-    private suspend fun readViaShizuku(): Float {
+    private suspend fun readViaShizuku(fallbackIntent: android.content.Intent?): Float {
         return suspendCancellableCoroutine { cont ->
             cont.invokeOnCancellation { }
             ShizukuHelper.readTemperature(object : ShizukuHelper.OnTemperatureListener {
@@ -71,16 +85,18 @@ class BatteryMonitor(
                 }
                 override fun onError(message: String) {
                     Log.w(TAG, "Shizuku 失败降级: $message")
-                    if (cont.isActive) cont.resumeWith(Result.success(getBatteryManagerTemperature()))
+                    // 降级时复用已注册的 intent，不再重复注册
+                    if (cont.isActive) cont.resumeWith(
+                        Result.success(getTemperatureFromIntent(fallbackIntent))
+                    )
                 }
             })
         }
     }
 
-    /** Intent 方式获取电池温度 */
-    private fun getBatteryManagerTemperature(): Float {
+    /** 从已注册的 Intent 中提取电池温度，避免重复注册 */
+    private fun getTemperatureFromIntent(intent: android.content.Intent?): Float {
         return try {
-            val intent = context.registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
             if (intent != null) {
                 val raw = intent.getIntExtra(BatteryManager.EXTRA_TEMPERATURE, -1)
                 if (raw > 0) raw / 10f else -1f
@@ -92,17 +108,15 @@ class BatteryMonitor(
     }
 
     /**
-     * 读取整机功耗（使用 BatteryManager 标准 API）
+     * 从已注册的 Intent 中提取电压，结合 BatteryManager API 计算功耗
      * P(W) = Voltage(mV) × |Current(μA)| / 1_000_000_000
-     * 使用 BatteryManager.getIntProperty(BATTERY_PROPERTY_CURRENT_NOW) 替代 intent extra
      */
-    private fun getBatteryPower(): Float {
+    private fun getPowerFromIntent(intent: android.content.Intent?): Float {
         return try {
             val batteryManager = context.getSystemService(Context.BATTERY_SERVICE) as BatteryManager
             val currentNow = batteryManager.getIntProperty(BatteryManager.BATTERY_PROPERTY_CURRENT_NOW)
             if (currentNow == Int.MIN_VALUE) return -1f
 
-            val intent = context.registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
             val voltage = intent?.getIntExtra(BatteryManager.EXTRA_VOLTAGE, -1) ?: -1
             if (voltage > 0) {
                 Math.abs(voltage.toDouble() * currentNow.toDouble() / 1_000_000_000.0).toFloat()
@@ -113,10 +127,20 @@ class BatteryMonitor(
         }
     }
 
-    private fun updateDisplay(celsius: Float, watts: Float) {
-        floatingView.updateTemperature(celsius)
-        floatingView.updatePower(watts)
-        updateNotification(celsius, watts)
+    /** 温度变化超过此阈值才更新通知 */
+    private suspend fun updateDisplay(celsius: Float, watts: Float) {
+        withContext(Dispatchers.Main) {
+            floatingView.updateTemperature(celsius)
+            floatingView.updatePower(watts)
+        }
+        // 仅当温度或功耗有显著变化时更新通知，减少 I/O
+        if (abs(celsius - lastNotifiedTemp) >= TEMP_THRESHOLD ||
+            abs(watts - lastNotifiedPower) >= POWER_THRESHOLD
+        ) {
+            lastNotifiedTemp = celsius
+            lastNotifiedPower = watts
+            updateNotification(celsius, watts)
+        }
     }
 
     private fun updateNotification(celsius: Float, watts: Float) {

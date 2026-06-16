@@ -11,12 +11,14 @@ import java.net.URL
  * 版本更新信息数据类
  * @param hasUpdate 是否有新版本
  * @param latestVersion 最新版本号（不含 v 前缀）
- * @param downloadUrl 下载页面 URL
+ * @param downloadUrl 下载页面 URL（Gitee Release 页）
+ * @param apkDownloadUrl APK 文件直链下载地址
  */
 data class UpdateInfo(
     val hasUpdate: Boolean,
     val latestVersion: String,
-    val downloadUrl: String
+    val downloadUrl: String,
+    val apkDownloadUrl: String = ""
 )
 
 /**
@@ -45,9 +47,40 @@ object UpdateChecker {
             val latestTag = json.getString("tag_name").removePrefix("v")
             val downloadUrl = "https://gitee.com/qinzuoyong/floating-data/releases"
 
+            // 从 API 响应中提取 APK 附件下载地址
+            var apkUrl = ""
+            // Gitee API 返回的 attachments 数组
+            if (json.has("attachments")) {
+                val assets = json.getJSONArray("attachments")
+                for (i in 0 until assets.length()) {
+                    val asset = assets.getJSONObject(i)
+                    val name = asset.optString("name", "")
+                    if (name.endsWith(".apk")) {
+                        apkUrl = asset.optString("browser_download_url", "")
+                        break
+                    }
+                }
+            }
+            // 也检查 assets 字段（不同 API 版本字段名可能不同）
+            if (apkUrl.isBlank() && json.has("assets")) {
+                val assets = json.getJSONArray("assets")
+                for (i in 0 until assets.length()) {
+                    val asset = assets.getJSONObject(i)
+                    val name = asset.optString("name", "")
+                    if (name.endsWith(".apk")) {
+                        apkUrl = asset.optString("browser_download_url", "")
+                        break
+                    }
+                }
+            }
+            // 兜底：按标准规则拼接下载地址
+            if (apkUrl.isBlank()) {
+                apkUrl = "https://gitee.com/qinzuoyong/floating-data/releases/download/v${latestTag}/yongge.apk"
+            }
+
             val hasUpdate = compareVersions(latestTag, currentVersion) > 0
-            Log.i(TAG, "当前版本: $currentVersion, 最新版本: $latestTag, 有更新: $hasUpdate")
-            UpdateInfo(hasUpdate, latestTag, downloadUrl)
+            Log.i(TAG, "当前版本: $currentVersion, 最新版本: $latestTag, 有更新: $hasUpdate, APK: $apkUrl")
+            UpdateInfo(hasUpdate, latestTag, downloadUrl, apkUrl)
         } catch (e: Exception) {
             Log.w(TAG, "检查更新失败: ${e.message}")
             UpdateInfo(false, "", "")

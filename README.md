@@ -1,7 +1,7 @@
 ﻿# 🔋 勇哥 - 电池温度悬浮窗
 
 > **实时监测电池温度与功耗的 Android 悬浮窗工具**  
-> 版本: **1.5** | 最低支持: **Android 14 (API 34)**
+> 版本: **1.52** | 最低支持: **Android 14 (API 34)**
 
 ---
 
@@ -15,6 +15,7 @@
 - 📱 **开机自启** — 支持开机自动启动悬浮窗服务
 - 💪 **持久保活** — 前台 Service + AlarmManager 心跳，START_STICKY 重启策略
 - 🔄 **自动更新检测** — 打开应用自动检测 Gitee 仓库是否有新版本，可选升级或忽略 | 实时查询服务状态，开关同步
+- 📥 **App 内可视化下载** — 点击「立即升级」在 App 内下载 APK，实时显示 0%~100% 圆形进度 + 百分比动画，下载完成一键安装
 
 ## 📦 下载
 https://gitee.com/qinzuoyong/floating-data/releases
@@ -27,9 +28,9 @@ https://gitee.com/qinzuoyong/floating-data/releases
 - Android SDK 35+
 
 ### 构建命令
-`./gradlew.bat assembleDebug --no-configuration-cache`
+`./gradlew.bat assembleRelease --no-configuration-cache`
 
-APK 输出路径：`app/build/outputs/apk/debug/yongge.apk`
+APK 输出路径：`app/build/outputs/apk/release/yongge.apk`
 
 ### 技术栈
 | 组件 | 版本 |
@@ -56,6 +57,8 @@ APK 输出路径：`app/build/outputs/apk/debug/yongge.apk`
 
 | 版本 | 日期 | 变更 |
 |------|------|------|
+| v1.52 | 2026-06-16 | 🧹 **项目清理**：删除无用文件（create_release.ps1、apk/、构建缓存、空目录），释放 101 MB；App 内可视化下载更新；构建改为 release 正式版（APK 签名） |
+| v1.51 | 2026-06-16 | 🚀 **性能优化**：Shizuku 反射缓存；协程调度优化；Intent 注册合并；锁定状态/视图尺寸内存缓存；通知阈值去重 |
 | v1.5 | 2026-06-16 | 修复双击锁定（开关与状态分离）；柔光蓝锁定边框；手动检查更新按钮；版本升级
 | v1.43 | 2026-06-15 | 修复自动更新 API；修复双击锁定开关控制；悬浮窗状态实时记录；版本升级
 | v1.42 | 2026-06-15 | 双击锁定悬浮窗；UI 全面美化；代码清理优化；版本升级
