@@ -28,9 +28,11 @@ https://gitee.com/qinzuoyong/floating-data/releases
 - Android SDK 35+
 
 ### 构建命令
-`./gradlew.bat assembleDebug --no-configuration-cache`
+`./gradlew.bat assembleRelease --no-configuration-cache`
 
-APK 输出路径：`app/build/outputs/apk/debug/yongge.apk`
+APK 输出路径：`app/build/outputs/apk/release/yongge.apk`
+
+> ⚠️ Release APK 为未签名版本，安装前需签名：`jarsigner -keystore <密钥库> yongge.apk <别名>`
 
 ### 技术栈
 | 组件 | 版本 |

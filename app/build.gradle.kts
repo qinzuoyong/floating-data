@@ -9,18 +9,24 @@ android {
     base {
         archivesName.set("yongge")
     }
-    // assembleDebug 完成后将 APK 复制为 yongge.apk（用 copyTo 替代不可靠的 renameTo）
+        // assembleRelease 完成后将 APK 复制为 yongge.apk（用 copyTo 替代不可靠的 renameTo）
     tasks.register("copyApkToYongge") {
         doLast {
-            val apkDir = layout.buildDirectory.dir("outputs/apk/debug").get().asFile
-            val src = apkDir.resolve("yongge-debug.apk")
+            val apkDir = layout.buildDirectory.dir("outputs/apk/release").get().asFile
+            // release 构建默认生成 unsigned APK（需配置 signingConfigs 后才会签名）
+            val src = apkDir.resolve("yongge-release-unsigned.apk")
             val dst = apkDir.resolve("yongge.apk")
-            if (dst.exists()) dst.delete()
-            src.copyTo(dst, overwrite = true)
-            if (dst.exists()) {
-                logger.lifecycle("APK copied: yongge.apk")
+            if (src.exists()) {
+                if (dst.exists()) dst.delete()
+                src.copyTo(dst, overwrite = true)
+                if (dst.exists()) {
+                    logger.lifecycle("APK copied: yongge.apk (release, unsigned)")
+                    logger.lifecycle("→ 安装前需签名: jarsigner -keystore <key> yongge.apk <alias>")
+                } else {
+                    logger.warn("APK copy failed")
+                }
             } else {
-                logger.warn("APK copy failed")
+                logger.warn("未找到 release APK 输出")
             }
         }
     }
@@ -67,7 +73,7 @@ android {
 }
 
 afterEvaluate {
-    tasks.named("assembleDebug") { finalizedBy("copyApkToYongge") }
+    tasks.named("assembleRelease") { finalizedBy("copyApkToYongge") }
 }
 
 dependencies {
