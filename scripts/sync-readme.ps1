@@ -8,11 +8,11 @@
     2. 更新 README.md 中的版本号标记
     3. 自动 commit 变更（可选）
 
+    编码处理：使用 .NET 方法 + 系统默认编码（GBK），
+    避免 PowerShell 的 UTF-8 BOM 导致中文乱码。
+
 .PARAMETER AutoCommit
     是否自动 commit 变更，默认 $true
-
-.EXAMPLE
-    .\sync-readme.ps1 -AutoCommit $true
 #>
 
 param(
@@ -36,7 +36,11 @@ $ProjectRoot = Split-Path -Parent $PSScriptRoot
 $BuildGradlePath = Join-Path $ProjectRoot "app\build.gradle.kts"
 $ReadmePath = Join-Path $ProjectRoot "README.md"
 
+# 使用系统默认编码（中文 Windows = GBK/CP936）
+$DefaultEncoding = [System.Text.Encoding]::Default
+
 Write-Host "开始同步 README 版本号..." -ForegroundColor Cyan
+Write-Host "系统编码: $($DefaultEncoding.EncodingName) (CodePage $($DefaultEncoding.CodePage))" -ForegroundColor Gray
 
 # 1. 从 build.gradle.kts 提取版本号
 if (-not (Test-Path $BuildGradlePath)) {
@@ -44,7 +48,7 @@ if (-not (Test-Path $BuildGradlePath)) {
     exit 1
 }
 
-$BuildContent = Get-Content $BuildGradlePath -Raw
+$BuildContent = [System.IO.File]::ReadAllText($BuildGradlePath, $DefaultEncoding)
 if ($BuildContent -match 'versionName\s*=\s*"([^"]+)"') {
     $Version = $Matches[1]
     Write-Host "检测到版本号: $Version" -ForegroundColor Green
@@ -59,7 +63,7 @@ if (-not (Test-Path $ReadmePath)) {
     exit 1
 }
 
-$ReadmeContent = Get-Content $ReadmePath -Raw -Encoding UTF8
+$ReadmeContent = [System.IO.File]::ReadAllText($ReadmePath, $DefaultEncoding)
 $OldVersionPattern = '(?<=版本:\s*\*\*)[^\*]+(?=\*\*)'
 
 if ($ReadmeContent -match $OldVersionPattern) {
@@ -70,7 +74,7 @@ if ($ReadmeContent -match $OldVersionPattern) {
     }
     
     $NewContent = $ReadmeContent -replace $OldVersionPattern, $Version
-    Set-Content -Path $ReadmePath -Value $NewContent -NoNewline -Encoding UTF8
+    [System.IO.File]::WriteAllText($ReadmePath, $NewContent, $DefaultEncoding)
     Write-Host "README.md 已更新: $OldVersion -> $Version" -ForegroundColor Green
 } else {
     Write-Error "README.md 中未找到版本号标记 (格式: 版本: **X.XX**)"
@@ -81,7 +85,7 @@ if ($ReadmeContent -match $OldVersionPattern) {
 if ($AutoCommitBool) {
     Set-Location $ProjectRoot
     & $GitPath add README.md
-    & $GitPath commit -m "docs: 自动同步版本号到 README ($Version)"
+    & $GitPath commit -m "docs: auto sync version to README ($Version)"
     Write-Host "已自动 commit README 变更" -ForegroundColor Green
 }
 
