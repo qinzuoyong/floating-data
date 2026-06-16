@@ -24,3 +24,11 @@ dependencyResolutionManagement {
 
 rootProject.name = "BatteryFloating"
 include(":app")
+
+// Gradle 构建缓存重定向到 _build/ 目录
+buildCache {
+    local {
+        directory = File(rootDir, "_build/gradle-cache")
+        isEnabled = true
+    }
+}
