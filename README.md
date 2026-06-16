@@ -1,26 +1,29 @@
 # ?? 勇哥 - 电池温度悬浮窗
 
 > **实时监测电池温度与功耗的 Android 悬浮窗工具**  
-> 版本: **1.52** | 最低支持: **Android 14 (API 34)**
+> 版本: **1.55** | 最低支持: **Android 14 (API 34)**
 
 ---
 
-## ? 功能特性
+## ?? 功能特性
 
-- ??? **实时温度显示** — 悬浮窗显示当前电池温度（℃），支持 Shizuku sysfs 读取 + BatteryManager 降级
-- ? **功耗监测** — 显示整机实时功耗（W），使用 Android 标准 BatteryManager API
+- ???? **实时温度显示** — 悬浮窗显示当前电池温度（℃），支持 Shizuku sysfs 读取 + BatteryManager 降级
+- ?? **功耗监测** — 显示整机实时功耗（W），使用 Android 标准 BatteryManager API
 - ?? **高度自定义** — 可调节字体大小、背景颜色、字体颜色、透明度、圆角曲率
 - ?? **横竖屏智能适配** — 悬浮窗在横竖屏下均可自由拖拽，边界智能钳位不超出屏幕
 - ?? **隐藏后台模式** — 开启后按 Home/返回键自动移除任务卡片，防止被划掉（悬浮窗服务继续运行）
-- ?? **开机自启** — 支持开机自动启动悬浮窗服务
-- ?? **持久保活** — 前台 Service + AlarmManager 心跳，START_STICKY 重启策略
-- ?? **自动更新检测** — 打开应用自动检测 Gitee 仓库是否有新版本，可选升级或忽略 | 实时查询服务状态，开关同步
+- ?? **开机自启动** — 支持开机智能判断：仅当上次退出前悬浮窗开启时才自动启动
+- ???? **进程保活** — 多级保活体系：前台 Service（常驻通知）+ 1px 不可见 Overlay + 可选的无障碍服务保活
+- ?? **自动更新检测** — 打开应用自动检测 Gitee 仓库是否有新版本，可选升级或忽略
 - ?? **App 内可视化下载** — 点击「立即升级」在 App 内下载 APK，实时显示 0%~100% 圆形进度 + 百分比动画，下载完成一键安装
+- ?? **双击锁定** — 双击悬浮窗可锁定/解锁拖拽位置，独立开关控制
 
 ## ?? 下载
 https://gitee.com/qinzuoyong/floating-data/releases
 
-## ??? 构建说明
+https://github.com/qinzuoyong/floating-data/releases
+
+## ?? 构建说明
 
 ### 环境要求
 - Android Studio
@@ -30,7 +33,7 @@ https://gitee.com/qinzuoyong/floating-data/releases
 ### 构建命令
 `./gradlew.bat assembleRelease --no-configuration-cache`
 
-APK 输出路径：`app/build/outputs/apk/release/yongge.apk`
+APK 输出路径：`_build/app/outputs/apk/release/yongge.apk`
 
 ### 技术栈
 | 组件 | 版本 |
@@ -41,7 +44,7 @@ APK 输出路径：`app/build/outputs/apk/release/yongge.apk`
 | Min SDK | 34 (Android 14) |
 | Target SDK | 34 |
 | Compose BOM | 2026.02.01 |
-| Material3 | ? |
+| Material3 | ?? |
 | Shizuku | 13.1.5 |
 | 协程 | 1.7.3 |
 
@@ -52,12 +55,15 @@ APK 输出路径：`app/build/outputs/apk/release/yongge.apk`
 3. 忽略电池优化
 4. 点击「启动悬浮窗」
 5. 拖拽可移动到任意位置
+6. ???? 可选：连接 Shizuku 后开启「进程保活」获取最强保活效果
+7. ?? 开启「开机自启动」让应用智能判断开机后是否自动恢复
 
 ## ?? 版本历史
 
 | 版本 | 日期 | 变更 |
 |------|------|------|
-| v1.52 | 2026-06-16 | ??? **构建产物重定向**：`app/build/` → `_build/app/`，`build/` → `_build/root/`；Gradle/Kotlin 缓存重定向；删除 `.idea/`；项目根目录只保留源码和配置，临时文件全集中到 `_build/` |
+| v1.53 | 2026-06-16 | ???? **全新保活体系**：借鉴 GKD 保活机制，新增无损保活遮蔽层 + 可选无障碍保活（需 Shizuku）；???? 进程保活/开机自启独立开关控制；?? 智能开机自启判断；UI 新增保活/自启状态卡片 |
+| v1.52 | 2026-06-16 | ?? 构建改为 release 正式版（APK 1.6MB，APK 签名）；修复「开发者证书」；App 内可视化下载更新（实时进度 0%~100% + 一键安装） |
 | v1.51 | 2026-06-16 | ?? **性能优化**：Shizuku 反射缓存；协程调度优化；Intent 注册合并；锁定状态/视图尺寸内存缓存；通知阈值去重 |
 | v1.5 | 2026-06-16 | 修复双击锁定（开关与状态分离）；柔光蓝锁定边框；手动检查更新按钮；版本升级
 | v1.43 | 2026-06-15 | 修复自动更新 API；修复双击锁定开关控制；悬浮窗状态实时记录；版本升级
@@ -74,5 +80,5 @@ APK 输出路径：`app/build/outputs/apk/release/yongge.apk`
 ---
 
 **作者**: qinzuoyong  
-**仓库**: https://gitee.com/qinzuoyong/floating-data
-
+**Gitee 仓库**: https://gitee.com/qinzuoyong/floating-data
+**GitHub 仓库**: https://github.com/qinzuoyong/floating-data

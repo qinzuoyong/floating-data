@@ -4,4 +4,5 @@
     <string name="notification_channel_name">电池温度监控</string>
     <string name="notification_title">电池温度: %s°C</string>
     <string name="temperature_loading">--°C</string>
+    <string name="keeplive_a11y_description">用于提升应用进程存活率的无障碍服务（不处理任何事件，零功耗）</string>
 </resources>

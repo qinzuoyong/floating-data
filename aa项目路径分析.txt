@@ -1,0 +1,15 @@
+BatteryFloating/
+├── app/src/               ← 🎯 你的代码
+├── app/build.gradle.kts   ← 🎯 模块配置
+├── build.gradle.kts       ← 🎯 根配置（已改：buildDir 重定向）
+├── settings.gradle.kts    ← 🎯 项目设置（已改：buildCache 重定向）
+├── gradle.properties      ← 🎯 属性（已改：Kotlin 缓存重定向）
+├── gradle/libs.versions.toml
+├── gradle/wrapper/        ← Gradle Wrapper
+├── gradlew / gradlew.bat  ← 构建入口
+├── .gitignore             ← 已改：忽略 .idea/ _build/ apk/
+├── README.md              ← 已更新
+├── _build/                ← 临时文件集中地（已 gitignore）
+│   ├── app/               ← 代替 app/build/
+│   └── root/              ← 代替根 build/
+└── local.properties       ← SDK 路径（已 gitignore）

@@ -31,8 +31,6 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-# Git 路径
-$GitPath = "D:\Git\cmd\git.exe"
 
 Write-Host "开始一键部署..." -ForegroundColor Cyan
 Write-Host "========================================" -ForegroundColor Gray
