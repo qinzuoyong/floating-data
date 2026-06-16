@@ -39,6 +39,7 @@ import com.example.batteryfloat.service.KeepliveA11yService
 import com.example.batteryfloat.shizuku.ShizukuHelper
 import com.example.batteryfloat.ui.theme.BatteryFloatingTheme
 import com.example.batteryfloat.util.KeepaliveManager
+import androidx.lifecycle.Lifecycle
 import com.example.batteryfloat.update.ApkDownloader
 import com.example.batteryfloat.update.DownloadState
 import com.example.batteryfloat.update.UpdateChecker
@@ -78,6 +79,8 @@ class MainActivity : ComponentActivity() {
         super.onResume()
         // 从外部页面返回后重置标志
         isLaunchingExternal = false
+        // 同步保活服务的真实运行状态
+        com.example.batteryfloat.util.KeepaliveManager.isKeepaliveRunning()
     }
 
     private fun openOverlaySettings() {
@@ -165,6 +168,20 @@ fun MainScreen(
     var lockDrag by remember { mutableStateOf(prefs.getBoolean("lock_drag_enabled", false)) }
     var keepaliveEnabled by remember { mutableStateOf(prefs.getBoolean("keepalive_enabled", false)) }
     var bootAutoStart by remember { mutableStateOf(prefs.getBoolean("boot_auto_start", true)) }
+
+    // 每次回到前台时同步保活服务真实状态
+    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    androidx.compose.runtime.DisposableEffect(lifecycleOwner) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                keepaliveEnabled = prefs.getBoolean("keepalive_enabled", false) &&
+                        com.example.batteryfloat.service.KeepliveA11yService.isRunning
+                isServiceRunning = com.example.batteryfloat.service.FloatingWindowService.isRunning
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
 
     // ===== 版本更新检测 =====
     var showUpdateDialog by remember { mutableStateOf(false) }
@@ -263,7 +280,11 @@ fun MainScreen(
                 }
                 Button(
                     onClick = {
-                        if (isServiceRunning) { onStopService(); isServiceRunning = false }
+                        if (isServiceRunning) {
+                            onStopService(); isServiceRunning = false
+                            // 用户主动停止悬浮窗，清除开机自启标记
+                            prefs.edit().putBoolean("floating_was_running", false).apply()
+                        }
                         else {
                             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(context)) {
                                 Toast.makeText(context, "请先开启悬浮窗权限", Toast.LENGTH_SHORT).show()
@@ -375,10 +396,15 @@ fun MainScreen(
                     }
                 }
                 Switch(checked = keepaliveEnabled, onCheckedChange = { enabled ->
-                    keepaliveEnabled = enabled
-                    prefs.edit().putBoolean("keepalive_enabled", enabled).apply()
                     scope.launch {
-                        KeepaliveManager.toggleKeepalive(context, enabled)
+                        val success = KeepaliveManager.toggleKeepalive(context, enabled)
+                        // 只有操作成功时才更新状态
+                        keepaliveEnabled = success
+                        prefs.edit().putBoolean("keepalive_enabled", success).apply()
+                        if (!success) {
+                            // 操作失败，恢复开关状态（Switch 已通过 keepaliveEnabled 恢复）
+                            Log.w("MainActivity", "保活操作失败，开关恢复为关闭")
+                        }
                     }
                 })
             }

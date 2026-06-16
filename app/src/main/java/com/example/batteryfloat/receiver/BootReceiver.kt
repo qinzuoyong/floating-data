@@ -21,8 +21,10 @@ import com.example.batteryfloat.service.FloatingWindowService
  * 5. 如果上次是关闭状态 → 静默退出
  * 6. 启动后延迟 15 秒再检查一次（防止系统开机阶段拉起失败）
  *
- * 原理参考 GKD 的智能启动策略：
- * GKD 并非每次开机都启动所有服务，而是根据用户上次关闭前的状态决策
+ * 注意：`floating_was_running` 只在以下情况被设为 false：
+ * - 用户通过 MainActivity 主动关闭悬浮窗
+ * 而不是在 FloatingWindowService.onDestroy 中设置，
+ * 因为系统杀死进程时也会触发 onDestroy，但我们希望开机自启时能恢复。
  */
 class BootReceiver : BroadcastReceiver() {
 
@@ -37,12 +39,20 @@ class BootReceiver : BroadcastReceiver() {
 
     override fun onReceive(context: Context, intent: Intent) {
         val action = intent.action
+
+        // 延迟检查回调
         if (action == ACTION_AUTO_START_CHECK) {
-            // 延迟检查：开机一段时间后再次确认服务是否存活
             handleDelayedCheck(context)
             return
         }
-        if (action != Intent.ACTION_BOOT_COMPLETED) return
+
+        // 仅处理开机完成广播
+        if (action != Intent.ACTION_BOOT_COMPLETED &&
+            action != "android.intent.action.QUICKBOOT_POWERON") {
+            return
+        }
+
+        Log.i(TAG, "收到开机广播: $action")
 
         val prefs: SharedPreferences =
             context.getSharedPreferences("floating_prefs", Context.MODE_PRIVATE)
@@ -71,7 +81,6 @@ class BootReceiver : BroadcastReceiver() {
             scheduleDelayedCheck(context)
         } catch (e: Exception) {
             Log.e(TAG, "开机启动服务失败", e)
-            // 启动失败也要尝试延迟重试
             scheduleDelayedCheck(context)
         }
     }
@@ -107,16 +116,19 @@ class BootReceiver : BroadcastReceiver() {
         val prefs: SharedPreferences =
             context.getSharedPreferences("floating_prefs", Context.MODE_PRIVATE)
 
-        if (!FloatingWindowService.isRunning &&
-            prefs.getBoolean(PREF_BOOT_AUTO_START, true) &&
-            prefs.getBoolean(PREF_FLOATING_RUNNING, false)
-        ) {
+        val shouldRestart = !FloatingWindowService.isRunning &&
+                prefs.getBoolean(PREF_BOOT_AUTO_START, true) &&
+                prefs.getBoolean(PREF_FLOATING_RUNNING, false)
+
+        if (shouldRestart) {
             Log.i(TAG, "延迟检查：服务未运行，自动重试启动")
             try {
                 FloatingWindowService.start(context)
             } catch (e: Exception) {
                 Log.e(TAG, "延迟检查：启动失败", e)
             }
+        } else {
+            Log.d(TAG, "延迟检查：服务状态正常或不需要启动")
         }
     }
 }
