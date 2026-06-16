@@ -36,13 +36,20 @@ import androidx.compose.runtime.rememberCoroutineScope
 import kotlinx.coroutines.launch
 import com.example.batteryfloat.service.FloatingWindowService
 import com.example.batteryfloat.ui.theme.BatteryFloatingTheme
+import com.example.batteryfloat.update.ApkDownloader
+import com.example.batteryfloat.update.DownloadState
 import com.example.batteryfloat.update.UpdateChecker
+import com.example.batteryfloat.update.UpdateDownloadDialog
 
 class MainActivity : ComponentActivity() {
 
     private val prefs: SharedPreferences by lazy {
         getSharedPreferences("floating_prefs", Context.MODE_PRIVATE)
     }
+
+    /** 标志位：是否正在启动外部 Intent（如安装 APK/权限设置），跳过 onUserLeaveHint 的 finishAndRemoveTask */
+    @Volatile
+    private var isLaunchingExternal = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -55,18 +62,29 @@ class MainActivity : ComponentActivity() {
                     onStopService = { FloatingWindowService.stop(this) },
                     onOpenOverlaySettings = { openOverlaySettings() },
                     onOpenBatterySettings = { openBatteryOptimizationSettings() },
-                    onOpenUrl = { url -> startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) }
+                    onInstallApk = { file ->
+                        isLaunchingExternal = true
+                        ApkDownloader.install(this, file)
+                    }
                 )
             }
         }
     }
 
+    override fun onResume() {
+        super.onResume()
+        // 从外部页面返回后重置标志
+        isLaunchingExternal = false
+    }
+
     private fun openOverlaySettings() {
+        isLaunchingExternal = true
         startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")))
     }
 
     private fun openBatteryOptimizationSettings() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            isLaunchingExternal = true
             startActivity(Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
                 data = Uri.parse("package:$packageName")
             })
@@ -75,6 +93,11 @@ class MainActivity : ComponentActivity() {
 
     override fun onUserLeaveHint() {
         super.onUserLeaveHint()
+        // 如果是启动外部 Intent（安装 APK/权限设置）导致的离开，不执行隐藏后台
+        if (isLaunchingExternal) {
+            Log.d("MainActivity", "onUserLeaveHint: 启动外部 Intent，跳过 finishAndRemoveTask")
+            return
+        }
         if (prefs.getBoolean("hide_recents", false)) {
             Log.i("MainActivity", "隐藏后台(Home键): finishAndRemoveTask")
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
@@ -124,7 +147,7 @@ fun MainScreen(
     onStopService: () -> Unit,
     onOpenOverlaySettings: () -> Unit,
     onOpenBatterySettings: () -> Unit,
-    onOpenUrl: (String) -> Unit = {}
+    onInstallApk: (java.io.File) -> Unit = {}
 ) {
     val context = LocalContext.current
 
@@ -141,10 +164,23 @@ fun MainScreen(
     // ===== 版本更新检测 =====
     var showUpdateDialog by remember { mutableStateOf(false) }
     var updateVersion by remember { mutableStateOf("") }
-    var updateUrl by remember { mutableStateOf("") }
+    var updateApkUrl by remember { mutableStateOf("") }
     var isChecking by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     var hasChecked by remember { mutableStateOf(false) }
+
+    // 观察 ApkDownloader 的下载状态
+    val downloadState by ApkDownloader.downloadState.collectAsState()
+
+    // 下载状态变化时自动打开/关闭对话框
+    LaunchedEffect(downloadState) {
+        when (downloadState) {
+            is DownloadState.Downloading -> showUpdateDialog = true
+            is DownloadState.Completed -> showUpdateDialog = true
+            is DownloadState.Error -> showUpdateDialog = true
+            else -> {} // Idle 时不打开
+        }
+    }
 
     LaunchedEffect(Unit) {
         if (!hasChecked) {
@@ -152,69 +188,36 @@ fun MainScreen(
             val info = UpdateChecker.check("1.51")
             if (info.hasUpdate) {
                 updateVersion = info.latestVersion
-                updateUrl = info.downloadUrl
+                updateApkUrl = info.apkDownloadUrl
                 showUpdateDialog = true
             }
         }
     }
 
-    // ===== 版本更新弹窗 =====
+    // ===== 更新下载对话框（带进度） =====
     if (showUpdateDialog) {
-        AlertDialog(
-            onDismissRequest = { showUpdateDialog = false },
-            shape = RoundedCornerShape(20.dp),
-            containerColor = MaterialTheme.colorScheme.surface,
-            title = {
-                Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Spacer(Modifier.height(8.dp))
-                    Text(text = "🎉", fontSize = 36.sp)
-                    Spacer(Modifier.height(8.dp))
-                    Text("发现新版本", fontWeight = FontWeight.Bold, fontSize = 20.sp)
+        UpdateDownloadDialog(
+            updateVersion = updateVersion,
+            downloadState = downloadState,
+            onStartDownload = {
+                if (updateApkUrl.isNotBlank()) {
+                    scope.launch {
+                        ApkDownloader.download(context, updateApkUrl)
+                    }
                 }
             },
-            text = {
-                Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Text(
-                        "v${updateVersion} 现已发布",
-                        fontWeight = FontWeight.SemiBold,
-                        fontSize = 16.sp,
-                        color = MaterialTheme.colorScheme.primary,
-                        textAlign = TextAlign.Center
-                    )
-                    Spacer(Modifier.height(12.dp))
-                    Text(
-                    "当前版本: v1.51",
-                        fontSize = 13.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        textAlign = TextAlign.Center
-                    )
-                    Spacer(Modifier.height(4.dp))
-                    Text(
-                        "是否前往下载页面更新？",
-                        fontSize = 14.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        textAlign = TextAlign.Center
-                    )
+            onInstall = {
+                val completedState = downloadState as? DownloadState.Completed
+                if (completedState != null) {
+                    onInstallApk(completedState.file)
                 }
             },
-            confirmButton = {
-                Button(
-                    onClick = { showUpdateDialog = false; onOpenUrl(updateUrl) },
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
-                    shape = RoundedCornerShape(12.dp)
-                ) { Text("立即升级", fontWeight = FontWeight.SemiBold) }
-            },
-            dismissButton = {
-                TextButton(
-                    onClick = { showUpdateDialog = false },
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 2.dp)
-                ) { Text("以后再说", color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            onDismiss = {
+                showUpdateDialog = false
+                // 如果已完成但用户选择稍后安装，重置下载状态
+                if (downloadState is DownloadState.Completed) {
+                    ApkDownloader.cleanup(context)
+                }
             }
         )
     }
@@ -505,11 +508,11 @@ fun MainScreen(
                             if (!isChecking) {
                                 isChecking = true
                                 scope.launch {
-            val info = UpdateChecker.check("1.51")
+                                    val info = UpdateChecker.check("1.51")
                                     isChecking = false
                                     if (info.hasUpdate) {
                                         updateVersion = info.latestVersion
-                                        updateUrl = info.downloadUrl
+                                        updateApkUrl = info.apkDownloadUrl
                                         showUpdateDialog = true
                                     } else {
                                         Toast.makeText(context, "已是最新版本", Toast.LENGTH_SHORT).show()
