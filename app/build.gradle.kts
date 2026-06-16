@@ -5,23 +5,32 @@ plugins {
 
 android {
     namespace = "com.example.batteryfloat"
-    // APK 输出文件名设为 yongge (<module>-<variant>.apk -> yongge-debug.apk)
+    // APK 输出文件名设为 yongge (<module>-<variant>.apk -> yongge-release.apk)
     base {
         archivesName.set("yongge")
     }
-        // assembleRelease 完成后将 APK 复制为 yongge.apk（用 copyTo 替代不可靠的 renameTo）
+
+    // 使用 Android SDK 自带的 debug 密钥签名，无需自己创建密钥库
+    signingConfigs {
+        create("debugKey") {
+            storeFile = file(System.getProperty("user.home") + "/.android/debug.keystore")
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+        }
+    }
+
+    // assembleRelease 完成后将 APK 复制为 yongge.apk
     tasks.register("copyApkToYongge") {
         doLast {
             val apkDir = layout.buildDirectory.dir("outputs/apk/release").get().asFile
-            // release 构建默认生成 unsigned APK（需配置 signingConfigs 后才会签名）
-            val src = apkDir.resolve("yongge-release-unsigned.apk")
+            val src = apkDir.resolve("yongge-release.apk")
             val dst = apkDir.resolve("yongge.apk")
             if (src.exists()) {
                 if (dst.exists()) dst.delete()
                 src.copyTo(dst, overwrite = true)
                 if (dst.exists()) {
-                    logger.lifecycle("APK copied: yongge.apk (release, unsigned)")
-                    logger.lifecycle("→ 安装前需签名: jarsigner -keystore <key> yongge.apk <alias>")
+                    logger.lifecycle("APK copied: yongge.apk (release, signed with debug key)")
                 } else {
                     logger.warn("APK copy failed")
                 }
@@ -55,6 +64,7 @@ android {
         release {
             isMinifyEnabled = true
             isShrinkResources = true
+            signingConfig = signingConfigs.getByName("debugKey")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "src/main/keepRules/rules.keep"
