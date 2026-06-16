@@ -45,8 +45,8 @@ android {
         applicationId = "com.yongge.batteryfloat"
         minSdk = 34
         targetSdk = 34
-        versionCode = 14
-        versionName = "1.51"
+        versionCode = 15
+        versionName = "1.52"
 
         // 只保留中文资源，剪掉多语言
         resConfigs("zh")
