@@ -170,12 +170,14 @@ fun MainScreen(
     var bootAutoStart by remember { mutableStateOf(prefs.getBoolean("boot_auto_start", true)) }
 
     // 每次回到前台时同步保活服务真实状态
+    // 注意：keepaliveEnabled 的值 = 服务实际运行状态
+    // 不再依赖 prefs（因为 prefs 只在操作成功时写入）
     val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
     androidx.compose.runtime.DisposableEffect(lifecycleOwner) {
         val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
-                keepaliveEnabled = prefs.getBoolean("keepalive_enabled", false) &&
-                        com.example.batteryfloat.service.KeepliveA11yService.isRunning
+                // 直接读取服务真实运行状态
+                keepaliveEnabled = com.example.batteryfloat.service.KeepliveA11yService.isRunning
                 isServiceRunning = com.example.batteryfloat.service.FloatingWindowService.isRunning
             }
         }
@@ -207,7 +209,7 @@ fun MainScreen(
     LaunchedEffect(Unit) {
         if (!hasChecked) {
             hasChecked = true
-            val info = UpdateChecker.check("1.53")
+            val info = UpdateChecker.check("1.54")
             if (info.hasUpdate) {
                 updateVersion = info.latestVersion
                 updateApkUrl = info.apkDownloadUrl
@@ -396,14 +398,17 @@ fun MainScreen(
                     }
                 }
                 Switch(checked = keepaliveEnabled, onCheckedChange = { enabled ->
+                    // 立即更新 UI（乐观更新），操作失败时再恢复
+                    keepaliveEnabled = enabled
                     scope.launch {
                         val success = KeepaliveManager.toggleKeepalive(context, enabled)
-                        // 只有操作成功时才更新状态
-                        keepaliveEnabled = success
-                        prefs.edit().putBoolean("keepalive_enabled", success).apply()
                         if (!success) {
-                            // 操作失败，恢复开关状态（Switch 已通过 keepaliveEnabled 恢复）
-                            Log.w("MainActivity", "保活操作失败，开关恢复为关闭")
+                            // 操作失败，恢复开关状态
+                            keepaliveEnabled = !enabled
+                            Log.w("MainActivity", "保活操作失败，开关恢复")
+                        } else {
+                            // 操作成功，持久化状态
+                            prefs.edit().putBoolean("keepalive_enabled", enabled).apply()
                         }
                     }
                 })
@@ -605,14 +610,14 @@ fun MainScreen(
                 ) {
                     Column {
                         Text("🎯 版本更新", fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
-                        Text("v1.53", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("v1.54", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     Button(
                         onClick = {
                             if (!isChecking) {
                                 isChecking = true
                                 scope.launch {
-                                    val info = UpdateChecker.check("1.53")
+                                    val info = UpdateChecker.check("1.54")
                                     isChecking = false
                                     if (info.hasUpdate) {
                                         updateVersion = info.latestVersion
