@@ -3,6 +3,8 @@ package com.example.batteryfloat.view
 import kotlin.math.abs
 import android.content.Context
 import android.content.SharedPreferences
+import android.os.VibrationEffect
+import android.os.Vibrator
 import android.util.Log
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
@@ -228,6 +230,14 @@ class FloatingWindowView(context: Context) : LinearLayout(context) {
                         lockEngaged = !lockEngaged
                         prefs.edit().putBoolean(PREF_LOCK_ENGAGED, lockEngaged).apply()
                         Log.i(TAG, "双击切换锁定: $lockEngaged")
+                        // 触发震动反馈（提示用户锁定状态已变更）
+                        @Suppress("MissingPermission")
+                        val vibrator = context.getSystemService(Vibrator::class.java)
+                        if (vibrator != null && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                            vibrator.vibrate(
+                                VibrationEffect.createOneShot(30, VibrationEffect.DEFAULT_AMPLITUDE)
+                            )
+                        }
                         // 刷新外观（更新边框，不修改温度文本）
                         reloadAppearance()
                     }

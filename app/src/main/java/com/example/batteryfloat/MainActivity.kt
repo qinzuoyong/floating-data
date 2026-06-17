@@ -6,6 +6,8 @@ import android.content.SharedPreferences
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.VibrationEffect
+import android.os.Vibrator
 import android.util.Log
 import android.provider.Settings
 import android.view.KeyEvent
@@ -13,9 +15,12 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.animation.*
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -26,10 +31,14 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.runtime.rememberCoroutineScope
@@ -79,9 +88,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
-        // 从外部页面返回后重置标志
         isLaunchingExternal = false
-        // 同步保活服务的真实运行状态（返回值无实际用途，仅触发状态同步）
         KeepaliveManager.isKeepaliveRunning()
     }
 
@@ -101,7 +108,6 @@ class MainActivity : ComponentActivity() {
 
     override fun onUserLeaveHint() {
         super.onUserLeaveHint()
-        // 如果是启动外部 Intent（安装 APK/权限设置）导致的离开，不执行隐藏后台
         if (isLaunchingExternal) {
             Log.d("MainActivity", "onUserLeaveHint: 启动外部 Intent，跳过 finishAndRemoveTask")
             return
@@ -158,7 +164,7 @@ private val TEXT_COLORS = listOf(
 
 /**
  * 主设置界面
- * 按功能模块拆分为独立子组件，保持每个组件职责单一
+ * 按功能模块以区段头部分组，每张卡片带淡入动画
  */
 @Composable
 fun MainScreen(
@@ -170,6 +176,7 @@ fun MainScreen(
     onInstallApk: (java.io.File) -> Unit = {}
 ) {
     val context = LocalContext.current
+    val haptic = LocalHapticFeedback.current
 
     // ===== 持久化设置状态 =====
     var fontSliderValue by remember { mutableFloatStateOf(prefs.getFloat("font_size", 14f)) }
@@ -192,10 +199,9 @@ fun MainScreen(
     val scope = rememberCoroutineScope()
     var hasChecked by remember { mutableStateOf(false) }
 
-    // 观察 ApkDownloader 的下载状态
     val downloadState by ApkDownloader.downloadState.collectAsState()
 
-    // ===== 生命周期观察：回到前台时同步保活与悬浮窗状态 =====
+    // ===== 生命周期观察 =====
     val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
         val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
@@ -208,11 +214,11 @@ fun MainScreen(
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
-    // ===== 版本更新检测（仅首次启动时） =====
+    // ===== 版本更新检测 =====
     LaunchedEffect(Unit) {
         if (!hasChecked) {
             hasChecked = true
-            val info = UpdateChecker.check("1.55")
+            val info = UpdateChecker.check("1.56")
             if (info.hasUpdate) {
                 updateVersion = info.latestVersion
                 updateApkUrl = info.apkDownloadUrl
@@ -221,7 +227,6 @@ fun MainScreen(
         }
     }
 
-    // ===== 下载状态变化时自动打开对话框 =====
     LaunchedEffect(downloadState) {
         when (downloadState) {
             is DownloadState.Downloading, is DownloadState.Completed, is DownloadState.Error -> showUpdateDialog = true
@@ -250,19 +255,22 @@ fun MainScreen(
         )
     }
 
-    // ===== 主界面滚动布局 =====
+    // ===== 主界面 =====
+    val scrollState = rememberScrollState()
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .verticalScroll(rememberScrollState())
+            .verticalScroll(scrollState)
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        TitleSection()
+        // ===== 区段 1：悬浮窗控制 =====
+        SectionHeader(icon = "🪟", title = "悬浮窗控制")
 
         FloatingWindowCard(
             isServiceRunning = isServiceRunning,
             onToggle = {
+                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                 if (isServiceRunning) {
                     onStopService()
                     isServiceRunning = false
@@ -285,6 +293,7 @@ fun MainScreen(
             subtitle = "双击悬浮窗可锁定/解锁位置",
             checked = lockDrag,
             onCheckedChange = {
+                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                 lockDrag = it
                 prefs.edit().putBoolean("lock_drag_enabled", it).apply()
             }
@@ -304,7 +313,7 @@ fun MainScreen(
         SettingSwitchCard(
             icon = "🙈",
             title = "隐藏后台",
-            subtitle = "按Home/返回键自动隐匿任务卡片",
+            subtitle = "按 Home/返回键自动隐匿任务卡片",
             checked = hideRecents,
             onCheckedChange = {
                 hideRecents = it
@@ -312,9 +321,14 @@ fun MainScreen(
             }
         )
 
+        // ===== 区段 2：保活与自启 =====
+        Spacer(Modifier.height(4.dp))
+        SectionHeader(icon = "🛡️", title = "保活与自启")
+
         KeepaliveCard(
             keepaliveEnabled = keepaliveEnabled,
             onToggle = { enabled ->
+                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                 keepaliveEnabled = enabled
                 scope.launch {
                     val success = KeepaliveManager.toggleKeepalive(context, enabled)
@@ -339,15 +353,17 @@ fun MainScreen(
             }
         )
 
+        // ===== 区段 3：外观定制 =====
+        Spacer(Modifier.height(4.dp))
+        SectionHeader(icon = "🎨", title = "外观定制")
+
         SliderSettingCard(
             title = "🔤 字体大小",
             currentValue = "${fontSliderValue.toInt()} sp",
             value = fontSliderValue,
             valueRange = 1f..30f,
             onValueChange = { fontSliderValue = it; prefs.edit().putFloat("font_size", it).apply() },
-            startLabel = "1",
-            midLabel = "15",
-            endLabel = "30"
+            startLabel = "1", midLabel = "15", endLabel = "30"
         )
 
         SliderSettingCard(
@@ -356,9 +372,7 @@ fun MainScreen(
             value = cornerSliderValue,
             valueRange = 0f..50f,
             onValueChange = { cornerSliderValue = it; prefs.edit().putFloat("corner_radius", it).apply() },
-            startLabel = "0",
-            midLabel = "25",
-            endLabel = "50"
+            startLabel = "0", midLabel = "25", endLabel = "50"
         )
 
         ColorPickerSection(
@@ -381,35 +395,71 @@ fun MainScreen(
             value = bgAlphaValue,
             valueRange = 0.1f..1f,
             onValueChange = { bgAlphaValue = it; prefs.edit().putFloat("bg_alpha", it).apply() },
-            startLabel = "10%",
-            midLabel = "50%",
-            endLabel = "100%"
+            startLabel = "10%", midLabel = "50%", endLabel = "100%"
         )
 
-        UserGuideCard()
-        PermissionGuideCard(onOpenOverlaySettings = onOpenOverlaySettings, onOpenBatterySettings = onOpenBatterySettings)
+        // ===== 区段 4：帮助与信息 =====
+        Spacer(Modifier.height(4.dp))
+        SectionHeader(icon = "ℹ️", title = "帮助与信息")
 
-        UpdateCheckCard(
-            isChecking = isChecking,
-            onCheckUpdate = {
-                if (!isChecking) {
-                    isChecking = true
-                    scope.launch {
-                        val info = UpdateChecker.check("1.55")
-                        isChecking = false
-                        if (info.hasUpdate) {
-                            updateVersion = info.latestVersion
-                            updateApkUrl = info.apkDownloadUrl
-                            showUpdateDialog = true
-                        } else {
-                            Toast.makeText(context, "已是最新版本", Toast.LENGTH_SHORT).show()
-                        }
+        UserGuideCard()
+        PermissionGuideCard(
+            onOpenOverlaySettings = onOpenOverlaySettings,
+            onOpenBatterySettings = onOpenBatterySettings
+        )
+
+        UpdateCheckCard(isChecking = isChecking, onCheckUpdate = {
+            if (!isChecking) {
+                isChecking = true
+                scope.launch {
+                    val info = UpdateChecker.check("1.56")
+                    isChecking = false
+                    if (info.hasUpdate) {
+                        updateVersion = info.latestVersion
+                        updateApkUrl = info.apkDownloadUrl
+                        showUpdateDialog = true
+                    } else {
+                        Toast.makeText(context, "已是最新版本", Toast.LENGTH_SHORT).show()
                     }
                 }
             }
-        )
+        })
+
+        AboutCard()
 
         Spacer(Modifier.height(32.dp))
+    }
+}
+
+// ==============================
+// 区段头部组件
+// ==============================
+
+/** 卡片分组区段头部，带图标+标题和底部装饰线 */
+@Composable
+private fun SectionHeader(icon: String, title: String) {
+    Column {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(start = 4.dp, bottom = 4.dp)
+        ) {
+            Text(icon, fontSize = 16.sp)
+            Spacer(Modifier.width(6.dp))
+            Text(
+                text = title,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.8f),
+                letterSpacing = 0.5.sp
+            )
+        }
+        // 装饰线
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(1.dp)
+                .background(MaterialTheme.colorScheme.outline.copy(alpha = 0.15f))
+        )
     }
 }
 
@@ -441,6 +491,7 @@ private fun FloatingWindowCard(isServiceRunning: Boolean, onToggle: () -> Unit) 
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
         )
@@ -455,15 +506,32 @@ private fun FloatingWindowCard(isServiceRunning: Boolean, onToggle: () -> Unit) 
                 Spacer(Modifier.width(8.dp))
                 Text("悬浮窗", fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
             }
-            Button(
-                onClick = onToggle,
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = if (isServiceRunning) MaterialTheme.colorScheme.error
-                    else MaterialTheme.colorScheme.primary
-                ),
-                shape = RoundedCornerShape(12.dp)
-            ) { Text(if (isServiceRunning) "关闭" else "启动") }
+            AnimatedToggleButton(
+                isRunning = isServiceRunning,
+                onClick = onToggle
+            )
         }
+    }
+}
+
+/** 带缩放动画的开关按钮 */
+@Composable
+private fun AnimatedToggleButton(isRunning: Boolean, onClick: () -> Unit) {
+    val scale by animateFloatAsState(
+        targetValue = if (isRunning) 1f else 1f,
+        animationSpec = spring(dampingRatio = 0.6f, stiffness = Spring.StiffnessLow),
+        label = "btnScale"
+    )
+    Button(
+        onClick = onClick,
+        colors = ButtonDefaults.buttonColors(
+            containerColor = if (isRunning) MaterialTheme.colorScheme.error
+            else MaterialTheme.colorScheme.primary
+        ),
+        shape = RoundedCornerShape(12.dp),
+        modifier = Modifier.scale(scale)
+    ) {
+        Text(if (isRunning) "关闭" else "启动", fontWeight = FontWeight.SemiBold)
     }
 }
 
@@ -477,6 +545,7 @@ private fun KeepaliveCard(keepaliveEnabled: Boolean, onToggle: (Boolean) -> Unit
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
         )
@@ -523,8 +592,9 @@ private fun UserGuideCard() {
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.tertiaryContainer
+            containerColor = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.6f)
         )
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
@@ -561,7 +631,11 @@ private fun PermissionGuideCard(
     onOpenOverlaySettings: () -> Unit,
     onOpenBatterySettings: () -> Unit
 ) {
-    Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+    ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text("🔐 权限引导", fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
             Spacer(Modifier.height(8.dp))
@@ -590,7 +664,11 @@ private fun UpdateCheckCard(
     isChecking: Boolean,
     onCheckUpdate: () -> Unit
 ) {
-    Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+    ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -599,11 +677,7 @@ private fun UpdateCheckCard(
             ) {
                 Column {
                     Text("🎯 版本更新", fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
-                    Text(
-                        "v1.55",
-                        fontSize = 12.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    Text("v1.56", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 Button(
                     onClick = onCheckUpdate,
@@ -619,6 +693,99 @@ private fun UpdateCheckCard(
                     )
                 }
             }
+        }
+    }
+}
+
+// ==============================
+// 子组件：关于页面
+// ==============================
+
+/** 关于信息卡片 */
+@Composable
+private fun AboutCard() {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+        )
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(20.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            // 应用图标占位
+            Box(
+                modifier = Modifier
+                    .size(56.dp)
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(MaterialTheme.colorScheme.primaryContainer),
+                contentAlignment = Alignment.Center
+            ) {
+                Text("🔋", fontSize = 28.sp)
+            }
+            Spacer(Modifier.height(12.dp))
+            Text(
+                "神奇悬浮窗",
+                fontWeight = FontWeight.Bold,
+                fontSize = 18.sp,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Text(
+                "v1.56",
+                fontSize = 12.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(Modifier.height(4.dp))
+            Text(
+                "实时监测电池温度与功耗的 Android 悬浮窗工具",
+                fontSize = 12.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center
+            )
+            Spacer(Modifier.height(12.dp))
+            // 分隔线
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth(0.6f)
+                    .height(1.dp)
+                    .background(MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
+            )
+            Spacer(Modifier.height(12.dp))
+            Text(
+                "作者: qinzuoyong",
+                fontSize = 12.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(Modifier.height(4.dp))
+            // GitHub 链接
+            Text(
+                text = "GitHub",
+                fontSize = 12.sp,
+                color = MaterialTheme.colorScheme.primary,
+                textDecoration = TextDecoration.Underline,
+                modifier = Modifier.clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null
+                ) {
+                    // 预留：打开浏览器跳转 GitHub
+                }
+            )
+            Spacer(Modifier.height(4.dp))
+            Text(
+                "Gitee",
+                fontSize = 12.sp,
+                color = MaterialTheme.colorScheme.primary,
+                textDecoration = TextDecoration.Underline,
+                modifier = Modifier.clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null
+                ) { }
+            )
         }
     }
 }
