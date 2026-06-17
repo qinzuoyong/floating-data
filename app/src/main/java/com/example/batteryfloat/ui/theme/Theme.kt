@@ -11,17 +11,51 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.platform.LocalContext
 
 private val DarkColorScheme = darkColorScheme(
-    primary = Purple80,
-    secondary = PurpleGrey80,
-    tertiary = Pink80
+    primary = CyanBlueDarkPrimary,
+    onPrimary = CyanBlueDarkOnPrimary,
+    primaryContainer = CyanBlueDarkPrimaryContainer,
+    onPrimaryContainer = CyanBlueDarkOnPrimaryContainer,
+    secondary = CyanBlueDarkSecondary,
+    onSecondary = CyanBlueDarkOnSecondary,
+    secondaryContainer = CyanBlueDarkSecondaryContainer,
+    onSecondaryContainer = CyanBlueDarkOnSecondaryContainer,
+    tertiary = CyanBlueDarkTertiary,
+    onTertiary = CyanBlueDarkOnTertiary,
+    tertiaryContainer = CyanBlueDarkTertiaryContainer,
+    onTertiaryContainer = CyanBlueDarkOnTertiaryContainer,
+    background = CyanBlueDarkBackground,
+    surface = CyanBlueDarkSurface,
+    surfaceVariant = CyanBlueDarkSurfaceVariant,
+    onBackground = CyanBlueDarkOnBackground,
+    onSurface = CyanBlueDarkOnSurface,
+    outline = CyanBlueDarkOutline
 )
 
 private val LightColorScheme = lightColorScheme(
-    primary = Purple40,
-    secondary = PurpleGrey40,
-    tertiary = Pink40
+    primary = CyanBlueLightPrimary,
+    onPrimary = CyanBlueLightOnPrimary,
+    primaryContainer = CyanBlueLightPrimaryContainer,
+    onPrimaryContainer = CyanBlueLightOnPrimaryContainer,
+    secondary = CyanBlueLightSecondary,
+    onSecondary = CyanBlueLightOnSecondary,
+    secondaryContainer = CyanBlueLightSecondaryContainer,
+    onSecondaryContainer = CyanBlueLightOnSecondaryContainer,
+    tertiary = CyanBlueLightTertiary,
+    onTertiary = CyanBlueLightOnTertiary,
+    tertiaryContainer = CyanBlueLightTertiaryContainer,
+    onTertiaryContainer = CyanBlueLightOnTertiaryContainer,
+    background = CyanBlueLightBackground,
+    surface = CyanBlueLightSurface,
+    surfaceVariant = CyanBlueLightSurfaceVariant,
+    onBackground = CyanBlueLightOnBackground,
+    onSurface = CyanBlueLightOnSurface,
+    outline = CyanBlueLightOutline
 )
 
+/**
+ * BatteryFloating 主题
+ * 优先使用 Android 12+ 动态取色（Monet），回退到青蓝色自定义配色
+ */
 @Composable
 fun BatteryFloatingTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
