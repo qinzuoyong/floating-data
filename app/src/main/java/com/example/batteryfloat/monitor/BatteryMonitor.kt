@@ -26,12 +26,16 @@ class BatteryMonitor(
     private val floatingView: FloatingWindowView
 ) {
     private val TAG = "BatteryMonitor"
-    private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
+    // 使用 SupervisorJob 配合 CoroutineName，便于调试和取消管理
+    private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob() + CoroutineName("BatteryMonitor"))
     private var isRunning = false
 
     // ===== 缓存上次通知值，非显著变化时不更新通知 =====
     private var lastNotifiedTemp = -100f
     private var lastNotifiedPower = -100f
+
+    /** 缓存 IntentFilter 对象，避免每 2 秒创建新对象 */
+    private val batteryIntentFilter = IntentFilter(Intent.ACTION_BATTERY_CHANGED)
 
     companion object {
         private const val POLL_INTERVAL_MS = 2000L
@@ -46,7 +50,11 @@ class BatteryMonitor(
         isRunning = true
         scope.launch {
             while (isActive && isRunning) {
-                fetchBatteryData()
+                try {
+                    fetchBatteryData()
+                } catch (e: Exception) {
+                    Log.e(TAG, "电池数据获取异常", e)
+                }
                 delay(POLL_INTERVAL_MS)
             }
         }
@@ -54,14 +62,15 @@ class BatteryMonitor(
 
     fun stop() {
         isRunning = false
+        // 优雅关闭协程，等待正在执行的任务完成
         scope.cancel()
     }
 
     /** 获取温度+功耗双数据（一次注册 Intent，共享数据） */
     private suspend fun fetchBatteryData() {
-        // 只注册一次 ACTION_BATTERY_CHANGED，温度/功耗共享同一份 intent 数据
+        // 使用缓存的 IntentFilter，避免每次创建新对象
         val batteryIntent = context.registerReceiver(
-            null, IntentFilter(Intent.ACTION_BATTERY_CHANGED)
+            null, batteryIntentFilter
         )
 
         val temperature = if (ShizukuHelper.isRunning() && ShizukuHelper.hasPermission()) {
@@ -119,7 +128,7 @@ class BatteryMonitor(
 
             val voltage = intent?.getIntExtra(BatteryManager.EXTRA_VOLTAGE, -1) ?: -1
             if (voltage > 0) {
-                Math.abs(voltage.toDouble() * currentNow.toDouble() / 1_000_000_000.0).toFloat()
+                abs(voltage.toDouble() * currentNow.toDouble() / 1_000_000_000.0).toFloat()
             } else -1f
         } catch (e: Exception) {
             Log.w(TAG, "功耗读取失败", e)

@@ -79,7 +79,7 @@ class KeepliveA11yService : AccessibilityService() {
      * 窗口仅 1x1 像素，不可触摸，对用户完全不可见。
      */
     private fun addAliveOverlay() {
-        removeAliveOverlay()
+        removeAliveOverlay()  // 先清理旧的
         val wm = getSystemService(WINDOW_SERVICE) as WindowManager
         val view = View(this)
         val lp = WindowManager.LayoutParams(
@@ -102,6 +102,7 @@ class KeepliveA11yService : AccessibilityService() {
             Log.i(TAG, "1x1 保活覆盖层添加成功")
         } catch (e: Exception) {
             Log.e(TAG, "添加保活覆盖层失败: ${e.message}")
+            aliveView = null  // 确保状态一致
         }
     }
 

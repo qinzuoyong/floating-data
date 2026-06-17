@@ -1,5 +1,6 @@
 package com.example.batteryfloat.view
 
+import kotlin.math.abs
 import android.content.Context
 import android.content.SharedPreferences
 import android.util.Log
@@ -38,6 +39,8 @@ class FloatingWindowView(context: Context) : LinearLayout(context) {
         private const val PREF_LOCK_ENABLED = "lock_drag_enabled"
         /** 实际锁定状态 key（由双击切换） */
         private const val PREF_LOCK_ENGAGED = "lock_drag"
+        /** 拖拽触发阈值（像素），超过此值视为拖拽 */
+        private const val DRAG_THRESHOLD = 10
     }
 
     // 拖拽相关
@@ -45,6 +48,9 @@ class FloatingWindowView(context: Context) : LinearLayout(context) {
     private var initialY = 0
     private var initialTouchX = 0f
     private var initialTouchY = 0f
+
+    /** 缓存 density，避免每帧 getDisplayMetrics 开销 */
+    private val density: Float = context.resources.displayMetrics.density
 
     // 双击锁定相关
     private var lastTapTime = 0L
@@ -195,8 +201,8 @@ class FloatingWindowView(context: Context) : LinearLayout(context) {
                 return true
             }
             MotionEvent.ACTION_MOVE -> {
-                val dx = Math.abs(event.rawX - initialTouchX)
-                val dy = Math.abs(event.rawY - initialTouchY)
+                val dx = abs(event.rawX - initialTouchX)
+                val dy = abs(event.rawY - initialTouchY)
                 if (dx > 10 || dy > 10) isDragging = true
 
                 // 实际锁定状态下禁止拖拽（使用内存缓存，避免每帧读 SharedPreferences）
@@ -229,11 +235,16 @@ class FloatingWindowView(context: Context) : LinearLayout(context) {
                 }
                 return true
             }
+            MotionEvent.ACTION_CANCEL -> {
+                // 处理取消事件，重置拖拽状态
+                isDragging = false
+                return true
+            }
         }
         return super.onTouchEvent(event)
     }
 
     private fun dpToPx(dp: Int): Int {
-        return (dp * context.resources.displayMetrics.density).toInt()
+        return (dp * density).toInt()
     }
 }
