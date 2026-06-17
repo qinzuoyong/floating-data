@@ -108,14 +108,11 @@ class FloatingWindowService : Service() {
 
     override fun onDestroy() {
         isRunning = false
-        // 注意：不在 onDestroy 中设置 floating_was_running = false
-        // 因为系统杀死进程时也会触发 onDestroy，但我们希望开机自启时能恢复
-        // 只有用户通过 MainActivity 主动停止时才设置为 false
         cancelHeartbeat()
         stopMonitoring()
         removeFloatingWindow()
         removeAliveOverlay()
-        // 取消注册 SharedPreferences 监听器
+        // 取消注册 SharedPreferences 监听器，防止内存泄漏
         prefsListener?.let { prefs.unregisterOnSharedPreferenceChangeListener(it) }
         prefsListener = null
 
@@ -279,6 +276,7 @@ class FloatingWindowService : Service() {
             Log.d(TAG, "1x1 保活覆盖层添加成功")
         } catch (e: Exception) {
             Log.w(TAG, "添加保活覆盖层失败: ${e.message}")
+            aliveView = null  // 确保状态一致
         }
     }
 
@@ -292,7 +290,7 @@ class FloatingWindowService : Service() {
             } catch (e: Exception) {
                 Log.w(TAG, "移除保活覆盖层失败: ${e.message}")
             }
-            aliveView = null
+            aliveView = null  // 确保状态一致
         }
     }
 

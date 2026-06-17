@@ -1,7 +1,7 @@
-# 勇哥 - 电池温度悬浮窗
+# 手机信息悬浮窗
 
 > 实时监测电池温度与功耗的 Android 悬浮窗工具
-> 版本: 1.54 | 最低支持: Android 14 (API 34)
+> 版本: 1.55 | 最低支持: Android 14 (API 34)
 
 ────────────────────────────────────────
 
@@ -43,7 +43,9 @@
 下载地址
 ────────────────────────────────────────
 
-  https://github.com/qinzuoyong/floating-data/releases
+https://gitee.com/qinzuoyong/floating-data/releases
+
+https://github.com/qinzuoyong/floating-data/releases
 
 ────────────────────────────────────────
 
@@ -89,6 +91,12 @@ APK 输出路径:
 
 版本历史
 ────────────────────────────────────────
+
+  v1.55  2026-06-17
+         全量代码审查与优化: MainScreen重构(拆分为10+子组件)
+         ShizukuHelper线程安全修复(synchronized双重检查锁定)
+         BatteryMonitor IntentFilter缓存优化
+         FloatingWindowView density缓存+Math→kotlin.math.abs
 
   v1.54  2026-06-17
          保活开关优化: ADB/Shizuku 优先静默启用，无 ADB 时引导系统无障碍设置
@@ -146,4 +154,40 @@ APK 输出路径:
 ────────────────────────────────────────
 
 作者: qinzuoyong
+Gitee: https://gitee.com/qinzuoyong/floating-data
 GitHub: https://github.com/qinzuoyong/floating-data
+
+────────────────────────────────────────
+
+代码优化记录 (2026-06-17)
+────────────────────────────────────────
+
+本次全量代码审查与优化（第二轮）修复了以下问题：
+
+1. MainScreen 重构（Clean Architecture）
+   - 将 600+ 行的 MainScreen 拆分为 10+ 独立子组件
+   - 新增 SettingSwitchCard、ColorPickerSection、SliderSettingCard 公共组件
+   - 每个组件职责单一，可读性和可维护性大幅提升
+
+2. ShizukuHelper 线程安全（Critical）
+   - 反射缓存添加 synchronized 双重检查锁定模式
+   - cacheProcessMethods() 单独提取为同步方法
+   - 消除多线程并发时的 NullPointerException 风险
+
+3. BatteryMonitor 性能优化
+   - 缓存 IntentFilter 对象，消除每 2 秒 new IntentFilter() 的内存开销
+   - 统一使用 kotlin.math.abs 替代 Math.abs
+
+4. FloatingWindowView 性能优化
+   - density 字段在 init 时缓存，避免每次 dpToPx 调用都 getDisplayMetrics
+   - 使用 DRAG_THRESHOLD 常量化拖拽阈值
+   - 统一使用 kotlin.math.abs 替代 Math.abs（减少 JNI 调用）
+
+5. 版本号升级
+   - versionCode 17→18, versionName 1.54→1.55
+
+6. 构建验证（第二轮）
+   - assembleDebug: ✅ 通过
+   - test: ✅ 通过
+   - lint: ✅ 通过（0 error, 52 warnings）
+   - assembleRelease: ✅ 通过
