@@ -12,9 +12,9 @@ import androidx.compose.ui.unit.sp
 
 /**
  * 通用开关设置卡片
- * 用于锁定悬浮窗、功耗显示、隐藏后台、开机自启动等二元开关设置
+ * 使用 Material Icon 图标，无阴影扁平设计
  *
- * @param icon Emoji 图标
+ * @param icon Material Icon 组件，例如 { Icons.Filled.Lock, contentDescription = "锁定" }
  * @param title 设置项标题
  * @param subtitle 设置项副标题说明
  * @param checked 当前开关状态
@@ -22,7 +22,7 @@ import androidx.compose.ui.unit.sp
  */
 @Composable
 fun SettingSwitchCard(
-    icon: String,
+    icon: @Composable () -> Unit,
     title: String,
     subtitle: String,
     checked: Boolean,
@@ -31,9 +31,9 @@ fun SettingSwitchCard(
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
         )
     ) {
         Row(
@@ -43,16 +43,17 @@ fun SettingSwitchCard(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            Column {
+            Column(modifier = Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(icon, fontSize = 20.sp)
-                    Spacer(Modifier.width(8.dp))
+                    icon()
+                    Spacer(Modifier.width(10.dp))
                     Text(title, fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
                 }
                 Text(
                     subtitle,
                     fontSize = 12.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(start = 34.dp, top = 2.dp)
                 )
             }
             Switch(checked = checked, onCheckedChange = onCheckedChange)

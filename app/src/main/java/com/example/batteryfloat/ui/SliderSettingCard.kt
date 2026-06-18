@@ -11,8 +11,8 @@ import androidx.compose.ui.unit.sp
 
 /**
  * 滑块设置卡片
- * 用于字体大小、圆角曲率、透明度等滑块调节
-
+ * 用于字体大小、圆角曲率、透明度等滑块调节，无阴影扁平设计
+ *
  * @param title 设置项标题
  * @param currentValue 当前值的文本显示
  * @param value 滑块当前数值
@@ -35,7 +35,8 @@ fun SliderSettingCard(
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp)
+        shape = RoundedCornerShape(16.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text(title, fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
@@ -57,21 +58,9 @@ fun SliderSettingCard(
                     Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Text(
-                        startLabel,
-                        fontSize = 11.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Text(
-                        midLabel,
-                        fontSize = 11.sp,
-                        color = MaterialTheme.colorScheme.outline
-                    )
-                    Text(
-                        endLabel,
-                        fontSize = 11.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    Text(startLabel, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(midLabel, fontSize = 11.sp, color = MaterialTheme.colorScheme.outline)
+                    Text(endLabel, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
         }
