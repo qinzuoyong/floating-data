@@ -33,10 +33,10 @@ private val TEXT_COLORS = listOf(
  */
 @Composable
 fun AppearanceScreen(prefs: SharedPreferences) {
-    var fontSliderValue by remember { mutableFloatStateOf(prefs.getFloat("font_size", 14f)) }
+    var fontSliderValue by remember { mutableFloatStateOf(prefs.getFloat("font_size", 7f)) }
     var cornerSliderValue by remember { mutableFloatStateOf(prefs.getFloat("corner_radius", 30f)) }
-    var bgAlphaValue by remember { mutableFloatStateOf(prefs.getFloat("bg_alpha", 0.8f)) }
-    var bgColor by remember { mutableIntStateOf(prefs.getInt("bg_color", 0xFF000000.toInt())) }
+    var bgAlphaValue by remember { mutableFloatStateOf(prefs.getFloat("bg_alpha", 0.5f)) }
+    var bgColor by remember { mutableIntStateOf(prefs.getInt("bg_color", 0xFF666666.toInt())) }
     var textColor by remember { mutableIntStateOf(prefs.getInt("text_color", 0xFFFFFFFF.toInt())) }
 
     val scrollState = rememberScrollState()

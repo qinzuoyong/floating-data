@@ -96,9 +96,9 @@ class FloatingWindowView(context: Context) : LinearLayout(context) {
     }
 
     private fun applyAppearance() {
-        val fontSize = prefs.getFloat("font_size", 14f)
-        val alpha = (prefs.getFloat("bg_alpha", 0.8f) * 255).toInt().coerceIn(0, 255)
-        val bgColor = prefs.getInt("bg_color", Color.argb(255, 0, 0, 0))
+        val fontSize = prefs.getFloat("font_size", 7f)
+        val alpha = (prefs.getFloat("bg_alpha", 0.5f) * 255).toInt().coerceIn(0, 255)
+        val bgColor = prefs.getInt("bg_color", 0xFF666666.toInt())
         val finalBg = Color.argb(alpha, Color.red(bgColor), Color.green(bgColor), Color.blue(bgColor))
         val cornerRadius = prefs.getFloat("corner_radius", 30f)
         val textColor = prefs.getInt("text_color", Color.WHITE)

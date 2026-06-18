@@ -31,6 +31,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.batteryfloat.WebViewActivity
 import com.example.batteryfloat.service.KeepliveA11yService
 import com.example.batteryfloat.update.ApkDownloader
 import com.example.batteryfloat.update.DownloadState
@@ -97,7 +98,7 @@ fun AboutScreen(
             if (!isChecking) {
                 isChecking = true
                 scope.launch {
-                    val info = UpdateChecker.check("1.57")
+                    val info = UpdateChecker.check("1.58")
                     isChecking = false
                     if (info.hasUpdate) {
                         updateVersion = info.latestVersion
@@ -230,7 +231,7 @@ private fun UpdateCheckCard(isChecking: Boolean, onCheckUpdate: () -> Unit) {
                 Spacer(Modifier.width(8.dp))
                 Column {
                     Text("版本更新", fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
-                    Text("v1.57", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("v1.58", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
             FilledTonalButton(onClick = onCheckUpdate, enabled = !isChecking, shape = RoundedCornerShape(12.dp)) {
@@ -240,15 +241,19 @@ private fun UpdateCheckCard(isChecking: Boolean, onCheckUpdate: () -> Unit) {
     }
 }
 
-/** 关于信息卡片 - 含修复的 GitHub/Gitee 链接 */
+/** 关于信息卡片 - 含 WebView 内置浏览的 GitHub/Gitee 链接 */
 @Composable
 private fun AboutInfoCard() {
     val context = LocalContext.current
-    val safeOpenUrl: (String) -> Unit = { url ->
+    val openInWebView: (String, String) -> Unit = { url, title ->
         try {
-            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) })
+            context.startActivity(Intent(context, WebViewActivity::class.java).apply {
+                putExtra(WebViewActivity.EXTRA_URL, url)
+                putExtra(WebViewActivity.EXTRA_TITLE, title)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            })
         } catch (_: Exception) {
-            Toast.makeText(context, "无法打开浏览器", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, "无法打开页面", Toast.LENGTH_SHORT).show()
         }
     }
     Card(
@@ -263,7 +268,7 @@ private fun AboutInfoCard() {
             }
             Spacer(Modifier.height(12.dp))
             Text("神奇悬浮窗", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = MaterialTheme.colorScheme.onSurface)
-            Text("v1.57", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("v1.58", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Text("实时监测电池温度与功耗的 Android 悬浮窗工具", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
             Spacer(Modifier.height(12.dp))
             HorizontalDivider(modifier = Modifier.fillMaxWidth(0.6f))
@@ -274,14 +279,14 @@ private fun AboutInfoCard() {
             Text("GitHub", fontSize = 13.sp, color = MaterialTheme.colorScheme.primary,
                 textDecoration = TextDecoration.Underline,
                 modifier = Modifier.clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {
-                    safeOpenUrl("https://github.com/qinzuoyong/floating-data")
+                    openInWebView("https://github.com/qinzuoyong/floating-data", "GitHub")
                 })
             Spacer(Modifier.height(6.dp))
-            // Gitee 链接（修复：点击跳转浏览器）
+            // Gitee 链接（WebView 内置浏览）
             Text("Gitee", fontSize = 13.sp, color = MaterialTheme.colorScheme.primary,
                 textDecoration = TextDecoration.Underline,
                 modifier = Modifier.clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {
-                    safeOpenUrl("https://gitee.com/qinzuoyong/floating-data")
+                    openInWebView("https://gitee.com/qinzuoyong/floating-data", "Gitee")
                 })
         }
     }

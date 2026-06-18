@@ -54,7 +54,7 @@ fun HomeScreen(
     var isServiceRunning by remember { mutableStateOf(FloatingWindowService.isRunning) }
     var lockDrag by remember { mutableStateOf(prefs.getBoolean("lock_drag_enabled", false)) }
     var showPower by remember { mutableStateOf(prefs.getBoolean("show_power", false)) }
-    var hideRecents by remember { mutableStateOf(prefs.getBoolean("hide_recents", false)) }
+    var hideRecents by remember { mutableStateOf(prefs.getBoolean("hide_recents", true)) }
 
     val scrollState = rememberScrollState()
     Column(

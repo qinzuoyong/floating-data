@@ -1,7 +1,7 @@
 # 手机信息悬浮窗
 
 > 实时监测电池温度与功耗的 Android 悬浮窗工具
-> 版本: 1.57 | 最低支持: Android 14 (API 34)
+> 版本: 1.58 | 最低支持: Android 14 (API 34)
 
 ────────────────────────────────────────
 
@@ -92,6 +92,9 @@ APK 输出路径:
 版本历史
 ────────────────────────────────────────
 
+  v1.58  (当前版本)
+           版本号升级、外观默认值调整、隐藏后台默认开启、首次启动权限引导、WebView内置浏览、双源更新检测
+
   v1.57  2026-06-18
           UI 全面重构: 多页面底部导航架构(首页/外观/关于)
           主题色系改为天蓝主调(#1A73E8); 零阴影扁平卡片设计
@@ -170,43 +173,3 @@ Gitee: https://gitee.com/qinzuoyong/floating-data
 GitHub: https://github.com/qinzuoyong/floating-data
 
 ────────────────────────────────────────
-
-代码优化记录 (2026-06-17)
-────────────────────────────────────────
-
-本次全量代码审查与优化（第二轮）修复了以下问题：
-
-1. MainScreen 重构（Clean Architecture）
-   - 将 600+ 行的 MainScreen 拆分为 10+ 独立子组件
-   - 新增 SettingSwitchCard、ColorPickerSection、SliderSettingCard 公共组件
-   - 每个组件职责单一，可读性和可维护性大幅提升
-
-2. ShizukuHelper 线程安全（Critical）
-   - 反射缓存添加 synchronized 双重检查锁定模式
-   - cacheProcessMethods() 单独提取为同步方法
-   - 消除多线程并发时的 NullPointerException 风险
-
-3. BatteryMonitor 性能优化
-   - 缓存 IntentFilter 对象，消除每 2 秒 new IntentFilter() 的内存开销
-   - 统一使用 kotlin.math.abs 替代 Math.abs
-
-4. FloatingWindowView 性能优化
-   - density 字段在 init 时缓存，避免每次 dpToPx 调用都 getDisplayMetrics
-   - 使用 DRAG_THRESHOLD 常量化拖拽阈值
-   - 统一使用 kotlin.math.abs 替代 Math.abs（减少 JNI 调用）
-
-5. 版本号升级
-   - versionCode 17→18, versionName 1.54→1.55
-
-6. v1.56 应用名与UI优化
-   - 应用名: 勇哥 → 神奇悬浮窗
-   - 主题色系: 紫→青蓝主调; 新增暖橙辅助色
-   - 卡片分组: 分区段头部, 信息层级清晰
-   - 动画: 淡入+按钮缩放+锁定震动
-   - 新增 AboutCard 关于页面
-
-6. 构建验证（第二轮）
-   - assembleDebug: ✅ 通过
-   - test: ✅ 通过
-   - lint: ✅ 通过（0 error, 52 warnings）
-   - assembleRelease: ✅ 通过

@@ -120,7 +120,7 @@ object KeepaliveManager {
         withContext(Dispatchers.Main) {
             Toast.makeText(
                 context,
-                "请在无障碍设置中手动开启「勇哥」服务",
+                "请在无障碍设置中手动开启「神奇悬浮窗」服务",
                 Toast.LENGTH_LONG
             ).show()
             try {
@@ -203,7 +203,7 @@ object KeepaliveManager {
         withContext(Dispatchers.Main) {
             Toast.makeText(
                 context,
-                "请在无障碍设置中手动关闭「勇哥」服务",
+                "请在无障碍设置中手动关闭「神奇悬浮窗」服务",
                 Toast.LENGTH_LONG
             ).show()
             try {

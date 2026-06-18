@@ -14,6 +14,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import com.example.batteryfloat.service.FloatingWindowService
 import com.example.batteryfloat.ui.AppNavigation
+import com.example.batteryfloat.ui.PermissionGuideDialog
 import com.example.batteryfloat.ui.theme.BatteryFloatingTheme
 import com.example.batteryfloat.update.UpdateChecker
 import com.example.batteryfloat.update.ApkDownloader
@@ -40,7 +41,7 @@ class MainActivity : ComponentActivity() {
         // 后台检查版本更新
         val scope = kotlinx.coroutines.MainScope()
         scope.launch {
-            val info = UpdateChecker.check("1.57")
+            val info = UpdateChecker.check("1.58")
             if (info.hasUpdate) {
                 // 更新对话框由用户手动触发，后台仅记录
                 prefs.edit().putString("latest_version", info.latestVersion).apply()
@@ -49,7 +50,19 @@ class MainActivity : ComponentActivity() {
         }
 
         setContent {
+            // 首次启动弹出权限引导对话框
+            val showPermissionGuide = prefs.getBoolean("permission_guide_shown", false)
+
             BatteryFloatingTheme {
+                if (!showPermissionGuide) {
+                    PermissionGuideDialog(
+                        onDismiss = {
+                            prefs.edit().putBoolean("permission_guide_shown", true).apply()
+                        },
+                        onOpenOverlaySettings = { openOverlaySettings() },
+                        onOpenBatterySettings = { openBatteryOptimizationSettings() }
+                    )
+                }
                 AppNavigation(
                     prefs = prefs,
                     onStartService = { FloatingWindowService.start(this) },
