@@ -12,13 +12,11 @@ import android.view.KeyEvent
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.runtime.rememberCoroutineScope
 import com.example.batteryfloat.service.FloatingWindowService
 import com.example.batteryfloat.ui.AppNavigation
 import com.example.batteryfloat.ui.theme.BatteryFloatingTheme
 import com.example.batteryfloat.update.UpdateChecker
 import com.example.batteryfloat.update.ApkDownloader
-import com.example.batteryfloat.update.DownloadState
 import com.example.batteryfloat.util.KeepaliveManager
 import kotlinx.coroutines.launch
 

@@ -9,6 +9,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -197,7 +198,7 @@ private fun KeepaliveSection(
                     Text("进程保活", fontWeight = FontWeight.Medium, fontSize = 15.sp)
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         val a11yRunning = KeepliveA11yService.isRunning
-                        Box(modifier = Modifier.size(8.dp).clip(androidx.compose.foundation.shape.CircleShape).background(if (a11yRunning) Color(0xFF4CAF50) else Color(0xFFBDBDBD)))
+                        Box(modifier = Modifier.size(8.dp).clip(CircleShape).background(if (a11yRunning) Color(0xFF4CAF50) else Color(0xFFBDBDBD)))
                         Spacer(Modifier.width(4.dp))
                         Text(if (a11yRunning) "保活中 ✓" else "已关闭", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }

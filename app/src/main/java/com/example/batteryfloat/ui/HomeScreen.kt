@@ -19,7 +19,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.PowerOff
-import androidx.compose.material.icons.filled.ShowChart
+import androidx.compose.material.icons.automirrored.filled.ShowChart
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -33,7 +33,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.batteryfloat.service.FloatingWindowService
@@ -97,7 +96,7 @@ fun HomeScreen(
 
         // 功耗显示（从外观移入首页）
         SettingSwitchCard(
-            icon = { Icon(Icons.Filled.ShowChart, contentDescription = "功耗", tint = MaterialTheme.colorScheme.primary) },
+            icon = { Icon(Icons.AutoMirrored.Filled.ShowChart, contentDescription = "功耗", tint = MaterialTheme.colorScheme.primary) },
             title = "功耗显示",
             subtitle = "开启后悬浮窗显示整机功耗",
             checked = showPower,
