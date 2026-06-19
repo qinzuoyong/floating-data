@@ -183,11 +183,12 @@ class FloatingWindowService : Service() {
         )
         val alarmManager = getSystemService(ALARM_SERVICE) as AlarmManager
         try {
+            val pendingIntent = heartbeatPendingIntent ?: return
             alarmManager.setRepeating(
                 AlarmManager.ELAPSED_REALTIME_WAKEUP,
                 SystemClock.elapsedRealtime() + HEARTBEAT_INTERVAL_MS,
                 HEARTBEAT_INTERVAL_MS,
-                heartbeatPendingIntent!!
+                pendingIntent
             )
             Log.d(TAG, "心跳已设置: 间隔 ${HEARTBEAT_INTERVAL_MS / 60000} 分钟")
         } catch (e: Exception) {

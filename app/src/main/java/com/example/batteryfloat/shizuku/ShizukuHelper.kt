@@ -92,6 +92,9 @@ object ShizukuHelper {
     // ===== 温度读取 =====
 
     fun readTemperature(listener: OnTemperatureListener) {
+        var outputStream: java.io.OutputStream? = null
+        var inputStream: java.io.InputStream? = null
+        var reader: BufferedReader? = null
         try {
             ensureReflectionCache()
             val newProcess = _newProcessMethod!!
@@ -100,17 +103,15 @@ object ShizukuHelper {
             // 线程安全地缓存子进程 Method
             cacheProcessMethods(process)
 
-            val outputStream = _getOutputMethod!!.invoke(process) as java.io.OutputStream
-            val inputStream = _getInputMethod!!.invoke(process) as java.io.InputStream
+            outputStream = _getOutputMethod!!.invoke(process) as java.io.OutputStream
+            inputStream = _getInputMethod!!.invoke(process) as java.io.InputStream
 
             val cmd = "cat $TEMP_PATH 2>/dev/null || cat $TEMP_PATH_ALT 2>/dev/null\n"
             outputStream.write(cmd.toByteArray())
             outputStream.flush()
-            outputStream.close()
 
-            val reader = BufferedReader(InputStreamReader(inputStream))
+            reader = BufferedReader(InputStreamReader(inputStream))
             val line = reader.readLine()
-            reader.close()
             _waitForMethod!!.invoke(process)
 
             if (line != null && line.isNotBlank()) {
@@ -127,6 +128,10 @@ object ShizukuHelper {
         } catch (e: Exception) {
             Log.e(TAG, "Shizuku 读取温度失败", e)
             listener.onError(e.message ?: "未知错误")
+        } finally {
+            try { outputStream?.close() } catch (_: Exception) {}
+            try { reader?.close() } catch (_: Exception) {}
+            try { inputStream?.close() } catch (_: Exception) {}
         }
     }
 
@@ -140,6 +145,9 @@ object ShizukuHelper {
      * @return 命令输出文本，失败返回 null
      */
     fun executeCommand(command: String): String? {
+        var outputStream: java.io.OutputStream? = null
+        var inputStream: java.io.InputStream? = null
+        var reader: BufferedReader? = null
         try {
             ensureReflectionCache()
             val newProcess = _newProcessMethod!!
@@ -148,22 +156,24 @@ object ShizukuHelper {
             // 线程安全地缓存子进程 Method
             cacheProcessMethods(process)
 
-            val outputStream = _getOutputMethod!!.invoke(process) as java.io.OutputStream
-            val inputStream = _getInputMethod!!.invoke(process) as java.io.InputStream
+            outputStream = _getOutputMethod!!.invoke(process) as java.io.OutputStream
+            inputStream = _getInputMethod!!.invoke(process) as java.io.InputStream
 
             outputStream.write("$command\n".toByteArray())
             outputStream.flush()
-            outputStream.close()
 
-            val reader = BufferedReader(InputStreamReader(inputStream))
+            reader = BufferedReader(InputStreamReader(inputStream))
             val result = reader.readText()
-            reader.close()
             _waitForMethod!!.invoke(process)
 
             return result.trim().ifEmpty { null }
         } catch (e: Exception) {
             Log.e(TAG, "Shizuku 执行命令失败: $command", e)
             return null
+        } finally {
+            try { outputStream?.close() } catch (_: Exception) {}
+            try { reader?.close() } catch (_: Exception) {}
+            try { inputStream?.close() } catch (_: Exception) {}
         }
     }
 }

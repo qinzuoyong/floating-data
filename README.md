@@ -92,13 +92,14 @@ APK 输出路径:
 ────────────────────────────────────────
 
   v1.60  (当前版本)
-          移除无障碍保活服务：彻底解决侧载安装「部分功能已被限制」弹窗
+          移除无障碍保活服务：解决侧载安装「部分功能已被限制」弹窗
           启动自动更新弹窗：打开 App 立即检测并提示更新
           进程优先级最大化：IMPORTANCE_LOW + REDELIVER_INTENT + getForegroundService
           通知栏常驻小图标 + stopWithTask=false 双重防杀
           清理所有无障碍相关代码、权限和配置残留
           修复 3 个 Kotlin 编译 warning（弃用 API + 类型不匹配）
           版本号改用 BuildConfig.VERSION_NAME 自动同步
+          全量代码审计修复：Shizuku 资源泄漏 try-finally 保护、BatteryMonitor @Volatile 线程可见性、FloatingWindowService 空安全优化
 
   v1.59
            解除MIUI应用限制(多策略:反射+Shizuku+引导); 修复保活闪退(非阻塞设计+防Activity销毁)
@@ -182,7 +183,9 @@ APK 输出路径:
 ────────────────────────────────────────
 
 作者: qinzuoyong
+
 Gitee: https://gitee.com/qinzuoyong/floating-data
+
 GitHub: https://github.com/qinzuoyong/floating-data
 
 ────────────────────────────────────────

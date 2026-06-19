@@ -28,6 +28,7 @@ class BatteryMonitor(
     private val TAG = "BatteryMonitor"
     // 使用 SupervisorJob 配合 CoroutineName，便于调试和取消管理
     private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob() + CoroutineName("BatteryMonitor"))
+    @Volatile
     private var isRunning = false
 
     // ===== 缓存上次通知值，非显著变化时不更新通知 =====
