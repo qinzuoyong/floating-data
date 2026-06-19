@@ -168,7 +168,7 @@ private fun UpdateCheckCard(isChecking: Boolean, onCheckUpdate: () -> Unit) {
                 Spacer(Modifier.width(8.dp))
                 Column {
                     Text("版本更新", fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
-                    Text("v1.59", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("v1.60", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
             FilledTonalButton(onClick = onCheckUpdate, enabled = !isChecking, shape = RoundedCornerShape(12.dp)) {
@@ -197,7 +197,7 @@ private fun AboutInfoCard(onOpenExternalLink: (String, String) -> Unit = { _, _ 
             }
             Spacer(Modifier.height(12.dp))
             Text("神奇悬浮窗", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = MaterialTheme.colorScheme.onSurface)
-            Text("v1.59", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("v1.60", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Text("实时监测电池温度与功耗的 Android 悬浮窗工具", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
             Spacer(Modifier.height(12.dp))
             HorizontalDivider(modifier = Modifier.fillMaxWidth(0.6f))

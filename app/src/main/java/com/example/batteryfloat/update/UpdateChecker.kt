@@ -33,7 +33,7 @@ object UpdateChecker {
     /**
      * 检查是否有新版本
      * 双源：Gitee → GitHub（失败自动切换）
-     * @param currentVersion 当前应用版本号（如 "1.59"）
+     * @param currentVersion 当前应用版本号（如 "1.60"）
      * @return UpdateInfo 更新信息
      */
     suspend fun check(currentVersion: String): UpdateInfo = withContext(Dispatchers.IO) {
@@ -77,7 +77,7 @@ object UpdateChecker {
             conn.readTimeout = 5000
             conn.setRequestProperty("Accept", "application/json")
             // GitHub API 需要 User-Agent
-            conn.setRequestProperty("User-Agent", "BatteryFloating/1.59")
+            conn.setRequestProperty("User-Agent", "BatteryFloating/1.60")
 
             val response = conn.inputStream.bufferedReader().use { it.readText() }
             val json = JSONObject(response)
