@@ -11,13 +11,6 @@
     <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
-    <uses-permission
-        android:name="android.permission.WRITE_SECURE_SETTINGS"
-        tools:ignore="ProtectedPermissions" />
-    <uses-permission
-        android:name="android.permission.BIND_ACCESSIBILITY_SERVICE"
-        tools:ignore="ProtectedPermissions" />
-
     <application
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
@@ -47,21 +40,8 @@
         <service
             android:name=".service.FloatingWindowService"
             android:exported="false"
-            android:foregroundServiceType="specialUse" />
-
-        <service
-            android:name=".service.KeepliveA11yService"
-            android:exported="false"
-            android:label="@string/app_name"
-            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"
-            tools:ignore="AccessibilityPolicy">
-            <intent-filter>
-                <action android:name="android.accessibilityservice.AccessibilityService" />
-            </intent-filter>
-            <meta-data
-                android:name="android.accessibilityservice"
-                android:resource="@xml/keeplive_a11y_config" />
-        </service>
+            android:foregroundServiceType="specialUse"
+            android:stopWithTask="false" />
 
         <receiver
             android:name=".receiver.BootReceiver"

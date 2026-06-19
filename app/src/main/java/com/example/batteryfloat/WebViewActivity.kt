@@ -16,6 +16,7 @@ import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.TextView
 import androidx.activity.ComponentActivity
+import androidx.activity.OnBackPressedCallback
 import androidx.activity.enableEdgeToEdge
 
 /**
@@ -149,19 +150,18 @@ class WebViewActivity : ComponentActivity() {
 
         setContentView(rootLayout)
         wv.loadUrl(url)
-    }
 
-    /**
-     * 返回键优先回退 WebView 历史记录，无历史时才退出 Activity
-     */
-    @Deprecated("Deprecated in Java")
-    override fun onBackPressed() {
-        val wv = webView
-        if (wv != null && wv.canGoBack()) {
-            wv.goBack()
-        } else {
-            super.onBackPressed()
-        }
+        // 返回键优先回退 WebView 历史记录，无历史时才退出
+        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                val wv = webView
+                if (wv != null && wv.canGoBack()) {
+                    wv.goBack()
+                } else {
+                    finish()
+                }
+            }
+        })
     }
 
     override fun onDestroy() {

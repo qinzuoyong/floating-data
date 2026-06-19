@@ -95,7 +95,7 @@ object ShizukuHelper {
         try {
             ensureReflectionCache()
             val newProcess = _newProcessMethod!!
-            val process = newProcess.invoke(null, arrayOf("sh"), null, null)
+            val process = newProcess.invoke(null, arrayOf("sh"), null, null) as Any
 
             // 线程安全地缓存子进程 Method
             cacheProcessMethods(process)
@@ -134,7 +134,7 @@ object ShizukuHelper {
 
     /**
      * 通过 Shizuku 执行任意 shell 命令并返回结果
-     * 用于 KeepaliveManager 等模块执行 settings 命令
+     * 执行 settings 等 shell 命令
      *
      * @param command 要执行的 shell 命令
      * @return 命令输出文本，失败返回 null
@@ -143,7 +143,7 @@ object ShizukuHelper {
         try {
             ensureReflectionCache()
             val newProcess = _newProcessMethod!!
-            val process = newProcess.invoke(null, arrayOf("sh"), null, null)
+            val process = newProcess.invoke(null, arrayOf("sh"), null, null) as Any
 
             // 线程安全地缓存子进程 Method
             cacheProcessMethods(process)

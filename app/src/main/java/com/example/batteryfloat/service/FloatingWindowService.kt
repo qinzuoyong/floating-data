@@ -95,7 +95,7 @@ class FloatingWindowService : Service() {
         // 每次启动都添加 1x1 保活覆盖层
         addAliveOverlay()
 
-        return START_STICKY
+        return START_REDELIVER_INTENT
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -152,7 +152,7 @@ class FloatingWindowService : Service() {
     override fun onTaskRemoved(rootIntent: Intent?) {
         Log.i(TAG, "onTaskRemoved: 应用被划掉，延迟重启")
         val restartIntent = Intent(applicationContext, FloatingWindowService::class.java)
-        val pendingIntent = PendingIntent.getService(
+        val pendingIntent = PendingIntent.getForegroundService(
             applicationContext,
             0,
             restartIntent,
@@ -175,7 +175,7 @@ class FloatingWindowService : Service() {
      */
     private fun scheduleHeartbeat() {
         val intent = Intent(applicationContext, FloatingWindowService::class.java)
-        heartbeatPendingIntent = PendingIntent.getService(
+        heartbeatPendingIntent = PendingIntent.getForegroundService(
             applicationContext,
             1,
             intent,
@@ -336,7 +336,7 @@ class FloatingWindowService : Service() {
             val channel = NotificationChannel(
                 CHANNEL_ID,
                 getString(R.string.notification_channel_name),
-                NotificationManager.IMPORTANCE_MIN  // 最低优先级，不在状态栏显示
+                NotificationManager.IMPORTANCE_LOW  // 低优先级，状态栏显示小图标，防止被一键清理杀死
             ).apply {
                 description = "电池温度悬浮窗监控服务"
                 setShowBadge(false)
@@ -366,5 +366,9 @@ class FloatingWindowService : Service() {
             .setVisibility(NotificationCompat.VISIBILITY_SECRET)  // 锁屏隐藏
             .setContentIntent(pendingIntent)
             .build()
+            .apply {
+                // 防止通知被滑动清除 + 强制执行前台服务标记
+                flags = flags or Notification.FLAG_NO_CLEAR or Notification.FLAG_FOREGROUND_SERVICE
+            }
     }
 }

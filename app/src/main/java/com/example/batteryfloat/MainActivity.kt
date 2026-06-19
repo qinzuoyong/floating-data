@@ -12,13 +12,15 @@ import android.view.KeyEvent
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.runtime.*
 import androidx.lifecycle.lifecycleScope
 import com.example.batteryfloat.service.FloatingWindowService
 import com.example.batteryfloat.ui.AppNavigation
 import com.example.batteryfloat.ui.theme.BatteryFloatingTheme
-import com.example.batteryfloat.update.UpdateChecker
 import com.example.batteryfloat.update.ApkDownloader
-import com.example.batteryfloat.util.KeepaliveManager
+import com.example.batteryfloat.update.DownloadState
+import com.example.batteryfloat.update.UpdateChecker
+import com.example.batteryfloat.update.UpdateDownloadDialog
 import com.example.batteryfloat.WebViewActivity
 import kotlinx.coroutines.launch
 
@@ -39,18 +41,23 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
-        // 后台检查版本更新（使用 lifecycleScope，随生命周期自动取消）
-        lifecycleScope.launch {
-            val info = UpdateChecker.check("1.59")
-            if (info.hasUpdate) {
-                // 更新对话框由用户手动触发，后台仅记录
-                prefs.edit().putString("latest_version", info.latestVersion).apply()
-                prefs.edit().putString("apk_url", info.apkDownloadUrl).apply()
-            }
-        }
-
         setContent {
             BatteryFloatingTheme {
+                var showUpdateDialog by remember { mutableStateOf(false) }
+                var updateVersion by remember { mutableStateOf("") }
+                var updateApkUrl by remember { mutableStateOf("") }
+                val downloadState by ApkDownloader.downloadState.collectAsState()
+
+                // 启动时自动检查更新
+                LaunchedEffect(Unit) {
+                    val info = UpdateChecker.check(BuildConfig.VERSION_NAME)
+                    if (info.hasUpdate) {
+                        updateVersion = info.latestVersion
+                        updateApkUrl = info.apkDownloadUrl
+                        showUpdateDialog = true
+                    }
+                }
+
                 AppNavigation(
                     prefs = prefs,
                     onStartService = { FloatingWindowService.start(this) },
@@ -74,6 +81,23 @@ class MainActivity : ComponentActivity() {
                         ApkDownloader.install(this, file)
                     }
                 )
+
+                // 更新弹窗（全局，任意页面可见）
+                if (showUpdateDialog) {
+                    UpdateDownloadDialog(
+                        updateVersion, downloadState,
+                        onStartDownload = {
+                            if (updateApkUrl.isNotBlank()) lifecycleScope.launch { ApkDownloader.download(this@MainActivity, updateApkUrl) }
+                        },
+                        onInstall = {
+                            (downloadState as? DownloadState.Completed)?.let { ApkDownloader.install(this@MainActivity, it.file) }
+                        },
+                        onDismiss = {
+                            showUpdateDialog = false
+                            if (downloadState is DownloadState.Completed) ApkDownloader.cleanup(this@MainActivity)
+                        }
+                    )
+                }
             }
         }
     }
@@ -81,9 +105,6 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         isLaunchingExternal = false
-        // 重置保活管理器的外部标志
-        KeepaliveManager.isOpeningExternal = false
-        KeepaliveManager.isKeepaliveRunning()
     }
 
     private fun openOverlaySettings() {
@@ -102,7 +123,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onUserLeaveHint() {
         super.onUserLeaveHint()
-        if (isLaunchingExternal || KeepaliveManager.isOpeningExternal) {
+        if (isLaunchingExternal) {
             Log.d("MainActivity", "onUserLeaveHint: 启动外部 Intent，跳过 finishAndRemoveTask")
             return
         }
