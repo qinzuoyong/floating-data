@@ -1,13 +1,20 @@
 package com.example.batteryfloat.ui
 
 import android.content.SharedPreferences
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -70,6 +77,15 @@ fun AppearanceScreen(prefs: SharedPreferences) {
         // ===== 主题设置 =====
         SectionTitle(title = "主题模式")
         ThemeModeCard(
+            icon = {
+                Icon(
+                    Icons.Filled.Palette,
+                    contentDescription = "主题",
+                    tint = Color(0xFF283593),  // 靛蓝色图标
+                    modifier = Modifier.size(24.dp)
+                )
+            },
+            iconBackgroundColor = Color(0xFFE8EAF6),  // 浅靛蓝色背景
             selectedMode = themeMode,
             onModeSelected = { mode ->
                 themeMode = mode
@@ -80,6 +96,15 @@ fun AppearanceScreen(prefs: SharedPreferences) {
         // ===== 字体设置 =====
         SectionTitle(title = "字体配置")
         SliderSettingCard(
+            icon = {
+                Icon(
+                    Icons.Filled.TextFields,
+                    contentDescription = "字体",
+                    tint = Color(0xFF00838F),  // 青色图标
+                    modifier = Modifier.size(24.dp)
+                )
+            },
+            iconBackgroundColor = Color(0xFFE0F7FA),  // 浅青色背景
             title = "字体大小",
             currentValue = "${fontSliderValue.toInt()} sp",
             value = fontSliderValue,
@@ -96,6 +121,15 @@ fun AppearanceScreen(prefs: SharedPreferences) {
         // ===== 圆角设置 =====
         SectionTitle(title = "圆角曲率")
         SliderSettingCard(
+            icon = {
+                Icon(
+                    Icons.Filled.CropFree,
+                    contentDescription = "圆角",
+                    tint = Color(0xFF4E342E),  // 棕色图标
+                    modifier = Modifier.size(24.dp)
+                )
+            },
+            iconBackgroundColor = Color(0xFFEFEBE9),  // 浅棕色背景
             title = "圆角大小",
             currentValue = "${cornerSliderValue.toInt()} px",
             value = cornerSliderValue,
@@ -112,6 +146,15 @@ fun AppearanceScreen(prefs: SharedPreferences) {
         // ===== 颜色设置 =====
         SectionTitle(title = "颜色配置")
         ColorPickerSection(
+            icon = {
+                Icon(
+                    Icons.Filled.FormatPaint,
+                    contentDescription = "背景色",
+                    tint = Color(0xFFAD1457),  // 粉色图标
+                    modifier = Modifier.size(24.dp)
+                )
+            },
+            iconBackgroundColor = Color(0xFFFCE4EC),  // 浅粉色背景
             title = "背景颜色",
             colors = BG_COLORS,
             selectedColor = bgColor,
@@ -122,6 +165,15 @@ fun AppearanceScreen(prefs: SharedPreferences) {
         )
 
         ColorPickerSection(
+            icon = {
+                Icon(
+                    Icons.Filled.FontDownload,
+                    contentDescription = "文字色",
+                    tint = Color(0xFF37474F),  // 深灰色图标
+                    modifier = Modifier.size(24.dp)
+                )
+            },
+            iconBackgroundColor = Color(0xFFECEFF1),  // 浅灰色背景
             title = "文字颜色",
             colors = TEXT_COLORS,
             selectedColor = textColor,
@@ -134,6 +186,15 @@ fun AppearanceScreen(prefs: SharedPreferences) {
         // ===== 透明度设置 =====
         SectionTitle(title = "透明度")
         SliderSettingCard(
+            icon = {
+                Icon(
+                    Icons.Filled.Opacity,
+                    contentDescription = "透明度",
+                    tint = Color(0xFF455A64),  // 蓝灰色图标
+                    modifier = Modifier.size(24.dp)
+                )
+            },
+            iconBackgroundColor = Color(0xFFCFD8DC),  // 浅蓝灰色背景
             title = "背景透明度",
             currentValue = "${(bgAlphaValue * 100).toInt()}%",
             value = bgAlphaValue,
@@ -156,12 +217,15 @@ fun AppearanceScreen(prefs: SharedPreferences) {
  * 主题外观选择卡片
  * 
  * 设计特点：
- * 1. 三段式选择：跟随系统 / 浅色 / 深色
- * 2. 清晰的选中状态
- * 3. 统一的圆角和间距
+ * 1. 图标带靛蓝色圆形背景（主题/外观）
+ * 2. 三段式选择：跟随系统 / 浅色 / 深色
+ * 3. 清晰的选中状态
+ * 4. 统一的圆角和间距
  */
 @Composable
 private fun ThemeModeCard(
+    icon: @Composable (() -> Unit)? = null,
+    iconBackgroundColor: Color = Color.Transparent,
     selectedMode: Int,
     onModeSelected: (Int) -> Unit
 ) {
@@ -170,18 +234,35 @@ private fun ThemeModeCard(
         shape = RoundedCornerShape(DesignSystem.CornerL),
         elevation = CardDefaults.cardElevation(defaultElevation = DesignSystem.ElevationNone),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
         )
     ) {
         Column(
             modifier = Modifier.padding(DesignSystem.CardPadding)
         ) {
-            Text(
-                text = "主题外观",
-                fontWeight = FontWeight.SemiBold,
-                fontSize = DesignSystem.FontSizeBody,
-                color = MaterialTheme.colorScheme.onSurface
-            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // 可选的图标带彩色圆形背景
+                if (icon != null) {
+                    Box(
+                        modifier = Modifier
+                            .size(40.dp)
+                            .clip(CircleShape)
+                            .background(iconBackgroundColor),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        icon()
+                    }
+                    Spacer(modifier = Modifier.width(DesignSystem.SpacingM))
+                }
+                Text(
+                    text = "主题外观",
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = DesignSystem.FontSizeBody,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+            }
             Spacer(Modifier.height(DesignSystem.SpacingM))
             SingleChoiceSegmentedButtonRow(
                 modifier = Modifier.fillMaxWidth()

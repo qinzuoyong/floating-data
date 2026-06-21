@@ -37,7 +37,7 @@ fun SettingCard(
         shape = RoundedCornerShape(DesignSystem.CornerL),
         elevation = CardDefaults.cardElevation(defaultElevation = DesignSystem.ElevationNone),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
         )
     ) {
         Column(
@@ -122,9 +122,16 @@ fun SettingSwitchCard(
 
 /**
  * 带滑块的设置卡片
+ * 
+ * 设计特点：
+ * 1. 图标带彩色圆形背景，增强视觉识别性
+ * 2. 卡片使用不透明的 surfaceContainerLow 背景
+ * 3. 统一的间距和圆角
  */
 @Composable
 fun SliderSettingCard(
+    icon: @Composable (() -> Unit)? = null,
+    iconBackgroundColor: Color = Color.Transparent,
     title: String,
     currentValue: String,
     value: Float,
@@ -140,7 +147,7 @@ fun SliderSettingCard(
         shape = RoundedCornerShape(DesignSystem.CornerL),
         elevation = CardDefaults.cardElevation(defaultElevation = DesignSystem.ElevationNone),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
         )
     ) {
         Column(
@@ -151,12 +158,29 @@ fun SliderSettingCard(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = title,
-                    fontWeight = FontWeight.SemiBold,
-                    fontSize = DesignSystem.FontSizeBody,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // 可选的图标带彩色圆形背景
+                    if (icon != null) {
+                        Box(
+                            modifier = Modifier
+                                .size(40.dp)
+                                .clip(CircleShape)
+                                .background(iconBackgroundColor),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            icon()
+                        }
+                        Spacer(modifier = Modifier.width(DesignSystem.SpacingM))
+                    }
+                    Text(
+                        text = title,
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = DesignSystem.FontSizeBody,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
                 Text(
                     text = currentValue,
                     fontSize = DesignSystem.FontSizeCaption,
@@ -202,9 +226,16 @@ fun SliderSettingCard(
 
 /**
  * 颜色选择器卡片
+ * 
+ * 设计特点：
+ * 1. 图标带彩色圆形背景，增强视觉识别性
+ * 2. 卡片使用不透明的 surfaceContainerLow 背景
+ * 3. 统一的间距和圆角
  */
 @Composable
 fun ColorPickerSection(
+    icon: @Composable (() -> Unit)? = null,
+    iconBackgroundColor: Color = Color.Transparent,
     title: String,
     colors: List<Pair<String, Int>>,
     selectedColor: Int,
@@ -216,18 +247,35 @@ fun ColorPickerSection(
         shape = RoundedCornerShape(DesignSystem.CornerL),
         elevation = CardDefaults.cardElevation(defaultElevation = DesignSystem.ElevationNone),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
         )
     ) {
         Column(
             modifier = Modifier.padding(DesignSystem.CardPadding)
         ) {
-            Text(
-                text = title,
-                fontWeight = FontWeight.SemiBold,
-                fontSize = DesignSystem.FontSizeBody,
-                color = MaterialTheme.colorScheme.onSurface
-            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // 可选的图标带彩色圆形背景
+                if (icon != null) {
+                    Box(
+                        modifier = Modifier
+                            .size(40.dp)
+                            .clip(CircleShape)
+                            .background(iconBackgroundColor),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        icon()
+                    }
+                    Spacer(modifier = Modifier.width(DesignSystem.SpacingM))
+                }
+                Text(
+                    text = title,
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = DesignSystem.FontSizeBody,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+            }
             Spacer(modifier = Modifier.height(DesignSystem.SpacingM))
             Row(
                 modifier = Modifier.fillMaxWidth(),

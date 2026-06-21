@@ -8,6 +8,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -20,6 +21,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -165,7 +167,7 @@ fun AboutScreen(
  * 权限引导卡片
  * 
  * 设计特点：
- * 1. 图标+文字组合
+ * 1. 图标带绿色圆形背景（安全/权限）
  * 2. 分层按钮：主要/次要操作
  * 3. 统一的圆角和间距
  */
@@ -180,20 +182,29 @@ private fun PermissionGuideCard(
         shape = RoundedCornerShape(DesignSystem.CornerL),
         elevation = CardDefaults.cardElevation(defaultElevation = DesignSystem.ElevationNone),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
         )
     ) {
         Column(
             modifier = Modifier.padding(DesignSystem.CardPadding)
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    Icons.Filled.VerifiedUser, 
-                    contentDescription = null, 
-                    tint = MaterialTheme.colorScheme.primary, 
-                    modifier = Modifier.size(DesignSystem.SpacingL)
-                )
-                Spacer(Modifier.width(DesignSystem.SpacingS))
+                // 图标带绿色圆形背景
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(CircleShape)
+                        .background(Color(0xFFE8F5E9)),  // 浅绿色背景
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        Icons.Filled.VerifiedUser, 
+                        contentDescription = null, 
+                        tint = Color(0xFF2E7D32),  // 绿色图标
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
+                Spacer(Modifier.width(DesignSystem.SpacingM))
                 Text(
                     "权限引导", 
                     fontWeight = FontWeight.SemiBold, 
@@ -252,6 +263,11 @@ private fun PermissionGuideCard(
 
 /**
  * 开机自启设置卡片
+ * 
+ * 设计特点：
+ * 1. 图标带蓝色圆形背景（启动/系统）
+ * 2. 卡片使用不透明的 surfaceContainerLow 背景
+ * 3. 统一的间距和圆角
  */
 @Composable
 private fun BootSection(bootAutoStart: Boolean, onBootToggle: (Boolean) -> Unit) {
@@ -260,20 +276,29 @@ private fun BootSection(bootAutoStart: Boolean, onBootToggle: (Boolean) -> Unit)
         shape = RoundedCornerShape(DesignSystem.CornerL),
         elevation = CardDefaults.cardElevation(defaultElevation = DesignSystem.ElevationNone),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
         )
     ) {
         Column(
             modifier = Modifier.padding(DesignSystem.CardPadding)
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    Icons.Filled.Security, 
-                    contentDescription = null, 
-                    tint = MaterialTheme.colorScheme.primary, 
-                    modifier = Modifier.size(DesignSystem.SpacingL)
-                )
-                Spacer(Modifier.width(DesignSystem.SpacingS))
+                // 图标带蓝色圆形背景
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(CircleShape)
+                        .background(Color(0xFFE3F2FD)),  // 浅蓝色背景
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        Icons.Filled.Security, 
+                        contentDescription = null, 
+                        tint = Color(0xFF1565C0),  // 蓝色图标
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
+                Spacer(Modifier.width(DesignSystem.SpacingM))
                 Text(
                     "开机自启", 
                     fontWeight = FontWeight.SemiBold, 
@@ -312,6 +337,11 @@ private fun BootSection(bootAutoStart: Boolean, onBootToggle: (Boolean) -> Unit)
 
 /**
  * 版本更新检查卡片
+ * 
+ * 设计特点：
+ * 1. 图标带橙色圆形背景（更新/下载）
+ * 2. 卡片使用不透明的 surfaceContainerLow 背景
+ * 3. 统一的间距和圆角
  */
 @Composable
 private fun UpdateCheckCard(isChecking: Boolean, onCheckUpdate: () -> Unit) {
@@ -320,7 +350,7 @@ private fun UpdateCheckCard(isChecking: Boolean, onCheckUpdate: () -> Unit) {
         shape = RoundedCornerShape(DesignSystem.CornerL),
         elevation = CardDefaults.cardElevation(defaultElevation = DesignSystem.ElevationNone),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
         )
     ) {
         Row(
@@ -331,13 +361,22 @@ private fun UpdateCheckCard(isChecking: Boolean, onCheckUpdate: () -> Unit) {
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    Icons.Filled.SystemUpdateAlt, 
-                    contentDescription = null, 
-                    tint = MaterialTheme.colorScheme.primary, 
-                    modifier = Modifier.size(DesignSystem.SpacingL)
-                )
-                Spacer(Modifier.width(DesignSystem.SpacingS))
+                // 图标带橙色圆形背景
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(CircleShape)
+                        .background(Color(0xFFFFF3E0)),  // 浅橙色背景
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        Icons.Filled.SystemUpdateAlt, 
+                        contentDescription = null, 
+                        tint = Color(0xFFE65100),  // 橙色图标
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
+                Spacer(Modifier.width(DesignSystem.SpacingM))
                 Column {
                     Text(
                         "版本更新", 
@@ -369,8 +408,8 @@ private fun UpdateCheckCard(isChecking: Boolean, onCheckUpdate: () -> Unit) {
  * 关于信息卡片 - 含 WebView 内置浏览的 GitHub/Gitee 链接
  * 
  * 设计特点：
- * 1. 居中布局
- * 2. 图标+标题+描述组合
+ * 1. 图标带紫色圆形背景（信息/关于）
+ * 2. 居中布局
  * 3. 分割线分隔
  * 4. 链接样式统一
  */
@@ -381,7 +420,7 @@ private fun AboutInfoCard(onOpenExternalLink: (String, String) -> Unit = { _, _ 
         shape = RoundedCornerShape(DesignSystem.CornerL),
         elevation = CardDefaults.cardElevation(defaultElevation = DesignSystem.ElevationNone),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
         )
     ) {
         Column(
@@ -390,19 +429,19 @@ private fun AboutInfoCard(onOpenExternalLink: (String, String) -> Unit = { _, _ 
                 .padding(DesignSystem.CardPaddingLarge), 
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // 应用图标
+            // 应用图标 - 带紫色圆形背景
             Box(
                 Modifier
                     .size(56.dp)
-                    .clip(RoundedCornerShape(DesignSystem.CornerM))
-                    .background(MaterialTheme.colorScheme.primaryContainer), 
+                    .clip(CircleShape)
+                    .background(Color(0xFFF3E5F5)),  // 浅紫色背景
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
                     Icons.Filled.Info, 
                     contentDescription = null, 
-                    modifier = Modifier.size(DesignSystem.SpacingL + DesignSystem.SpacingS), 
-                    tint = MaterialTheme.colorScheme.onPrimaryContainer
+                    modifier = Modifier.size(28.dp), 
+                    tint = Color(0xFF6A1B9A)  // 紫色图标
                 )
             }
             
