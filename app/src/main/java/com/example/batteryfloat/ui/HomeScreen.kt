@@ -5,10 +5,7 @@ import android.os.Build
 import android.provider.Settings
 import android.widget.Toast
 import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
-import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -32,7 +29,6 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
@@ -40,10 +36,15 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.example.batteryfloat.PrefsKeys
 import com.example.batteryfloat.service.FloatingWindowService
+import com.example.batteryfloat.ui.theme.DesignSystem
 
 /**
  * 首页 - 悬浮窗控制
- * 包含悬浮窗开关、功耗显示开关、锁定切换、隐藏后台
+ * 
+ * 重新设计要点：
+ * 1. 统一间距：使用 DesignSystem 中的 8dp 网格系统
+ * 2. 层级分明：主操作区 > 功能开关区 > 隐藏后台区
+ * 3. 美学优化：状态指示灯、动画按钮、卡片阴影
  */
 @Composable
 fun HomeScreen(
@@ -60,7 +61,7 @@ fun HomeScreen(
     var showPower by remember { mutableStateOf(prefs.getBoolean(PrefsKeys.SHOW_POWER, true)) }
     var hideRecents by remember { mutableStateOf(prefs.getBoolean(PrefsKeys.HIDE_RECENTS, true)) }
 
-    // 页面恢复时刷新服务运行状态（防止系统后台杀死服务后 UI 仍显示"运行中"）
+    // 页面恢复时刷新服务运行状态
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
@@ -77,19 +78,16 @@ fun HomeScreen(
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(scrollState)
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+            .padding(horizontal = DesignSystem.PagePadding),
+        verticalArrangement = Arrangement.spacedBy(DesignSystem.SpacingM)
     ) {
-        // 标题
-        Text(
-            text = "悬浮窗控制",
-            fontSize = 22.sp,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onBackground,
-            modifier = Modifier.padding(top = 8.dp, bottom = 4.dp)
+        // 标题区域
+        PageTitle(
+            title = "悬浮窗控制",
+            modifier = Modifier.padding(top = DesignSystem.SpacingL)
         )
 
-        // 悬浮窗开关卡片
+        // ===== 主操作区：悬浮窗开关 =====
         FloatingWindowCard(
             isServiceRunning = isServiceRunning,
             onToggle = {
@@ -110,9 +108,19 @@ fun HomeScreen(
             }
         )
 
-        // 功耗显示（从外观移入首页）
+        // ===== 功能开关区 =====
+        SectionTitle(title = "功能设置")
+
+        // 功耗显示
         SettingSwitchCard(
-            icon = { Icon(Icons.AutoMirrored.Filled.ShowChart, contentDescription = "功耗", tint = MaterialTheme.colorScheme.primary) },
+            icon = { 
+                Icon(
+                    Icons.AutoMirrored.Filled.ShowChart, 
+                    contentDescription = "功耗", 
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(DesignSystem.SpacingL)
+                ) 
+            },
             title = "功耗显示",
             subtitle = "开启后悬浮窗显示整机功耗",
             checked = showPower,
@@ -123,8 +131,16 @@ fun HomeScreen(
             }
         )
 
+        // 锁定悬浮窗
         SettingSwitchCard(
-            icon = { Icon(Icons.Filled.Lock, contentDescription = "锁定", tint = MaterialTheme.colorScheme.primary) },
+            icon = { 
+                Icon(
+                    Icons.Filled.Lock, 
+                    contentDescription = "锁定", 
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(DesignSystem.SpacingL)
+                ) 
+            },
             title = "锁定悬浮窗",
             subtitle = "双击悬浮窗可锁定/解锁位置",
             checked = lockDrag,
@@ -139,8 +155,16 @@ fun HomeScreen(
             }
         )
 
+        // 隐藏后台
         SettingSwitchCard(
-            icon = { Icon(Icons.Filled.VisibilityOff, contentDescription = "隐藏", tint = MaterialTheme.colorScheme.primary) },
+            icon = { 
+                Icon(
+                    Icons.Filled.VisibilityOff, 
+                    contentDescription = "隐藏", 
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(DesignSystem.SpacingL)
+                ) 
+            },
             title = "隐藏后台",
             subtitle = "按 Home/返回键自动隐匿任务卡片",
             checked = hideRecents,
@@ -151,99 +175,140 @@ fun HomeScreen(
             }
         )
 
-        Spacer(Modifier.height(32.dp))
+        // 底部间距
+        Spacer(Modifier.height(DesignSystem.SpacingXl))
     }
 }
 
-/** 悬浮窗开关卡片，带状态指示灯和动画按钮 */
+/**
+ * 悬浮窗开关卡片
+ * 
+ * 设计特点：
+ * 1. 状态指示灯：绿色=运行中，灰色=已停止
+ * 2. 动画按钮：带缩放效果
+ * 3. 状态文字：清晰的状态描述
+ */
 @Composable
 private fun FloatingWindowCard(isServiceRunning: Boolean, onToggle: () -> Unit) {
     val bgColor by animateColorAsState(
-        targetValue = if (isServiceRunning) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f)
-        else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-        animationSpec = tween(300),
+        targetValue = if (isServiceRunning) {
+            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f)
+        } else {
+            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+        },
+        animationSpec = tween(DesignSystem.AnimationDurationNormal),
         label = "cardBg"
     )
+    
     val statusColor by animateColorAsState(
-        targetValue = if (isServiceRunning) Color(0xFF4CAF50) else Color(0xFFBDBDBD),
-        animationSpec = tween(300),
+        targetValue = if (isServiceRunning) {
+            Color(0xFF4CAF50)  // 成功绿
+        } else {
+            Color(0xFFBDBDBD)  // 中性灰
+        },
+        animationSpec = tween(DesignSystem.AnimationDurationNormal),
         label = "statusColor"
     )
 
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(20.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+        shape = RoundedCornerShape(DesignSystem.CornerXl),
+        elevation = CardDefaults.cardElevation(defaultElevation = DesignSystem.ElevationNone),
         colors = CardDefaults.cardColors(containerColor = bgColor)
     ) {
         Row(
-            Modifier
+            modifier = Modifier
                 .fillMaxWidth()
-                .padding(20.dp),
+                .padding(DesignSystem.CardPaddingLarge),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             Column {
                 Row(verticalAlignment = Alignment.CenterVertically) {
+                    // 状态指示灯
                     Box(
                         modifier = Modifier
-                            .size(10.dp)
+                            .size(DesignSystem.SpacingS + DesignSystem.SpacingXs)
                             .clip(CircleShape)
                             .background(statusColor)
                     )
-                    Spacer(Modifier.width(8.dp))
-                    Text("悬浮窗", fontWeight = FontWeight.SemiBold, fontSize = 18.sp)
+                    Spacer(Modifier.width(DesignSystem.SpacingS))
+                    Text(
+                        "悬浮窗",
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = DesignSystem.FontSizeHeading
+                    )
                 }
-                Spacer(Modifier.height(4.dp))
+                Spacer(Modifier.height(DesignSystem.SpacingXs))
                 Text(
                     if (isServiceRunning) "运行中" else "已停止",
-                    fontSize = 12.sp,
+                    fontSize = DesignSystem.FontSizeCaption,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
+            
+            // 动画切换按钮
             AnimatedToggleButton(isRunning = isServiceRunning, onClick = onToggle)
         }
     }
 }
 
-/** 带缩放的开关按钮 */
+/**
+ * 带缩放动画的切换按钮
+ * 
+ * 设计特点：
+ * 1. 点击时缩放反馈
+ * 2. 状态对应颜色：运行=红色停止，停止=绿色启动
+ * 3. 图标+文字组合
+ */
 @Composable
 private fun AnimatedToggleButton(isRunning: Boolean, onClick: () -> Unit) {
     var isPressed by remember { mutableStateOf(false) }
     val scale by animateFloatAsState(
         targetValue = if (isPressed) 0.92f else 1f,
-        animationSpec = spring(dampingRatio = 0.6f, stiffness = Spring.StiffnessLow),
+        animationSpec = spring(
+            dampingRatio = 0.6f,
+            stiffness = Spring.StiffnessLow
+        ),
         label = "btnScale"
     )
+    
     FilledTonalButton(
         onClick = {
             isPressed = true
             onClick()
         },
         colors = ButtonDefaults.filledTonalButtonColors(
-            containerColor = if (isRunning) MaterialTheme.colorScheme.errorContainer
-            else MaterialTheme.colorScheme.primaryContainer
+            containerColor = if (isRunning) {
+                MaterialTheme.colorScheme.errorContainer
+            } else {
+                MaterialTheme.colorScheme.primaryContainer
+            }
         ),
-        shape = RoundedCornerShape(14.dp),
+        shape = RoundedCornerShape(DesignSystem.CornerM),
         modifier = Modifier.scale(scale),
-        contentPadding = PaddingValues(horizontal = 20.dp, vertical = 12.dp)
+        contentPadding = PaddingValues(
+            horizontal = DesignSystem.CardPadding,
+            vertical = DesignSystem.SpacingS + DesignSystem.SpacingXs
+        )
     ) {
         Icon(
             imageVector = if (isRunning) Icons.Filled.PowerOff else Icons.Filled.PlayArrow,
             contentDescription = null,
-            modifier = Modifier.size(18.dp)
+            modifier = Modifier.size(DesignSystem.FontSizeHeading.value.dp)
         )
-        Spacer(Modifier.width(6.dp))
+        Spacer(Modifier.width(DesignSystem.SpacingS))
         Text(
             if (isRunning) "关闭" else "启动",
             fontWeight = FontWeight.SemiBold,
-            fontSize = 14.sp
+            fontSize = DesignSystem.FontSizeBody
         )
     }
+    
     // 点击后恢复
     LaunchedEffect(isPressed) {
         if (isPressed) {
-            kotlinx.coroutines.delay(100)
+            kotlinx.coroutines.delay(DesignSystem.AnimationDurationFast.toLong())
             isPressed = false
         }
     }

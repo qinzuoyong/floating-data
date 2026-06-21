@@ -20,6 +20,7 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.batteryfloat.ui.theme.DesignSystem
 import java.io.File
 
 /** 底部导航 Tab 定义 */
@@ -38,6 +39,11 @@ private val tabs = listOf(
 /**
  * 底部导航主容器
  * 3 Tab：首页 / 外观 / 关于，带 AnimatedContent 页面切换
+ * 
+ * 重新设计要点：
+ * 1. 统一间距：使用 DesignSystem 中的 8dp 网格系统
+ * 2. 层级分明：底部导航栏 + 页面内容
+ * 3. 美学优化：选中状态、动画切换、触觉反馈
  */
 @Composable
 fun AppNavigation(
@@ -56,7 +62,7 @@ fun AppNavigation(
         bottomBar = {
             NavigationBar(
                 containerColor = MaterialTheme.colorScheme.surface,
-                tonalElevation = 0.dp
+                tonalElevation = DesignSystem.ElevationNone
             ) {
                 tabs.forEachIndexed { index, tab ->
                     val selected = selectedTab == index
@@ -75,7 +81,7 @@ fun AppNavigation(
                         label = {
                             Text(
                                 tab.label,
-                                fontSize = 11.sp,
+                                fontSize = DesignSystem.FontSizeSmall,
                                 fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal
                             )
                         },

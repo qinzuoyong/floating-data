@@ -1,7 +1,7 @@
 # 手机信息悬浮窗
 
 > 实时监测电池温度与功耗的 Android 悬浮窗工具
-> 版本: 1.62 | 最低支持: Android 14 (API 34)
+> 版本: 1.63 | 最低支持: Android 14 (API 34)
 
 ────────────────────────────────────────
 
@@ -37,6 +37,9 @@
 
   [锁定] 双击锁定
          双击悬浮窗可锁定/解锁拖拽位置，独立开关控制
+
+  [主题] 主题外观选择
+         支持跟随系统/浅色/深色三种模式，实时切换，Material Design 3 设计语言
 
 ────────────────────────────────────────
 
@@ -91,13 +94,28 @@ APK 输出路径:
 版本历史
 ────────────────────────────────────────
 
-  v1.62  (当前版本)
-          修复锁定悬浮窗开关缓存不同步：关闭开关后悬浮窗锁定状态正确清除
-          修复 FLOATING_WAS_RUNNING 逻辑：系统杀进程不再误清除运行状态，开机自启正常恢复
-          统一主题背景色：浅色纯白(0xFFFFFF)、深色纯黑(0x000000)
-          统一所有卡片背景色：surfaceVariant@0.5f 一致
-          新增主题外观选择：跟随系统 / 浅色 / 深色，支持实时切换
+  v1.63  (当前版本)
+          UI 全面重新设计：采用 Material Design 3 设计语言
+          统一设计规范：8dp 网格系统、16dp 卡片圆角、24sp 标题字体
+          新增 DesignSystem 设计规范文件：集中管理间距、圆角、字体等变量
+          重构通用组件库：SettingCard、SettingSwitchCard、SliderSettingCard、ColorPickerSection
+          首页优化：状态指示灯、动画按钮、分组标题
+          外观页优化：主题模式三段式选择、颜色选择器、滑块控件
+          关于页优化：权限引导卡片、开机自启设置、版本更新检查、关于信息
+          底部导航优化：选中状态、动画切换、触觉反馈
+          代码质量提升：函数级注释、组件化设计、状态管理优化
+
+  v1.62
           全量代码审查与质量优化
+          修复版本比较算法（逐段整数比较，支持多段版本号如 1.62.1）
+          修复 FloatingWindowService 生命周期：isRunning 赋值顺序修正、onDestroy 写回运行状态
+          修复 MainActivity 异常处理：更新检查/权限设置/电池优化全部包裹 try-catch
+          WebViewActivity URL 白名单机制：仅 gitee.com/github.com 在 WebView 内加载，外部链接跳转系统浏览器
+          提取 SharedPreferences key 为 PrefsKeys 常量对象，消除所有硬编码字符串
+          优化 SharedPreferences 监听粒度：仅监听外观相关 key 变化才刷新悬浮窗
+          Theme 动态取色默认关闭，自定义天蓝配色在 Android 12+ 上生效
+          AnimatedToggleButton 添加点击缩放动画反馈
+          UpdateChecker User-Agent 动态获取版本号
 
   v1.61
           Android 14+ 受限设置引导：首次请求悬浮窗权限弹出分步引导对话框
