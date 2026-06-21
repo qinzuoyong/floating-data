@@ -1,6 +1,7 @@
 ﻿package com.example.batteryfloat.update
 
 import android.util.Log
+import com.example.batteryfloat.BuildConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
@@ -33,7 +34,7 @@ object UpdateChecker {
     /**
      * 检查是否有新版本
      * 双源：Gitee → GitHub（失败自动切换）
-     * @param currentVersion 当前应用版本号（如 "1.60"）
+     * @param currentVersion 当前应用版本号（如 "1.61"）
      * @return UpdateInfo 更新信息
      */
     suspend fun check(currentVersion: String): UpdateInfo = withContext(Dispatchers.IO) {
@@ -76,8 +77,8 @@ object UpdateChecker {
             conn.connectTimeout = 5000
             conn.readTimeout = 5000
             conn.setRequestProperty("Accept", "application/json")
-            // GitHub API 需要 User-Agent
-            conn.setRequestProperty("User-Agent", "BatteryFloating/1.60")
+            // GitHub API 需要 User-Agent，动态获取版本号
+            conn.setRequestProperty("User-Agent", "BatteryFloating/${BuildConfig.VERSION_NAME}")
 
             val response = conn.inputStream.bufferedReader().use { it.readText() }
             val json = JSONObject(response)
@@ -154,12 +155,19 @@ object UpdateChecker {
     }
 
     /**
-     * 比较两个语义化版本号
+     * 比较两个语义化版本号（逐段整数比较）
+     * 支持 "1.61" / "1.61.1" / "1.70" 等格式
      * @return >0 表示 v1 > v2, <0 表示 v1 < v2, =0 表示相等
      */
     private fun compareVersions(v1: String, v2: String): Int {
-        val d1 = v1.toDoubleOrNull() ?: 0.0
-        val d2 = v2.toDoubleOrNull() ?: 0.0
-        return d1.compareTo(d2)
+        val parts1 = v1.split(".").mapNotNull { it.toIntOrNull() }
+        val parts2 = v2.split(".").mapNotNull { it.toIntOrNull() }
+        val maxLen = maxOf(parts1.size, parts2.size)
+        for (i in 0 until maxLen) {
+            val p1 = parts1.getOrElse(i) { 0 }
+            val p2 = parts2.getOrElse(i) { 0 }
+            if (p1 != p2) return p1 - p2
+        }
+        return 0
     }
 }

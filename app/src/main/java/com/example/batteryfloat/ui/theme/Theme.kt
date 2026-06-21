@@ -54,20 +54,28 @@ private val LightColorScheme = lightColorScheme(
 
 /**
  * BatteryFloating 主题
- * 优先使用 Android 12+ 动态取色（Monet），回退到天蓝自定义配色
+ * 默认使用天蓝自定义配色，可通过 dynamicColor=true 启用 Android 12+ 动态取色
+ *
+ * @param themeMode 主题模式：0=跟随系统, 1=浅色, 2=深色
  */
 @Composable
 fun BatteryFloatingTheme(
-    darkTheme: Boolean = isSystemInDarkTheme(),
-    dynamicColor: Boolean = true,
+    themeMode: Int = 0,
+    dynamicColor: Boolean = false,
     content: @Composable () -> Unit
 ) {
+    val isDark = when (themeMode) {
+        1 -> false  // 浅色
+        2 -> true   // 深色
+        else -> isSystemInDarkTheme()  // 跟随系统
+    }
+
     val colorScheme = when {
         dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
             val context = LocalContext.current
-            if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
+            if (isDark) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
         }
-        darkTheme -> DarkColorScheme
+        isDark -> DarkColorScheme
         else -> LightColorScheme
     }
 

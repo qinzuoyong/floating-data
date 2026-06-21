@@ -92,16 +92,12 @@ APK 输出路径:
 ────────────────────────────────────────
 
   v1.62  (当前版本)
+          修复锁定悬浮窗开关缓存不同步：关闭开关后悬浮窗锁定状态正确清除
+          修复 FLOATING_WAS_RUNNING 逻辑：系统杀进程不再误清除运行状态，开机自启正常恢复
+          统一主题背景色：浅色纯白(0xFFFFFF)、深色纯黑(0x000000)
+          统一所有卡片背景色：surfaceVariant@0.5f 一致
+          新增主题外观选择：跟随系统 / 浅色 / 深色，支持实时切换
           全量代码审查与质量优化
-          修复版本比较算法（逐段整数比较，支持多段版本号如 1.62.1）
-          修复 FloatingWindowService 生命周期：isRunning 赋值顺序修正、onDestroy 写回运行状态
-          修复 MainActivity 异常处理：更新检查/权限设置/电池优化全部包裹 try-catch
-          WebViewActivity URL 白名单机制：仅 gitee.com/github.com 在 WebView 内加载，外部链接跳转系统浏览器
-          提取 SharedPreferences key 为 PrefsKeys 常量对象，消除所有硬编码字符串
-          优化 SharedPreferences 监听粒度：仅监听外观相关 key 变化才刷新悬浮窗
-          Theme 动态取色默认关闭，自定义天蓝配色在 Android 12+ 上生效
-          AnimatedToggleButton 添加点击缩放动画反馈
-          UpdateChecker User-Agent 动态获取版本号
 
   v1.61
           Android 14+ 受限设置引导：首次请求悬浮窗权限弹出分步引导对话框

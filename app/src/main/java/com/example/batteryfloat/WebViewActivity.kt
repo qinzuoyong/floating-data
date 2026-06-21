@@ -27,12 +27,15 @@ import androidx.activity.enableEdgeToEdge
  * - WebView 存为字段，onDestroy 中销毁防止内存泄漏
  * - 返回键优先回退 WebView 历史记录
  * - 使用新版 shouldOverrideUrlLoading(WebResourceRequest) 替代弃用重载
+ * - URL 白名单机制：仅允许 gitee.com 和 github.com 域名在 WebView 内加载
  */
 class WebViewActivity : ComponentActivity() {
 
     companion object {
         const val EXTRA_URL = "url"
         const val EXTRA_TITLE = "title"
+        /** 允许在 WebView 内加载的域名白名单 */
+        private val ALLOWED_DOMAINS = listOf("gitee.com", "github.com")
     }
 
     private var webView: WebView? = null
@@ -131,7 +134,21 @@ class WebViewActivity : ComponentActivity() {
                 request: WebResourceRequest?
             ): Boolean {
                 val targetUrl = request?.url?.toString() ?: return false
-                view?.loadUrl(targetUrl)
+                // 白名单域名在 WebView 内加载，外部链接跳转系统浏览器
+                val host = request.url?.host ?: ""
+                val isAllowed = ALLOWED_DOMAINS.any { domain ->
+                    host == domain || host.endsWith(".$domain")
+                }
+                if (isAllowed) {
+                    view?.loadUrl(targetUrl)
+                    return true
+                }
+                // 外部链接跳转系统浏览器
+                try {
+                    startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, request.url))
+                } catch (e: Exception) {
+                    android.util.Log.w("WebViewActivity", "无法打开外部链接: $targetUrl", e)
+                }
                 return true
             }
         }

@@ -8,6 +8,7 @@ import android.content.Intent
 import android.content.SharedPreferences
 import android.os.Build
 import android.util.Log
+import com.example.batteryfloat.PrefsKeys
 import com.example.batteryfloat.service.FloatingWindowService
 
 /**
@@ -30,8 +31,8 @@ class BootReceiver : BroadcastReceiver() {
 
     companion object {
         private const val TAG = "BootReceiver"
-        private const val PREF_BOOT_AUTO_START = "boot_auto_start"
-        private const val PREF_FLOATING_RUNNING = "floating_was_running"
+        private const val PREF_BOOT_AUTO_START = PrefsKeys.BOOT_AUTO_START
+        private const val PREF_FLOATING_RUNNING = PrefsKeys.FLOATING_WAS_RUNNING
         private const val ACTION_AUTO_START_CHECK = "com.example.batteryfloat.action.AUTO_START_CHECK"
         private const val DELAYED_CHECK_MS = 15_000L
         private const val REQUEST_CODE_CHECK = 10001
@@ -55,7 +56,7 @@ class BootReceiver : BroadcastReceiver() {
         Log.i(TAG, "收到开机广播: $action")
 
         val prefs: SharedPreferences =
-            context.getSharedPreferences("floating_prefs", Context.MODE_PRIVATE)
+            context.getSharedPreferences(PrefsKeys.PREFS_NAME, Context.MODE_PRIVATE)
 
         // 1. 检查「开机自启动」开关（默认开启）
         val bootAutoStart = prefs.getBoolean(PREF_BOOT_AUTO_START, true)
@@ -114,7 +115,7 @@ class BootReceiver : BroadcastReceiver() {
     /** 延迟检查处理：服务未运行时自动重试启动 */
     private fun handleDelayedCheck(context: Context) {
         val prefs: SharedPreferences =
-            context.getSharedPreferences("floating_prefs", Context.MODE_PRIVATE)
+            context.getSharedPreferences(PrefsKeys.PREFS_NAME, Context.MODE_PRIVATE)
 
         val shouldRestart = !FloatingWindowService.isRunning &&
                 prefs.getBoolean(PREF_BOOT_AUTO_START, true) &&

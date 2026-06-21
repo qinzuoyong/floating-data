@@ -1,6 +1,7 @@
 package com.example.batteryfloat.ui
 
 import android.content.SharedPreferences
+import android.os.Build
 import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -26,6 +27,7 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.batteryfloat.BuildConfig
+import com.example.batteryfloat.PrefsKeys
 import com.example.batteryfloat.update.ApkDownloader
 import com.example.batteryfloat.update.DownloadState
 import com.example.batteryfloat.update.UpdateChecker
@@ -47,13 +49,16 @@ fun AboutScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
-    var bootAutoStart by remember { mutableStateOf(prefs.getBoolean("boot_auto_start", true)) }
+    var bootAutoStart by remember { mutableStateOf(prefs.getBoolean(PrefsKeys.BOOT_AUTO_START, true)) }
 
     var showUpdateDialog by remember { mutableStateOf(false) }
     var updateVersion by remember { mutableStateOf("") }
     var updateApkUrl by remember { mutableStateOf("") }
     var isChecking by remember { mutableStateOf(false) }
     val downloadState by ApkDownloader.downloadState.collectAsState()
+
+    // Android 14+ 受限设置引导对话框
+    var showRestrictedGuide by remember { mutableStateOf(false) }
 
     val scrollState = rememberScrollState()
     Column(
@@ -67,10 +72,14 @@ fun AboutScreen(
             color = MaterialTheme.colorScheme.onBackground,
             modifier = Modifier.padding(top = 8.dp, bottom = 4.dp))
 
-        PermissionGuideCard(onOpenOverlaySettings, onOpenBatterySettings)
+        PermissionGuideCard(
+            onOpenOverlaySettings = onOpenOverlaySettings,
+            onOpenBatterySettings = onOpenBatterySettings,
+            onOpenRestrictedGuide = { showRestrictedGuide = true }
+        )
         BootSection(bootAutoStart) {
             bootAutoStart = it
-            prefs.edit().putBoolean("boot_auto_start", it).apply()
+            prefs.edit().putBoolean(PrefsKeys.BOOT_AUTO_START, it).apply()
         }
         UpdateCheckCard(isChecking) {
             if (!isChecking) {
@@ -88,6 +97,20 @@ fun AboutScreen(
         }
         AboutInfoCard(onOpenExternalLink)
         Spacer(Modifier.height(32.dp))
+    }
+
+    // Android 14+ 受限设置引导对话框
+    if (showRestrictedGuide) {
+        RestrictedSettingsDialog(
+            onDismiss = { showRestrictedGuide = false },
+            onOpenAppInfo = {
+                android.content.Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                    data = android.net.Uri.parse("package:${context.packageName}")
+                    addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                    context.startActivity(this)
+                }
+            }
+        )
     }
 
     if (showUpdateDialog) {
@@ -109,12 +132,89 @@ fun AboutScreen(
 // 子组件
 // ==============================
 
+/**
+ * 权限引导卡片
+ * 包含悬浮窗权限、电池优化、Android 14+ 受限设置解除
+ */
+@Composable
+private fun PermissionGuideCard(
+    onOpenOverlaySettings: () -> Unit,
+    onOpenBatterySettings: () -> Unit,
+    onOpenRestrictedGuide: () -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+        )
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Filled.VerifiedUser, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                Spacer(Modifier.width(8.dp))
+                Text("权限引导", fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
+            }
+            Spacer(Modifier.height(10.dp))
+
+            // 悬浮窗权限
+            OutlinedButton(
+                onClick = onOpenOverlaySettings,
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Text("开启悬浮窗权限")
+            }
+
+            Spacer(Modifier.height(8.dp))
+
+            // 忽略电池优化
+            OutlinedButton(
+                onClick = onOpenBatterySettings,
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Text("忽略电池优化")
+            }
+
+            // Android 14+ 侧载应用受限设置引导
+            if (Build.VERSION.SDK_INT >= 34) {
+                Spacer(Modifier.height(8.dp))
+                FilledTonalButton(
+                    onClick = onOpenRestrictedGuide,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.filledTonalButtonColors(
+                        containerColor = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.5f)
+                    )
+                ) {
+                    Icon(
+                        Icons.Filled.Security,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        "解除权限限制（Android 14+）",
+                        fontWeight = FontWeight.Medium,
+                        fontSize = 13.sp
+                    )
+                }
+            }
+        }
+    }
+}
+
 @Composable
 private fun BootSection(bootAutoStart: Boolean, onBootToggle: (Boolean) -> Unit) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+        )
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -135,32 +235,14 @@ private fun BootSection(bootAutoStart: Boolean, onBootToggle: (Boolean) -> Unit)
 }
 
 @Composable
-private fun PermissionGuideCard(onOpenOverlaySettings: () -> Unit, onOpenBatterySettings: () -> Unit) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
-    ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Filled.VerifiedUser, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
-                Spacer(Modifier.width(8.dp))
-                Text("权限引导", fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
-            }
-            Spacer(Modifier.height(10.dp))
-            OutlinedButton(onClick = onOpenOverlaySettings, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp)) { Text("开启悬浮窗权限") }
-            Spacer(Modifier.height(8.dp))
-            OutlinedButton(onClick = onOpenBatterySettings, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp)) { Text("忽略电池优化") }
-        }
-    }
-}
-
-@Composable
 private fun UpdateCheckCard(isChecking: Boolean, onCheckUpdate: () -> Unit) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+        )
     ) {
         Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -168,7 +250,7 @@ private fun UpdateCheckCard(isChecking: Boolean, onCheckUpdate: () -> Unit) {
                 Spacer(Modifier.width(8.dp))
                 Column {
                     Text("版本更新", fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
-                    Text("v1.60", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("v${BuildConfig.VERSION_NAME}", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
             FilledTonalButton(onClick = onCheckUpdate, enabled = !isChecking, shape = RoundedCornerShape(12.dp)) {
@@ -181,15 +263,11 @@ private fun UpdateCheckCard(isChecking: Boolean, onCheckUpdate: () -> Unit) {
 /** 关于信息卡片 - 含 WebView 内置浏览的 GitHub/Gitee 链接 */
 @Composable
 private fun AboutInfoCard(onOpenExternalLink: (String, String) -> Unit = { _, _ -> }) {
-    val context = LocalContext.current
-    val openInWebView: (String, String) -> Unit = { url, title ->
-        onOpenExternalLink(url, title)
-    }
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
     ) {
         Column(Modifier.fillMaxWidth().padding(20.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             Box(Modifier.size(56.dp).clip(RoundedCornerShape(14.dp)).background(MaterialTheme.colorScheme.primaryContainer), contentAlignment = Alignment.Center) {
@@ -197,25 +275,23 @@ private fun AboutInfoCard(onOpenExternalLink: (String, String) -> Unit = { _, _ 
             }
             Spacer(Modifier.height(12.dp))
             Text("神奇悬浮窗", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = MaterialTheme.colorScheme.onSurface)
-            Text("v1.60", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("v${BuildConfig.VERSION_NAME}", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Text("实时监测电池温度与功耗的 Android 悬浮窗工具", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
             Spacer(Modifier.height(12.dp))
             HorizontalDivider(modifier = Modifier.fillMaxWidth(0.6f))
             Spacer(Modifier.height(12.dp))
             Text("作者: qinzuoyong", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Spacer(Modifier.height(8.dp))
-            // GitHub 链接（修复：点击跳转浏览器）
             Text("GitHub", fontSize = 13.sp, color = MaterialTheme.colorScheme.primary,
                 textDecoration = TextDecoration.Underline,
                 modifier = Modifier.clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {
-                    openInWebView("https://github.com/qinzuoyong/floating-data", "GitHub")
+                    onOpenExternalLink("https://github.com/qinzuoyong/floating-data", "GitHub")
                 })
             Spacer(Modifier.height(6.dp))
-            // Gitee 链接（WebView 内置浏览）
             Text("Gitee", fontSize = 13.sp, color = MaterialTheme.colorScheme.primary,
                 textDecoration = TextDecoration.Underline,
                 modifier = Modifier.clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {
-                    openInWebView("https://gitee.com/qinzuoyong/floating-data", "Gitee")
+                    onOpenExternalLink("https://gitee.com/qinzuoyong/floating-data", "Gitee")
                 })
         }
     }

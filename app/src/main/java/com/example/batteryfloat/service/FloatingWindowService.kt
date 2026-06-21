@@ -20,6 +20,7 @@ import android.view.View
 import android.view.WindowManager
 import androidx.core.app.NotificationCompat
 import com.example.batteryfloat.MainActivity
+import com.example.batteryfloat.PrefsKeys
 import com.example.batteryfloat.R
 import com.example.batteryfloat.monitor.BatteryMonitor
 import com.example.batteryfloat.view.FloatingWindowView
@@ -29,7 +30,7 @@ import com.example.batteryfloat.view.FloatingWindowView
  * - 管理 WindowManager 悬浮窗生命周期
  * - 通过 BatteryMonitor 实时更新温度显示
  * - 前台通知常驻，防止被系统清理
- * - START_STICKY 保证被杀后自动重建
+ * - START_REDELIVER_INTENT 保证被杀后自动重建并重传 Intent
  * - AlarmManager 心跳每 5 分钟检查存活性
  * - onTaskRemoved 通过 AlarmManager 延迟重启
  */
@@ -41,7 +42,7 @@ class FloatingWindowService : Service() {
     private var heartbeatPendingIntent: PendingIntent? = null
     private var prefsListener: SharedPreferences.OnSharedPreferenceChangeListener? = null
     private val prefs: SharedPreferences by lazy {
-        getSharedPreferences("floating_prefs", Context.MODE_PRIVATE)
+        getSharedPreferences(PrefsKeys.PREFS_NAME, Context.MODE_PRIVATE)
     }
 
     /** 保活用 1x1 不可见覆盖层 (TYPE_APPLICATION_OVERLAY) */
@@ -58,7 +59,18 @@ class FloatingWindowService : Service() {
         const val CHANNEL_ID = "battery_temp_channel_v2"
         const val NOTIFICATION_ID = 1001
         private const val HEARTBEAT_INTERVAL_MS = 5 * 60 * 1000L  // 5分钟心跳
-        const val PREF_FLOATING_RUNNING = "floating_was_running"
+        const val PREF_FLOATING_RUNNING = PrefsKeys.FLOATING_WAS_RUNNING
+
+        /** 外观/功能相关 key 集合，这些 key 变化时刷新悬浮窗外观和缓存 */
+        private val APPEARANCE_KEYS = setOf(
+            PrefsKeys.FONT_SIZE,
+            PrefsKeys.CORNER_RADIUS,
+            PrefsKeys.BG_ALPHA,
+            PrefsKeys.BG_COLOR,
+            PrefsKeys.TEXT_COLOR,
+            PrefsKeys.SHOW_POWER,
+            PrefsKeys.LOCK_DRAG_ENABLED  // 锁定开关变化时需更新 lockEnabled 缓存
+        )
 
         /** 启动悬浮窗服务 */
         fun start(context: Context) {
@@ -78,8 +90,8 @@ class FloatingWindowService : Service() {
     }
 
     override fun onCreate() {
-        isRunning = true
         super.onCreate()
+        isRunning = true
         // 记录悬浮窗运行状态（供开机自启判断）
         prefs.edit().putBoolean(PREF_FLOATING_RUNNING, true).apply()
         createNotificationChannel()
@@ -134,6 +146,9 @@ class FloatingWindowService : Service() {
 
     override fun onDestroy() {
         isRunning = false
+        // 注意：不在这里设置 FLOATING_WAS_RUNNING = false
+        // 因为系统杀进程也会触发 onDestroy，但开机自启时需要恢复
+        // 只在 HomeScreen 中用户手动关闭时才设置 false
         cancelHeartbeat()
         stopMonitoring()
         removeFloatingWindow()
@@ -237,9 +252,11 @@ class FloatingWindowService : Service() {
         // 初始化 lastOrientation，确保首次 onConfigurationChanged 时有正确的旧方向
         lastOrientation = resources.configuration.orientation
 
-        // 注册 SharedPreferences 监听器，实现设置实时生效
-        prefsListener = SharedPreferences.OnSharedPreferenceChangeListener { _, _ ->
-            floatingView?.reloadAppearance()
+        // 注册 SharedPreferences 监听器，仅监听外观相关 key 变化
+        prefsListener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+            if (key in APPEARANCE_KEYS) {
+                floatingView?.reloadAppearance()
+            }
         }
         prefsListener?.let { prefs.registerOnSharedPreferenceChangeListener(it) }
 

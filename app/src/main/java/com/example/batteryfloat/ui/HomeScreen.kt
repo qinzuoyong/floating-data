@@ -38,6 +38,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import com.example.batteryfloat.PrefsKeys
 import com.example.batteryfloat.service.FloatingWindowService
 
 /**
@@ -55,9 +56,9 @@ fun HomeScreen(
     val haptic = LocalHapticFeedback.current
 
     var isServiceRunning by remember { mutableStateOf(FloatingWindowService.isRunning) }
-    var lockDrag by remember { mutableStateOf(prefs.getBoolean("lock_drag_enabled", false)) }
-    var showPower by remember { mutableStateOf(prefs.getBoolean("show_power", true)) }
-    var hideRecents by remember { mutableStateOf(prefs.getBoolean("hide_recents", true)) }
+    var lockDrag by remember { mutableStateOf(prefs.getBoolean(PrefsKeys.LOCK_DRAG_ENABLED, false)) }
+    var showPower by remember { mutableStateOf(prefs.getBoolean(PrefsKeys.SHOW_POWER, true)) }
+    var hideRecents by remember { mutableStateOf(prefs.getBoolean(PrefsKeys.HIDE_RECENTS, true)) }
 
     // 页面恢复时刷新服务运行状态（防止系统后台杀死服务后 UI 仍显示"运行中"）
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -96,7 +97,7 @@ fun HomeScreen(
                 if (isServiceRunning) {
                     onStopService()
                     isServiceRunning = false
-                    prefs.edit().putBoolean("floating_was_running", false).apply()
+                    prefs.edit().putBoolean(PrefsKeys.FLOATING_WAS_RUNNING, false).apply()
                 } else {
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(context)) {
                         Toast.makeText(context, "请先开启悬浮窗权限", Toast.LENGTH_SHORT).show()
@@ -118,7 +119,7 @@ fun HomeScreen(
             onCheckedChange = {
                 haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                 showPower = it
-                prefs.edit().putBoolean("show_power", it).apply()
+                prefs.edit().putBoolean(PrefsKeys.SHOW_POWER, it).apply()
             }
         )
 
@@ -130,7 +131,11 @@ fun HomeScreen(
             onCheckedChange = {
                 haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                 lockDrag = it
-                prefs.edit().putBoolean("lock_drag_enabled", it).apply()
+                prefs.edit().putBoolean(PrefsKeys.LOCK_DRAG_ENABLED, it).apply()
+                // 关闭锁定开关时，同时清除实际锁定状态
+                if (!it) {
+                    prefs.edit().putBoolean(PrefsKeys.LOCK_DRAG_ENGAGED, false).apply()
+                }
             }
         )
 
@@ -142,7 +147,7 @@ fun HomeScreen(
             onCheckedChange = {
                 haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                 hideRecents = it
-                prefs.edit().putBoolean("hide_recents", it).apply()
+                prefs.edit().putBoolean(PrefsKeys.HIDE_RECENTS, it).apply()
             }
         )
 
@@ -155,7 +160,7 @@ fun HomeScreen(
 private fun FloatingWindowCard(isServiceRunning: Boolean, onToggle: () -> Unit) {
     val bgColor by animateColorAsState(
         targetValue = if (isServiceRunning) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f)
-        else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+        else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
         animationSpec = tween(300),
         label = "cardBg"
     )
@@ -204,13 +209,17 @@ private fun FloatingWindowCard(isServiceRunning: Boolean, onToggle: () -> Unit) 
 /** 带缩放的开关按钮 */
 @Composable
 private fun AnimatedToggleButton(isRunning: Boolean, onClick: () -> Unit) {
+    var isPressed by remember { mutableStateOf(false) }
     val scale by animateFloatAsState(
-        targetValue = 1f,
+        targetValue = if (isPressed) 0.92f else 1f,
         animationSpec = spring(dampingRatio = 0.6f, stiffness = Spring.StiffnessLow),
         label = "btnScale"
     )
     FilledTonalButton(
-        onClick = onClick,
+        onClick = {
+            isPressed = true
+            onClick()
+        },
         colors = ButtonDefaults.filledTonalButtonColors(
             containerColor = if (isRunning) MaterialTheme.colorScheme.errorContainer
             else MaterialTheme.colorScheme.primaryContainer
@@ -230,5 +239,12 @@ private fun AnimatedToggleButton(isRunning: Boolean, onClick: () -> Unit) {
             fontWeight = FontWeight.SemiBold,
             fontSize = 14.sp
         )
+    }
+    // 点击后恢复
+    LaunchedEffect(isPressed) {
+        if (isPressed) {
+            kotlinx.coroutines.delay(100)
+            isPressed = false
+        }
     }
 }

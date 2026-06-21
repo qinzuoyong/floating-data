@@ -14,6 +14,7 @@ import android.view.View
 import android.view.WindowManager
 import android.widget.LinearLayout
 import android.widget.TextView
+import com.example.batteryfloat.PrefsKeys
 import com.example.batteryfloat.R
 
 /**
@@ -27,7 +28,7 @@ class FloatingWindowView(context: Context) : LinearLayout(context) {
 
     private var layoutParams: WindowManager.LayoutParams? = null
     private val prefs: SharedPreferences =
-        context.getSharedPreferences("floating_prefs", Context.MODE_PRIVATE)
+        context.getSharedPreferences(PrefsKeys.PREFS_NAME, Context.MODE_PRIVATE)
 
     /** 温度文本 */
     val tempText: TextView = TextView(context)
@@ -38,19 +39,19 @@ class FloatingWindowView(context: Context) : LinearLayout(context) {
         private const val TAG = "FloatingWindowView"
         private const val DOUBLE_TAP_MS = 400L
         /** 锁定功能开关 key（由 MainScreen 开关控制） */
-        private const val PREF_LOCK_ENABLED = "lock_drag_enabled"
+        private const val PREF_LOCK_ENABLED = PrefsKeys.LOCK_DRAG_ENABLED
         /** 实际锁定状态 key（由双击切换） */
-        private const val PREF_LOCK_ENGAGED = "lock_drag"
+        private const val PREF_LOCK_ENGAGED = PrefsKeys.LOCK_DRAG_ENGAGED
         /** 拖拽触发阈值（像素），超过此值视为拖拽 */
         private const val DRAG_THRESHOLD = 10
         /** SharedPreferences key - 横屏 X */
-        private const val PREF_POS_LAND_X = "pos_land_x"
+        private const val PREF_POS_LAND_X = PrefsKeys.POS_LAND_X
         /** SharedPreferences key - 横屏 Y */
-        private const val PREF_POS_LAND_Y = "pos_land_y"
+        private const val PREF_POS_LAND_Y = PrefsKeys.POS_LAND_Y
         /** SharedPreferences key - 竖屏 X */
-        private const val PREF_POS_PORT_X = "pos_port_x"
+        private const val PREF_POS_PORT_X = PrefsKeys.POS_PORT_X
         /** SharedPreferences key - 竖屏 Y */
-        private const val PREF_POS_PORT_Y = "pos_port_y"
+        private const val PREF_POS_PORT_Y = PrefsKeys.POS_PORT_Y
     }
 
     // 拖拽相关
@@ -104,13 +105,13 @@ class FloatingWindowView(context: Context) : LinearLayout(context) {
     }
 
     private fun applyAppearance() {
-        val fontSize = prefs.getFloat("font_size", 8f)
-        val alpha = (prefs.getFloat("bg_alpha", 0.5f) * 255).toInt().coerceIn(0, 255)
-        val bgColor = prefs.getInt("bg_color", 0xFF666666.toInt())
+        val fontSize = prefs.getFloat(PrefsKeys.FONT_SIZE, 8f)
+        val alpha = (prefs.getFloat(PrefsKeys.BG_ALPHA, 0.5f) * 255).toInt().coerceIn(0, 255)
+        val bgColor = prefs.getInt(PrefsKeys.BG_COLOR, 0xFF666666.toInt())
         val finalBg = Color.argb(alpha, Color.red(bgColor), Color.green(bgColor), Color.blue(bgColor))
-        val cornerRadius = prefs.getFloat("corner_radius", 30f)
-        val textColor = prefs.getInt("text_color", Color.WHITE)
-        val showPower = prefs.getBoolean("show_power", true)
+        val cornerRadius = prefs.getFloat(PrefsKeys.CORNER_RADIUS, 30f)
+        val textColor = prefs.getInt(PrefsKeys.TEXT_COLOR, Color.WHITE)
+        val showPower = prefs.getBoolean(PrefsKeys.SHOW_POWER, true)
         // 同步内存缓存，后续触摸事件直接读取缓存变量
         lockEngaged = prefs.getBoolean(PREF_LOCK_ENGAGED, false)
         lockEnabled = prefs.getBoolean(PREF_LOCK_ENABLED, false)

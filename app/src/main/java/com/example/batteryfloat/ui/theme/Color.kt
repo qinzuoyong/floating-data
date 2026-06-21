@@ -24,9 +24,9 @@ val SkyBlueDarkOnTertiary        = Color(0xFF003820)
 val SkyBlueDarkTertiaryContainer = Color(0xFF005230)
 val SkyBlueDarkOnTertiaryContainer= Color(0xFFB6F0C8)
 
-val SkyBlueDarkBackground        = Color(0xFF121212)
-val SkyBlueDarkSurface           = Color(0xFF1E1E1E)
-val SkyBlueDarkSurfaceVariant    = Color(0xFF2C2C2C)
+val SkyBlueDarkBackground        = Color(0xFF000000)  // 纯黑背景
+val SkyBlueDarkSurface           = Color(0xFF1A1A1A)  // 深灰表面
+val SkyBlueDarkSurfaceVariant    = Color(0xFF2A2A2A)  // 中灰卡片区
 val SkyBlueDarkOnBackground      = Color(0xFFE0E0E0)
 val SkyBlueDarkOnSurface         = Color(0xFFE0E0E0)
 val SkyBlueDarkOutline           = Color(0xFF888888)
@@ -47,9 +47,9 @@ val SkyBlueLightOnTertiary        = Color(0xFFFFFFFF)
 val SkyBlueLightTertiaryContainer = Color(0xFFB2DFDB)
 val SkyBlueLightOnTertiaryContainer= Color(0xFF00201E)
 
-val SkyBlueLightBackground        = Color(0xFFF8F9FA)  // 极浅灰背景
-val SkyBlueLightSurface           = Color(0xFFFFFFFF)
-val SkyBlueLightSurfaceVariant    = Color(0xFFF1F3F4)  // 浅灰卡片区
+val SkyBlueLightBackground        = Color(0xFFFFFFFF)  // 纯白背景
+val SkyBlueLightSurface           = Color(0xFFFFFFFF)  // 纯白表面
+val SkyBlueLightSurfaceVariant    = Color(0xFFF5F5F5)  // 浅灰卡片区
 val SkyBlueLightOnBackground      = Color(0xFF1C1B1F)
 val SkyBlueLightOnSurface         = Color(0xFF1C1B1F)
 val SkyBlueLightOutline           = Color(0xFFDADCE0)  // 柔和边框
