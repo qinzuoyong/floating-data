@@ -1,7 +1,7 @@
 # 手机信息悬浮窗
 
 > 实时监测电池温度与功耗的 Android 悬浮窗工具
-> 版本: 1.60 | 最低支持: Android 14 (API 34)
+> 版本: 1.62 | 最低支持: Android 14 (API 34)
 
 ────────────────────────────────────────
 
@@ -91,8 +91,24 @@ APK 输出路径:
 版本历史
 ────────────────────────────────────────
 
-  v1.60  (当前版本)
-          移除无障碍保活服务：解决侧载安装「部分功能已被限制」弹窗
+  v1.62  (当前版本)
+          全量代码审查与质量优化
+          修复版本比较算法（逐段整数比较，支持多段版本号如 1.62.1）
+          修复 FloatingWindowService 生命周期：isRunning 赋值顺序修正、onDestroy 写回运行状态
+          修复 MainActivity 异常处理：更新检查/权限设置/电池优化全部包裹 try-catch
+          WebViewActivity URL 白名单机制：仅 gitee.com/github.com 在 WebView 内加载，外部链接跳转系统浏览器
+          提取 SharedPreferences key 为 PrefsKeys 常量对象，消除所有硬编码字符串
+          优化 SharedPreferences 监听粒度：仅监听外观相关 key 变化才刷新悬浮窗
+          Theme 动态取色默认关闭，自定义天蓝配色在 Android 12+ 上生效
+          AnimatedToggleButton 添加点击缩放动画反馈
+          UpdateChecker User-Agent 动态获取版本号
+
+  v1.61
+          Android 14+ 受限设置引导：首次请求悬浮窗权限弹出分步引导对话框
+          关于页新增「解除权限限制（Android 14+）」按钮，可随时查看引导
+
+  v1.60
+          移除无障碍保活服务
           启动自动更新弹窗：打开 App 立即检测并提示更新
           进程优先级最大化：IMPORTANCE_LOW + REDELIVER_INTENT + getForegroundService
           通知栏常驻小图标 + stopWithTask=false 双重防杀
@@ -102,7 +118,7 @@ APK 输出路径:
           全量代码审计修复：Shizuku 资源泄漏 try-finally 保护、BatteryMonitor @Volatile 线程可见性、FloatingWindowService 空安全优化
 
   v1.59
-           解除MIUI应用限制(多策略:反射+Shizuku+引导); 修复保活闪退(非阻塞设计+防Activity销毁)
+           修复保活闪退(非阻塞设计+防Activity销毁)
            保活开关状态与实际运行一致; 隐藏"正在其他应用上层"通知(IMPORTANCE_MIN)
            横竖屏切换位置偏差修复; 代码质量优化(内存泄漏/资源泄漏/弃用API)
 
