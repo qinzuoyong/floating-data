@@ -1,7 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <string name="app_name">神奇悬浮窗</string>
-    <string name="notification_channel_name">电池温度监控</string>
-    <string name="notification_title">电池温度: %s°C</string>
-    <string name="temperature_loading">--°C</string>
-</resources>
