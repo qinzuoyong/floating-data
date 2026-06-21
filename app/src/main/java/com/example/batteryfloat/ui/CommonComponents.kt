@@ -49,10 +49,16 @@ fun SettingCard(
 
 /**
  * 带图标的设置开关卡片
+ * 
+ * 设计特点：
+ * 1. 图标带彩色圆形背景，增强视觉识别性
+ * 2. 卡片使用不透明的 surfaceContainerLow 背景
+ * 3. 统一的间距和圆角
  */
 @Composable
 fun SettingSwitchCard(
     icon: @Composable () -> Unit,
+    iconBackgroundColor: Color = Color.Transparent,
     title: String,
     subtitle: String,
     checked: Boolean,
@@ -64,7 +70,7 @@ fun SettingSwitchCard(
         shape = RoundedCornerShape(DesignSystem.CornerL),
         elevation = CardDefaults.cardElevation(defaultElevation = DesignSystem.ElevationNone),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
         )
     ) {
         Row(
@@ -78,7 +84,16 @@ fun SettingSwitchCard(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.weight(1f)
             ) {
-                icon()
+                // 图标带彩色圆形背景
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(CircleShape)
+                        .background(iconBackgroundColor),
+                    contentAlignment = Alignment.Center
+                ) {
+                    icon()
+                }
                 Spacer(modifier = Modifier.width(DesignSystem.SpacingM))
                 Column {
                     Text(
