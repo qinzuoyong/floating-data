@@ -1,5 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<paths>
-    <!-- 用于分享下载的 APK 文件给系统安装器 -->
-    <cache-path name="apk_download" path="/" />
-</paths>
