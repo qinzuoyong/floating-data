@@ -1,7 +1,7 @@
-# 手机信息悬浮窗
+﻿# 手机信息悬浮窗
 
 > 实时监测电池温度与功耗的 Android 悬浮窗工具
-> 版本: 1.64 | 最低支持: Android 14 (API 34)
+> 版本: 1.65 | 最低支持: Android 14 (API 34)
 
 ────────────────────────────────────────
 
@@ -9,7 +9,7 @@
 ────────────────────────────────────────
 
   [温度] 实时温度显示
-         悬浮窗显示当前电池温度(℃)，支持 Shizuku sysfs 读取 + BatteryManager 降级
+         悬浮窗显示当前电池温度(℃)，使用 Android 标准 BatteryManager API 读取
 
   [功耗] 功耗监测
          显示整机实时功耗(W)，使用 Android 标准 BatteryManager API
@@ -74,7 +74,6 @@ APK 输出路径:
   Target SDK     34
   Compose BOM    2026.02.01
   Material3      Yes
-  Shizuku        13.1.5
   协程           1.7.3
 
 ────────────────────────────────────────
@@ -94,7 +93,12 @@ APK 输出路径:
 版本历史
 ────────────────────────────────────────
 
-  v1.64  (当前版本)
+  v1.65  (当前版本)
+          移除 Shizuku 依赖及相关代码
+          温度读取改为仅使用 Android 标准 BatteryManager API
+          版本号升级
+
+  v1.64
           全量代码审查与 Bug 修复
           修复：删除 3 个旧组件残留文件（SettingSwitchCard/SliderSettingCard/ColorPickerSection）
           修复：BootReceiver 开机自启延迟检查广播未注册自定义 action

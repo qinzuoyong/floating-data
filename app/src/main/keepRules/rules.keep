@@ -1,0 +1,9 @@
+﻿# R8 保留规则 — 电池温度悬浮窗
+# 前台 Service 不被混淆
+-keep class com.example.batteryfloat.service.FloatingWindowService { *; }
+
+# 开机广播接收器不被混淆
+-keep class com.example.batteryfloat.receiver.BootReceiver { *; }
+
+# 电池监控器保持回调接口
+-keep class com.example.batteryfloat.monitor.BatteryMonitor$* { *; }
