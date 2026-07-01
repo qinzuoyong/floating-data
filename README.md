@@ -97,6 +97,12 @@ APK 输出路径:
           移除 Shizuku 依赖及相关代码
           温度读取改为仅使用 Android 标准 BatteryManager API
           版本号升级
+          修复 BootReceiver 开机自启动未校验悬浮窗权限导致"幽灵服务"问题
+          补充 Android 14 specialUse FGS subtype 合规声明
+          心跳闹钟升级为 setExactAndAllowWhileIdle 增强 Doze 模式下保活
+          优化 onTaskRemoved 重启异常处理兼容 Android 12+
+          1x1 保活覆盖层增加失败重试机制
+          开机自启动增加短暂 WakeLock 确保服务拉起
 
   v1.64
           全量代码审查与 Bug 修复
