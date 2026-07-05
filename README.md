@@ -1,7 +1,7 @@
 # 手机信息悬浮窗
 
 > 实时监测电池温度与功耗的 Android 悬浮窗工具
-> 版本: 1.66 | 最低支持: Android 14 (API 34)
+> 版本: 1.67 | 最低支持: Android 14 (API 34)
 
 ────────────────────────────────────────
 
@@ -93,7 +93,16 @@ APK 输出路径:
 版本历史
 ────────────────────────────────────────
 
-  v1.66  (当前版本)
+  v1.67  (当前版本)
+          全量代码质量审计与修复
+          修复：FloatingWindowService.showFloatingWindow() 添加 addView try-catch 异常保护（P0）
+          修复：MainActivity 权限引导 showGuide() lambda 异常保护（P1）
+          修复：AboutScreen RestrictedSettingsDialog 打开应用信息页异常保护（P1）
+          修复：ApkDownloader.isValidApkFile() 读取返回值校验（P2）
+          修复：BatteryMonitor.lastNotifiedPower 初始值改为 Float.NaN
+          版本号升级
+          
+  v1.66
           功耗显示增加充放电感知：充电显示正值（绿色），放电显示负值（橙色）
           悬浮窗功耗文本美学设计：充电绿色 #4CAF50、放电橙色 #FF9800
           首页功耗开关增加符号说明（充电正值、耗电负值）

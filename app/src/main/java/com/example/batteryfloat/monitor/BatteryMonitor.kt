@@ -31,7 +31,7 @@ class BatteryMonitor(
 
     // ===== 缓存上次通知值，非显著变化时不更新通知 =====
     private var lastNotifiedTemp = -100f
-    private var lastNotifiedPower = -100f
+    private var lastNotifiedPower = Float.NaN
 
     /** 缓存 IntentFilter 对象，避免每 2 秒创建新对象 */
     private val batteryIntentFilter = IntentFilter(Intent.ACTION_BATTERY_CHANGED)

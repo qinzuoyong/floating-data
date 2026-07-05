@@ -1,4 +1,4 @@
-package com.example.batteryfloat.service
+﻿package com.example.batteryfloat.service
 
 import android.app.AlarmManager
 import android.app.Notification
@@ -283,7 +283,19 @@ class FloatingWindowService : Service() {
                 y = 400
             }
             view.setLayoutParams(params)
-            windowManager.addView(view, params)
+            try {
+                windowManager.addView(view, params)
+            } catch (e: SecurityException) {
+                Log.e(TAG, "添加悬浮窗失败：缺少悬浮窗权限", e)
+                isRunning = false
+                stopSelf()
+                return
+            } catch (e: Exception) {
+                Log.e(TAG, "添加悬浮窗失败: ${e.message}", e)
+                isRunning = false
+                stopSelf()
+                return
+            }
             // 恢复上次保存的位置（按当前屏幕方向），无保存值则钳位到屏幕内
             view.clampToScreenBounds(restorePosition = true)
         }
