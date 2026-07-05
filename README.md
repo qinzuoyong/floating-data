@@ -1,4 +1,4 @@
-# 手机信息悬浮窗
+﻿# 手机信息悬浮窗
 
 > 实时监测电池温度与功耗的 Android 悬浮窗工具
 > 版本: 1.66 | 最低支持: Android 14 (API 34)
@@ -99,6 +99,7 @@ APK 输出路径:
           首页功耗开关增加符号说明（充电正值、耗电负值）
           代码质量提升：BatteryMonitor 线程安全改用 AtomicBoolean
           代码质量提升：FloatingWindowService mainHandler 增加空值防护
+          修复悬浮窗触摸事件：改用 getX(0)/getY(0) 替代 rawX/rawY，确保多指触摸时坐标正确
           版本号升级
           
   v1.65

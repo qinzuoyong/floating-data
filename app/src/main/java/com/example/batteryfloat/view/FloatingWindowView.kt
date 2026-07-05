@@ -234,20 +234,23 @@ class FloatingWindowView(context: Context) : LinearLayout(context) {
                 isDragging = false
                 initialX = params.x
                 initialY = params.y
-                initialTouchX = event.rawX
-                initialTouchY = event.rawY
+                // 使用 getX(0)/getY(0) 确保多指触摸时获取第一个手指坐标
+                initialTouchX = event.getX(0)
+                initialTouchY = event.getY(0)
                 return true
             }
             MotionEvent.ACTION_MOVE -> {
-                val dx = abs(event.rawX - initialTouchX)
-                val dy = abs(event.rawY - initialTouchY)
+                val currentX = event.getX(0)
+                val currentY = event.getY(0)
+                val dx = abs(currentX - initialTouchX)
+                val dy = abs(currentY - initialTouchY)
                 if (dx > DRAG_THRESHOLD || dy > DRAG_THRESHOLD) isDragging = true
 
                 // 实际锁定状态下禁止拖拽（使用内存缓存，避免每帧读 SharedPreferences）
                 if (lockEngaged) return true
 
-                params.x = initialX + (event.rawX - initialTouchX).toInt()
-                params.y = initialY + (event.rawY - initialTouchY).toInt()
+                params.x = initialX + (currentX - initialTouchX).toInt()
+                params.y = initialY + (currentY - initialTouchY).toInt()
                 clampToScreenBounds()
                 return true
             }
