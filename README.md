@@ -101,6 +101,7 @@ APK 输出路径:
           修复：ApkDownloader.isValidApkFile() 读取返回值校验（P2）
           修复：BatteryMonitor.lastNotifiedPower 初始值改为 Float.NaN
           修复：FloatingWindowView 添加 performClick() 无障碍兼容
+          修复：拖拽坐标回退 rawX/rawY，解决 getX(0) 导致的视图移动后反馈循环问题
           版本号升级
           
   v1.66
