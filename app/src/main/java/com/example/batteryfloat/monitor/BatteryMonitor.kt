@@ -95,11 +95,9 @@ class BatteryMonitor(
 
     /**
      * 从已注册的 Intent 中提取电压，结合 BatteryManager API 计算功耗
-     * Android BATTERY_PROPERTY_CURRENT_NOW 符号约定:
-     * 正值 = 电池放电（电流流出），负值 = 电池充电（电流流入）
-     * 公式: P(W) = Voltage(mV) × (−currentNow) / 1,000,000,000
-     * 充电时 currentNow 为负，−currentNow 为正 → 正值显示
-     * 放电时 currentNow 为正，−currentNow 为负 → 负值显示
+     * 使用电池充电状态（BATTERY_STATUS_*）决定符号，避免制造商 currentNow 符号不一致
+     * 公式: P(W) = Voltage(mV) × |Current(μA)| / 1,000,000,000
+     * 充电 → 正值，放电 → 负值
      */
     private fun getPowerFromIntent(intent: Intent?): Float {
         return try {
@@ -109,7 +107,14 @@ class BatteryMonitor(
             val batteryManager = context.getSystemService(Context.BATTERY_SERVICE) as BatteryManager
             val currentNow = batteryManager.getIntProperty(BatteryManager.BATTERY_PROPERTY_CURRENT_NOW)
             if (currentNow == Int.MIN_VALUE) return Float.NaN
-            (voltage.toFloat() * (-currentNow)) / 1_000_000_000f
+            // 使用电池状态决定符号，而非依赖 currentNow 符号（不同制造商约定不一致）
+            val rawPower = (voltage.toFloat() * kotlin.math.abs(currentNow.toFloat())) / 1_000_000_000f
+            val charging = isCharging(intent)
+            when (charging) {
+                true -> rawPower        // 充电 → 正值
+                false -> -rawPower      // 放电 → 负值
+                null -> rawPower        // 未知 → 正值
+            }
         } catch (e: Exception) {
             Log.w(TAG, "功耗读取失败", e)
             Float.NaN

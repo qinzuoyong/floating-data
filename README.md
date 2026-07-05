@@ -102,6 +102,8 @@ APK 输出路径:
           修复：BatteryMonitor.lastNotifiedPower 初始值改为 Float.NaN
           修复：FloatingWindowView 添加 performClick() 无障碍兼容
           修复：拖拽坐标回退 rawX/rawY，解决 getX(0) 导致的视图移动后反馈循环问题
+          修复：功耗公式改用电池状态决定符号，解决制造商 currentNow 符号不一致问题
+          修复：功耗字体大小与温度显示保持一致
           版本号升级
           
   v1.66
@@ -110,7 +112,6 @@ APK 输出路径:
           首页功耗开关增加符号说明（充电正值、耗电负值）
           代码质量提升：BatteryMonitor 线程安全改用 AtomicBoolean
           代码质量提升：FloatingWindowService mainHandler 增加空值防护
-          修复悬浮窗触摸事件：改用 getX(0)/getY(0) 替代 rawX/rawY，确保多指触摸时坐标正确
           AboutScreen RestrictedSettingsDialog onOpenAppInfo 回调添加 try-catch 异常保护
           版本号升级
           
