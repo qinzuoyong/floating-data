@@ -1,4 +1,4 @@
-package com.example.batteryfloat.view
+﻿package com.example.batteryfloat.view
 
 import kotlin.math.abs
 import android.content.Context
@@ -270,6 +270,7 @@ class FloatingWindowView(context: Context) : LinearLayout(context) {
                             return true
                         }
                         // 双击：切换实际锁定状态
+                        performClick() // 无障碍服务兼容
                         lockEngaged = !lockEngaged
                         prefs.edit().putBoolean(PREF_LOCK_ENGAGED, lockEngaged).apply()
                         Log.i(TAG, "双击切换锁定: $lockEngaged")
@@ -295,6 +296,12 @@ class FloatingWindowView(context: Context) : LinearLayout(context) {
             }
         }
         return super.onTouchEvent(event)
+    }
+
+    // 无障碍服务兼容：重写 performClick 以配合 onTouchEvent
+    override fun performClick(): Boolean {
+        super.performClick()
+        return true
     }
 
     private fun dpToPx(dp: Int): Int {
