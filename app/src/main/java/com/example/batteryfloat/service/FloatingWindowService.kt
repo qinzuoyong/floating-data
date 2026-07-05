@@ -353,7 +353,7 @@ class FloatingWindowService : Service() {
             Log.w(TAG, "添加保活覆盖层失败: ${e.message}")
             aliveView = null  // 确保状态一致
             // 延迟 3 秒后重试一次（确保窗口服务就绪）
-            mainHandler.postDelayed({ tryAddAliveOverlayRetry() }, 3000)
+            mainHandler?.postDelayed({ tryAddAliveOverlayRetry() }, 3000)
         }
     }
 

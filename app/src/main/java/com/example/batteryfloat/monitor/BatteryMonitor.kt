@@ -11,7 +11,7 @@ import com.example.batteryfloat.R
 import com.example.batteryfloat.service.FloatingWindowService
 import com.example.batteryfloat.view.FloatingWindowView
 import kotlinx.coroutines.*
-import kotlin.math.abs
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * 电池监控器
@@ -27,8 +27,7 @@ class BatteryMonitor(
     private val TAG = "BatteryMonitor"
     // 使用 SupervisorJob 配合 CoroutineName，便于调试和取消管理
     private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob() + CoroutineName("BatteryMonitor"))
-    @Volatile
-    private var isRunning = false
+    private val isRunning = AtomicBoolean(false)
 
     // ===== 缓存上次通知值，非显著变化时不更新通知 =====
     private var lastNotifiedTemp = -100f
@@ -46,10 +45,10 @@ class BatteryMonitor(
     }
 
     fun start() {
-        if (isRunning) return
-        isRunning = true
+        if (isRunning.get()) return
+        isRunning.set(true)
         scope.launch {
-            while (isActive && isRunning) {
+            while (isActive && isRunning.get()) {
                 try {
                     fetchBatteryData()
                 } catch (e: Exception) {
@@ -61,7 +60,7 @@ class BatteryMonitor(
     }
 
     fun stop() {
-        isRunning = false
+        isRunning.set(false)
         // 优雅关闭协程，等待正在执行的任务完成
         scope.cancel()
     }
@@ -75,8 +74,9 @@ class BatteryMonitor(
 
         val temperature = getTemperatureFromIntent(batteryIntent)
         val power = getPowerFromIntent(batteryIntent)
+        val charging = isCharging(batteryIntent)
         if (temperature >= 0) {
-            updateDisplay(temperature, power)
+            updateDisplay(temperature, power, charging)
         }
     }
 
@@ -95,33 +95,52 @@ class BatteryMonitor(
 
     /**
      * 从已注册的 Intent 中提取电压，结合 BatteryManager API 计算功耗
-     * P(W) = Voltage(mV) × |Current(μA)| / 1_000_000_000
+     * Android BATTERY_PROPERTY_CURRENT_NOW 符号约定:
+     * 正值 = 电池放电（电流流出），负值 = 电池充电（电流流入）
+     * 公式: P(W) = Voltage(mV) × (−currentNow) / 1,000,000,000
+     * 充电时 currentNow 为负，−currentNow 为正 → 正值显示
+     * 放电时 currentNow 为正，−currentNow 为负 → 负值显示
      */
     private fun getPowerFromIntent(intent: Intent?): Float {
         return try {
+            if (intent == null) return Float.NaN
+            val voltage = intent.getIntExtra(BatteryManager.EXTRA_VOLTAGE, -1)
+            if (voltage <= 0) return Float.NaN
             val batteryManager = context.getSystemService(Context.BATTERY_SERVICE) as BatteryManager
             val currentNow = batteryManager.getIntProperty(BatteryManager.BATTERY_PROPERTY_CURRENT_NOW)
-            if (currentNow == Int.MIN_VALUE) return -1f
-
-            val voltage = intent?.getIntExtra(BatteryManager.EXTRA_VOLTAGE, -1) ?: -1
-            if (voltage > 0) {
-                abs(voltage.toDouble() * currentNow.toDouble() / 1_000_000_000.0).toFloat()
-            } else -1f
+            if (currentNow == Int.MIN_VALUE) return Float.NaN
+            (voltage.toFloat() * (-currentNow)) / 1_000_000_000f
         } catch (e: Exception) {
             Log.w(TAG, "功耗读取失败", e)
-            -1f
+            Float.NaN
+        }
+    }
+
+    /**
+     * 判断当前是否正在充电
+     * @return true 表示充电中，null 表示无法判断
+     */
+    private fun isCharging(intent: Intent?): Boolean? {
+        if (intent == null) return null
+        val status = intent.getIntExtra(BatteryManager.EXTRA_STATUS, BatteryManager.BATTERY_STATUS_UNKNOWN)
+        return when (status) {
+            BatteryManager.BATTERY_STATUS_CHARGING,
+            BatteryManager.BATTERY_STATUS_FULL -> true
+            BatteryManager.BATTERY_STATUS_DISCHARGING,
+            BatteryManager.BATTERY_STATUS_NOT_CHARGING -> false
+            else -> null
         }
     }
 
     /** 温度变化超过此阈值才更新通知 */
-    private suspend fun updateDisplay(celsius: Float, watts: Float) {
+    private suspend fun updateDisplay(celsius: Float, watts: Float, charging: Boolean?) {
         withContext(Dispatchers.Main) {
             floatingView.updateTemperature(celsius)
-            floatingView.updatePower(watts)
+            floatingView.updatePower(watts, charging)
         }
         // 仅当温度或功耗有显著变化时更新通知，减少 I/O
-        if (abs(celsius - lastNotifiedTemp) >= TEMP_THRESHOLD ||
-            abs(watts - lastNotifiedPower) >= POWER_THRESHOLD
+        if (kotlin.math.abs(celsius - lastNotifiedTemp) >= TEMP_THRESHOLD ||
+            kotlin.math.abs(watts - lastNotifiedPower) >= POWER_THRESHOLD
         ) {
             lastNotifiedTemp = celsius
             lastNotifiedPower = watts
@@ -131,7 +150,7 @@ class BatteryMonitor(
 
     private fun updateNotification(celsius: Float, watts: Float) {
         try {
-            val powerStr = if (watts >= 0) String.format("%.1fW", watts) else "--W"
+            val powerStr = if (watts.isFinite()) String.format("%.1fW", watts) else "--W"
             val notification = NotificationCompat.Builder(context, FloatingWindowService.CHANNEL_ID)
                 .setContentTitle(context.getString(R.string.notification_title, String.format("%.1f", celsius)))
                 .setContentText(powerStr)

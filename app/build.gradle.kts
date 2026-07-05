@@ -1,4 +1,4 @@
-﻿plugins {
+plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
 }
@@ -53,8 +53,8 @@ android {
         applicationId = "com.yongge.batteryfloat"
         minSdk = 34
         targetSdk = 34
-        versionCode = 28
-        versionName = "1.65"
+        versionCode = 29
+        versionName = "1.66"
 
         // 只保留中文资源，剪掉多语言（AGP 9.x 移除 resConfigs，改用 androidResources.localeFilters 但需 initscript）
     }
