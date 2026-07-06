@@ -262,7 +262,7 @@ class FloatingWindowView(context: Context) : LinearLayout(context) {
                         // 触发震动反馈（提示用户锁定状态已变更）
                         @Suppress("MissingPermission")
                         val vibrator = context.getSystemService(Vibrator::class.java)
-                        if (vibrator != null && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                        if (vibrator != null) {
                             vibrator.vibrate(
                                 VibrationEffect.createOneShot(30, VibrationEffect.DEFAULT_AMPLITUDE)
                             )

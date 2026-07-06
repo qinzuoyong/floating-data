@@ -238,7 +238,7 @@ private fun PermissionGuideCard(
             }
 
             // Android 14+ 侧载应用受限设置引导
-            if (Build.VERSION.SDK_INT >= 34) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
                 Spacer(Modifier.height(DesignSystem.SpacingS))
                 FilledTonalButton(
                     onClick = onOpenRestrictedGuide,

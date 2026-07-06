@@ -97,7 +97,7 @@ fun HomeScreen(
                     isServiceRunning = false
                     prefs.edit().putBoolean(PrefsKeys.FLOATING_WAS_RUNNING, false).apply()
                 } else {
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(context)) {
+                    if (!Settings.canDrawOverlays(context)) {
                         Toast.makeText(context, "请先开启悬浮窗权限", Toast.LENGTH_SHORT).show()
                         onOpenOverlaySettings()
                     } else {

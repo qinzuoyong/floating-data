@@ -158,7 +158,7 @@ class MainActivity : ComponentActivity() {
      */
     private fun openOverlaySettingsWithGuide(showGuide: () -> Unit) {
         // Android 14+ 且尚未授予悬浮窗权限 → 检查是否需要引导
-        if (Build.VERSION.SDK_INT >= 34 && !Settings.canDrawOverlays(this)) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE && !Settings.canDrawOverlays(this)) {
             val guideShown = prefs.getBoolean(PrefsKeys.RESTRICTED_SETTINGS_GUIDED, false)
             if (!guideShown) {
                 prefs.edit().putBoolean(PrefsKeys.RESTRICTED_SETTINGS_GUIDED, true).apply()
@@ -184,16 +184,14 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun openBatteryOptimizationSettings() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            isLaunchingExternal = true
-            try {
-                startActivity(Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
-                    data = Uri.parse("package:$packageName")
-                })
-            } catch (e: Exception) {
-                Log.w("MainActivity", "打开电池优化设置失败", e)
-                android.widget.Toast.makeText(this, "无法打开电池优化设置", android.widget.Toast.LENGTH_SHORT).show()
-            }
+        isLaunchingExternal = true
+        try {
+            startActivity(Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+                data = Uri.parse("package:$packageName")
+            })
+        } catch (e: Exception) {
+            Log.w("MainActivity", "打开电池优化设置失败", e)
+            android.widget.Toast.makeText(this, "无法打开电池优化设置", android.widget.Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -205,18 +203,14 @@ class MainActivity : ComponentActivity() {
         }
         if (prefs.getBoolean(PrefsKeys.HIDE_RECENTS, true)) {
             Log.i("MainActivity", "隐藏后台(Home键): finishAndRemoveTask")
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-                finishAndRemoveTask()
-            }
+            finishAndRemoveTask()
         }
     }
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
         if (keyCode == KeyEvent.KEYCODE_BACK && prefs.getBoolean(PrefsKeys.HIDE_RECENTS, true)) {
             Log.i("MainActivity", "隐藏后台(返回键): finishAndRemoveTask")
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-                finishAndRemoveTask()
-            }
+            finishAndRemoveTask()
             return true
         }
         return super.onKeyDown(keyCode, event)

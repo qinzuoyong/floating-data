@@ -1,4 +1,4 @@
-﻿package com.example.batteryfloat.ui.theme
+package com.example.batteryfloat.ui.theme
 
 import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -69,7 +69,7 @@ fun BatteryFloatingTheme(
         else -> darkTheme  // 跟随系统
     }
     val colorScheme = when {
-        dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
+        dynamicColor -> {
             val context = LocalContext.current
             if (effectiveDark) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
         }

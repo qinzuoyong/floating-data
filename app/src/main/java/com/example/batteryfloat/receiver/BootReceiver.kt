@@ -120,27 +120,25 @@ class BootReceiver : BroadcastReceiver() {
 
     /** 设置延迟检查闹钟 */
     private fun scheduleDelayedCheck(context: Context) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            try {
-                val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
-                val checkIntent = Intent(context, BootReceiver::class.java).apply {
-                    action = ACTION_AUTO_START_CHECK
-                }
-                val pendingIntent = PendingIntent.getBroadcast(
-                    context,
-                    REQUEST_CODE_CHECK,
-                    checkIntent,
-                    PendingIntent.FLAG_ONE_SHOT or PendingIntent.FLAG_IMMUTABLE
-                )
-                alarmManager.set(
-                    AlarmManager.RTC_WAKEUP,
-                    System.currentTimeMillis() + DELAYED_CHECK_MS,
-                    pendingIntent
-                )
-                Log.d(TAG, "已设置延迟检查: ${DELAYED_CHECK_MS / 1000} 秒后")
-            } catch (e: Exception) {
-                Log.e(TAG, "设置延迟检查失败", e)
+        try {
+            val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+            val checkIntent = Intent(context, BootReceiver::class.java).apply {
+                action = ACTION_AUTO_START_CHECK
             }
+            val pendingIntent = PendingIntent.getBroadcast(
+                context,
+                REQUEST_CODE_CHECK,
+                checkIntent,
+                PendingIntent.FLAG_ONE_SHOT or PendingIntent.FLAG_IMMUTABLE
+            )
+            alarmManager.set(
+                AlarmManager.RTC_WAKEUP,
+                System.currentTimeMillis() + DELAYED_CHECK_MS,
+                pendingIntent
+            )
+            Log.d(TAG, "已设置延迟检查: ${DELAYED_CHECK_MS / 1000} 秒后")
+        } catch (e: Exception) {
+            Log.e(TAG, "设置延迟检查失败", e)
         }
     }
 

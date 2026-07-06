@@ -1,4 +1,4 @@
-﻿package com.example.batteryfloat.service
+package com.example.batteryfloat.service
 
 import android.app.AlarmManager
 import android.app.Notification
@@ -86,11 +86,7 @@ class FloatingWindowService : Service() {
         /** 启动悬浮窗服务 */
         fun start(context: Context) {
             val intent = Intent(context, FloatingWindowService::class.java)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                context.startForegroundService(intent)
-            } else {
-                context.startService(intent)
-            }
+            context.startForegroundService(intent)
         }
 
         /** 停止悬浮窗服务 */
@@ -266,12 +262,7 @@ class FloatingWindowService : Service() {
 
         floatingView = FloatingWindowView(this).also { view ->
             val params = WindowManager.LayoutParams().apply {
-                type = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
-                } else {
-                    @Suppress("DEPRECATION")
-                    WindowManager.LayoutParams.TYPE_PHONE
-                }
+                type = WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
                 format = PixelFormat.TRANSLUCENT
                 flags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
                         WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
@@ -457,9 +448,5 @@ class FloatingWindowService : Service() {
             .setVisibility(NotificationCompat.VISIBILITY_SECRET)  // 锁屏隐藏
             .setContentIntent(pendingIntent)
             .build()
-            .apply {
-                // 防止通知被滑动清除 + 强制执行前台服务标记
-                flags = flags or Notification.FLAG_NO_CLEAR or Notification.FLAG_FOREGROUND_SERVICE
-            }
     }
 }
