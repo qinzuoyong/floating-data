@@ -1,0 +1,54 @@
+﻿package com.example.batteryfloat
+
+/**
+ * SharedPreferences key 集中管理
+ * 统一管理所有 SharedPreferences 的 key，避免硬编码字符串散落各处
+ */
+object PrefsKeys {
+    /** SharedPreferences 文件名 */
+    const val PREFS_NAME = "floating_prefs"
+
+    // ===== 外观设置 =====
+    /** 字体大小（sp） */
+    const val FONT_SIZE = "font_size"
+    /** 背景透明度（0.0-1.0） */
+    const val BG_ALPHA = "bg_alpha"
+    /** 背景颜色（ARGB int） */
+    const val BG_COLOR = "bg_color"
+    /** 圆角半径（dp） */
+    const val CORNER_RADIUS = "corner_radius"
+    /** 文字颜色（ARGB int） */
+    const val TEXT_COLOR = "text_color"
+    /** 功耗显示开关 */
+    const val SHOW_POWER = "show_power"
+
+    // ===== 悬浮窗位置 =====
+    /** 横屏 X 坐标 */
+    const val POS_LAND_X = "pos_land_x"
+    /** 横屏 Y 坐标 */
+    const val POS_LAND_Y = "pos_land_y"
+    /** 竖屏 X 坐标 */
+    const val POS_PORT_X = "pos_port_x"
+    /** 竖屏 Y 坐标 */
+    const val POS_PORT_Y = "pos_port_y"
+
+    // ===== 锁定功能 =====
+    /** 拖拽锁定功能开关 */
+    const val LOCK_DRAG_ENABLED = "lock_drag_enabled"
+    /** 实际锁定状态（双击切换） */
+    const val LOCK_DRAG_ENGAGED = "lock_drag"
+
+    // ===== 系统功能 =====
+    /** 开机自启动开关 */
+    const val BOOT_AUTO_START = "boot_auto_start"
+    /** 悬浮窗是否在上次运行中 */
+    const val FLOATING_WAS_RUNNING = "floating_was_running"
+    /** 隐藏后台任务卡片 */
+    const val HIDE_RECENTS = "hide_recents"
+
+    // ===== UI 状态 =====
+    /** 主题模式（0=跟随系统, 1=浅色, 2=深色） */
+    const val THEME_MODE = "theme_mode"
+    /** 受限设置引导已显示 */
+    const val RESTRICTED_SETTINGS_GUIDED = "restricted_settings_guided"
+}

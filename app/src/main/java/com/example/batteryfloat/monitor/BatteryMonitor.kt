@@ -74,9 +74,8 @@ class BatteryMonitor(
 
         val temperature = getTemperatureFromIntent(batteryIntent)
         val power = getPowerFromIntent(batteryIntent)
-        val charging = isCharging(batteryIntent)
         if (temperature >= 0) {
-            updateDisplay(temperature, power, charging)
+            updateDisplay(temperature, power)
         }
     }
 
@@ -138,10 +137,10 @@ class BatteryMonitor(
     }
 
     /** 温度变化超过此阈值才更新通知 */
-    private suspend fun updateDisplay(celsius: Float, watts: Float, charging: Boolean?) {
+    private suspend fun updateDisplay(celsius: Float, watts: Float) {
         withContext(Dispatchers.Main) {
             floatingView.updateTemperature(celsius)
-            floatingView.updatePower(watts, charging)
+            floatingView.updatePower(watts)
         }
         // 仅当温度或功耗有显著变化时更新通知，减少 I/O
         if (kotlin.math.abs(celsius - lastNotifiedTemp) >= TEMP_THRESHOLD ||

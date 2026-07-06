@@ -132,10 +132,7 @@ class FloatingWindowView(context: Context) : LinearLayout(context) {
         tempText.setTextColor(textColor)
 
         powerText.textSize = fontSize
-        // 仅当功耗不可用时使用外观自定义颜色，否则保持 updatePower() 设置的动态颜色
-        if (powerText.text == "--W") {
-            powerText.setTextColor(textColor)
-        }
+        powerText.setTextColor(textColor)
 
         powerText.visibility = if (showPower) View.VISIBLE else View.GONE
 
@@ -154,23 +151,14 @@ class FloatingWindowView(context: Context) : LinearLayout(context) {
     /**
      * 更新功耗显示
      * @param watts 功耗值（瓦），正值=充电，负值=放电，NaN=不可用
-     * @param isCharging 充电状态：true=充电，false=放电，null=未知
      */
-    fun updatePower(watts: Float, isCharging: Boolean?) {
+    fun updatePower(watts: Float) {
         if (!watts.isFinite()) {
             powerText.text = "--W"
             return
         }
-        // 格式化为带符号的功耗值
+        // 格式化为带符号的功耗值（颜色由 applyAppearance() 统一管理，与温度一致）
         powerText.text = String.format("%+.1fW", watts)
-        // 根据充放电状态设置颜色
-        powerText.setTextColor(
-            when (isCharging) {
-                true -> android.graphics.Color.parseColor("#4CAF50")   // 充电绿色
-                false -> android.graphics.Color.parseColor("#FF9800")  // 放电橙色
-                null -> prefs.getInt(PrefsKeys.TEXT_COLOR, android.graphics.Color.WHITE) // 未知继承主题色
-            }
-        )
     }
 
     /**
