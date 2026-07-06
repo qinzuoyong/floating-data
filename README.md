@@ -111,6 +111,7 @@ APK 输出路径:
           优化：MainActivity/AboutScreen 魔法数字 34 替换为 Build.VERSION_CODES.UPSIDE_DOWN_CAKE
           优化：FloatingWindowService 移除 TYPE_PHONE 不可达分支，移除手动通知 flags 操作依赖 setOngoing(true)
           优化：FloatingWindowView/BootReceiver/HomeScreen/Theme 移除冗余 SDK 版本检查
+          同步知识图谱：v1.68更新实体补充 P1+P2+P3 修复信息，更新 UpdateChecker/FloatingWindowView/MainActivity/FloatingWindowService/BootReceiver/HomeScreen/AboutScreen/AppearanceScreen/ui-theme模块 等实体及关系
           
   v1.67
           全量代码质量审计与修复
