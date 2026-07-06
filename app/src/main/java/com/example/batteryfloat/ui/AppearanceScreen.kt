@@ -1,6 +1,7 @@
 package com.example.batteryfloat.ui
 
 import android.content.SharedPreferences
+import com.example.batteryfloat.PrefsKeys
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -33,11 +34,11 @@ private val TEXT_COLORS = listOf(
  */
 @Composable
 fun AppearanceScreen(prefs: SharedPreferences) {
-    var fontSliderValue by remember { mutableFloatStateOf(prefs.getFloat("font_size", 8f)) }
-    var cornerSliderValue by remember { mutableFloatStateOf(prefs.getFloat("corner_radius", 30f)) }
-    var bgAlphaValue by remember { mutableFloatStateOf(prefs.getFloat("bg_alpha", 0.5f)) }
-    var bgColor by remember { mutableIntStateOf(prefs.getInt("bg_color", 0xFF666666.toInt())) }
-    var textColor by remember { mutableIntStateOf(prefs.getInt("text_color", 0xFFFFFFFF.toInt())) }
+    var fontSliderValue by remember { mutableFloatStateOf(prefs.getFloat(PrefsKeys.FONT_SIZE, 8f)) }
+    var cornerSliderValue by remember { mutableFloatStateOf(prefs.getFloat(PrefsKeys.CORNER_RADIUS, 30f)) }
+    var bgAlphaValue by remember { mutableFloatStateOf(prefs.getFloat(PrefsKeys.BG_ALPHA, 0.5f)) }
+    var bgColor by remember { mutableIntStateOf(prefs.getInt(PrefsKeys.BG_COLOR, 0xFF666666.toInt())) }
+    var textColor by remember { mutableIntStateOf(prefs.getInt(PrefsKeys.TEXT_COLOR, 0xFFFFFFFF.toInt())) }
 
     val scrollState = rememberScrollState()
     Column(
@@ -61,7 +62,7 @@ fun AppearanceScreen(prefs: SharedPreferences) {
             currentValue = "${fontSliderValue.toInt()} sp",
             value = fontSliderValue,
             valueRange = 1f..30f,
-            onValueChange = { fontSliderValue = it; prefs.edit().putFloat("font_size", it).apply() },
+            onValueChange = { fontSliderValue = it; prefs.edit().putFloat(PrefsKeys.FONT_SIZE, it).apply() },
             startLabel = "1", midLabel = "15", endLabel = "30"
         )
 
@@ -71,7 +72,7 @@ fun AppearanceScreen(prefs: SharedPreferences) {
             currentValue = "${cornerSliderValue.toInt()} px",
             value = cornerSliderValue,
             valueRange = 0f..60f,
-            onValueChange = { cornerSliderValue = it; prefs.edit().putFloat("corner_radius", it).apply() },
+            onValueChange = { cornerSliderValue = it; prefs.edit().putFloat(PrefsKeys.CORNER_RADIUS, it).apply() },
             startLabel = "0", midLabel = "30", endLabel = "60"
         )
 
@@ -80,7 +81,7 @@ fun AppearanceScreen(prefs: SharedPreferences) {
             title = "背景颜色",
             colors = BG_COLORS,
             selectedColor = bgColor,
-            onColorSelected = { bgColor = it; prefs.edit().putInt("bg_color", it).apply() }
+            onColorSelected = { bgColor = it; prefs.edit().putInt(PrefsKeys.BG_COLOR, it).apply() }
         )
 
         // 文字颜色
@@ -88,7 +89,7 @@ fun AppearanceScreen(prefs: SharedPreferences) {
             title = "文字颜色",
             colors = TEXT_COLORS,
             selectedColor = textColor,
-            onColorSelected = { textColor = it; prefs.edit().putInt("text_color", it).apply() }
+            onColorSelected = { textColor = it; prefs.edit().putInt(PrefsKeys.TEXT_COLOR, it).apply() }
         )
 
         // 透明度
@@ -97,7 +98,7 @@ fun AppearanceScreen(prefs: SharedPreferences) {
             currentValue = "${(bgAlphaValue * 100).toInt()}%",
             value = bgAlphaValue,
             valueRange = 0.1f..1f,
-            onValueChange = { bgAlphaValue = it; prefs.edit().putFloat("bg_alpha", it).apply() },
+            onValueChange = { bgAlphaValue = it; prefs.edit().putFloat(PrefsKeys.BG_ALPHA, it).apply() },
             startLabel = "10%", midLabel = "50%", endLabel = "100%"
         )
 

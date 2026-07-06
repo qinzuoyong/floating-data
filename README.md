@@ -1,4 +1,4 @@
-﻿# 手机信息悬浮窗
+# 手机信息悬浮窗
 
 > 实时监测电池温度与功耗的 Android 悬浮窗工具
 > 版本: 1.68 | 最低支持: Android 14 (API 34)
@@ -99,6 +99,13 @@ APK 输出路径:
           updatePower() 移除 isCharging 参数，颜色由 applyAppearance() 统一管理
           BatteryMonitor updateDisplay/fetchBatteryData 同步简化，移除冗余 charging 变量
           功耗仍保留带符号格式（%+.1fW），通过正负值区分充放电
+          修复：UpdateChecker User-Agent 改用 BuildConfig.VERSION_NAME，避免硬编码版本号
+          修复：UpdateChecker 添加 HTTP 响应码检查，非 2xx 状态码直接返回 null
+          修复：UpdateChecker 版本比较逻辑改为按点分段比较，解决 1.6 vs 1.60 比较错误
+          修复：FloatingWindowView coerceIn 崩溃保护，maxX/maxY 使用 maxOf 确保最小值
+          修复：FloatingWindowView 自定义字段 layoutParams 重命名为 windowParams，避免遮蔽父类属性
+          修复：MainActivity isLaunchingExternal 状态修正，移到实际 startActivity 调用前
+          修复：AppearanceScreen 统一使用 PrefsKeys 常量替换硬编码的 SharedPreferences key
           版本号升级
           
   v1.67

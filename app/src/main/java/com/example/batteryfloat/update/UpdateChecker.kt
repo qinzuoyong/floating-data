@@ -1,6 +1,7 @@
-﻿package com.example.batteryfloat.update
+package com.example.batteryfloat.update
 
 import android.util.Log
+import com.example.batteryfloat.BuildConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
@@ -77,8 +78,13 @@ object UpdateChecker {
             conn.readTimeout = 5000
             conn.setRequestProperty("Accept", "application/json")
             // GitHub API 需要 User-Agent
-            conn.setRequestProperty("User-Agent", "BatteryFloating/1.60")
+            conn.setRequestProperty("User-Agent", "BatteryFloating/${BuildConfig.VERSION_NAME}")
 
+            val responseCode = conn.responseCode
+            if (responseCode !in 200..299) {
+                Log.w(TAG, "HTTP $responseCode 从 $apiUrl 获取更新信息失败")
+                return null
+            }
             val response = conn.inputStream.bufferedReader().use { it.readText() }
             val json = JSONObject(response)
             val latestTag = json.getString("tag_name").removePrefix("v")
@@ -158,8 +164,14 @@ object UpdateChecker {
      * @return >0 表示 v1 > v2, <0 表示 v1 < v2, =0 表示相等
      */
     private fun compareVersions(v1: String, v2: String): Int {
-        val d1 = v1.toDoubleOrNull() ?: 0.0
-        val d2 = v2.toDoubleOrNull() ?: 0.0
-        return d1.compareTo(d2)
+        val parts1 = v1.split(".").map { it.toIntOrNull() ?: 0 }
+        val parts2 = v2.split(".").map { it.toIntOrNull() ?: 0 }
+        val maxLen = maxOf(parts1.size, parts2.size)
+        for (i in 0 until maxLen) {
+            val p1 = parts1.getOrElse(i) { 0 }
+            val p2 = parts2.getOrElse(i) { 0 }
+            if (p1 != p2) return p1.compareTo(p2)
+        }
+        return 0
     }
 }

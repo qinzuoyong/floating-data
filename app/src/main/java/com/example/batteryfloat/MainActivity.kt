@@ -157,8 +157,6 @@ class MainActivity : ComponentActivity() {
      * 引导过的用户再次点击时直接打开权限开关页（受限设置已允许，开关可操作）。
      */
     private fun openOverlaySettingsWithGuide(showGuide: () -> Unit) {
-        isLaunchingExternal = true
-
         // Android 14+ 且尚未授予悬浮窗权限 → 检查是否需要引导
         if (Build.VERSION.SDK_INT >= 34 && !Settings.canDrawOverlays(this)) {
             val guideShown = prefs.getBoolean(PrefsKeys.RESTRICTED_SETTINGS_GUIDED, false)
@@ -175,6 +173,7 @@ class MainActivity : ComponentActivity() {
 
         // 正常打开悬浮窗权限设置页
         try {
+            isLaunchingExternal = true
             startActivity(
                 Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName"))
             )

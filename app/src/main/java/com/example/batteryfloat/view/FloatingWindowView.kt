@@ -26,7 +26,7 @@ import com.example.batteryfloat.R
  */
 class FloatingWindowView(context: Context) : LinearLayout(context) {
 
-    private var layoutParams: WindowManager.LayoutParams? = null
+    private var windowParams: WindowManager.LayoutParams? = null
     private val prefs: SharedPreferences =
         context.getSharedPreferences(PrefsKeys.PREFS_NAME, Context.MODE_PRIVATE)
 
@@ -97,7 +97,7 @@ class FloatingWindowView(context: Context) : LinearLayout(context) {
     }
 
     fun setLayoutParams(params: WindowManager.LayoutParams) {
-        this.layoutParams = params
+        this.windowParams = params
     }
 
     fun reloadAppearance() {
@@ -168,7 +168,7 @@ class FloatingWindowView(context: Context) : LinearLayout(context) {
      * @param restorePosition 是否恢复为当前方向已保存的位置（方向切换时用）
      */
     fun clampToScreenBounds(restorePosition: Boolean = false) {
-        val params = layoutParams ?: return
+        val params = windowParams ?: return
         val wm = context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
         val windowMetrics = wm.currentWindowMetrics
         val bounds = windowMetrics.bounds
@@ -204,8 +204,8 @@ class FloatingWindowView(context: Context) : LinearLayout(context) {
             val leftInset = displayCutout?.safeInsetLeft ?: 0
             minX = -leftInset.coerceAtLeast(1)
         }
-        val maxX = screenW - viewW
-        val maxY = screenH - viewH
+        val maxX = maxOf(minX, screenW - viewW)
+        val maxY = maxOf(-topInset, screenH - viewH)
         params.x = params.x.coerceIn(minX, maxX)
         params.y = params.y.coerceIn(-topInset, maxY)
         try {
@@ -216,7 +216,7 @@ class FloatingWindowView(context: Context) : LinearLayout(context) {
     }
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
-        val params = layoutParams ?: return super.onTouchEvent(event)
+        val params = windowParams ?: return super.onTouchEvent(event)
         when (event.action) {
             MotionEvent.ACTION_DOWN -> {
                 isDragging = false
@@ -302,7 +302,7 @@ class FloatingWindowView(context: Context) : LinearLayout(context) {
      *        已变为新方向，必须由调用方传入旧方向）。
      */
     fun saveCurrentPosition(isLandscape: Boolean? = null) {
-        val params = layoutParams ?: return
+        val params = windowParams ?: return
         val landscape = isLandscape ?: run {
             val wm = context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
             val bounds = wm.currentWindowMetrics.bounds
