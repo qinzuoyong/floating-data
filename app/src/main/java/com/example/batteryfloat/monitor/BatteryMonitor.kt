@@ -30,8 +30,11 @@ class BatteryMonitor(
     private val isRunning = AtomicBoolean(false)
 
     // ===== 缓存上次通知值，非显著变化时不更新通知 =====
+    // lastNotifiedPower 用 -Infinity 而非 NaN 作哨兵：
+    // NaN 会污染 abs(watts - NaN) 比较（恒为 NaN→false）并回写缓存，
+    // 导致功耗从"不可用"转为有效时通知不更新。-Infinity 与有限值比较为 true，能正确首帧触发。
     private var lastNotifiedTemp = -100f
-    private var lastNotifiedPower = Float.NaN
+    private var lastNotifiedPower = Float.NEGATIVE_INFINITY
 
     /** 缓存 IntentFilter 对象，避免每 2 秒创建新对象 */
     private val batteryIntentFilter = IntentFilter(Intent.ACTION_BATTERY_CHANGED)
@@ -143,11 +146,13 @@ class BatteryMonitor(
             floatingView.updatePower(watts)
         }
         // 仅当温度或功耗有显著变化时更新通知，减少 I/O
-        if (kotlin.math.abs(celsius - lastNotifiedTemp) >= TEMP_THRESHOLD ||
-            kotlin.math.abs(watts - lastNotifiedPower) >= POWER_THRESHOLD
-        ) {
+        // 功耗为 NaN 时不参与比较、不回写缓存，避免 NaN 污染 lastNotifiedPower
+        val tempChanged = kotlin.math.abs(celsius - lastNotifiedTemp) >= TEMP_THRESHOLD
+        val powerChanged = watts.isFinite() &&
+                kotlin.math.abs(watts - lastNotifiedPower) >= POWER_THRESHOLD
+        if (tempChanged || powerChanged) {
             lastNotifiedTemp = celsius
-            lastNotifiedPower = watts
+            if (watts.isFinite()) lastNotifiedPower = watts
             updateNotification(celsius, watts)
         }
     }
