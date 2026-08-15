@@ -452,8 +452,8 @@ class FloatingWindowService : Service() {
         )
 
         return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("电池温度监控")
-            .setContentText("悬浮窗运行中")
+            .setContentTitle(getString(R.string.notification_foreground_title))
+            .setContentText(getString(R.string.notification_foreground_text))
             .setSmallIcon(R.drawable.ic_launcher_foreground)
             .setOngoing(true)
             .setPriority(NotificationCompat.PRIORITY_MIN)  // 最低优先级
