@@ -17,3 +17,6 @@ local.properties
 
 # 签名密钥（敏感，绝不进远程）
 release.keystore
+
+# 项目规范文件（非源码，不提交）
+CLAUDE.md
