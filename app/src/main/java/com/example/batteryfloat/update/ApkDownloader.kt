@@ -114,6 +114,14 @@ object ApkDownloader {
                             _downloadState.value =
                                 DownloadState.Downloading(progress.coerceIn(0, 100))
                         }
+                    } else {
+                        // 服务器未返回 Content-Length（chunked 编码）时按已下载字节滚动进度，
+                        // 每 50KB 进 1%，封顶 99%，避免全程卡 0%；完成由 Completed 状态接管
+                        val pseudoProgress = (1 + (totalBytesRead / (50 * 1024L)).toInt()).coerceIn(1, 99)
+                        if (pseudoProgress != lastProgress) {
+                            lastProgress = pseudoProgress
+                            _downloadState.value = DownloadState.Downloading(pseudoProgress)
+                        }
                     }
                 }
 
