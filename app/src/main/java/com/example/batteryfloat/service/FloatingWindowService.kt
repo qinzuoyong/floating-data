@@ -184,13 +184,26 @@ class FloatingWindowService : Service() {
             PendingIntent.FLAG_ONE_SHOT or PendingIntent.FLAG_IMMUTABLE
         )
         val alarmManager = getSystemService(ALARM_SERVICE) as AlarmManager
+        // 与心跳一致使用 setExactAndAllowWhileIdle 突破 Doze，确保划掉后准时重启
+        // USE_EXACT_ALARM 为 normal 权限，侧载安装自动授予；权限缺失时降级为 set，避免崩溃
         try {
-            alarmManager.set(
+            alarmManager.setExactAndAllowWhileIdle(
                 AlarmManager.RTC_WAKEUP,
                 System.currentTimeMillis() + 1000,
                 pendingIntent
             )
-            Log.d(TAG, "已调度 onTaskRemoved 重启")
+            Log.d(TAG, "已调度 onTaskRemoved 精确重启")
+        } catch (e: SecurityException) {
+            Log.w(TAG, "精确重启调度失败（权限不足），降级为普通闹钟: ${e.message}")
+            try {
+                alarmManager.set(
+                    AlarmManager.RTC_WAKEUP,
+                    System.currentTimeMillis() + 1000,
+                    pendingIntent
+                )
+            } catch (e2: Exception) {
+                Log.e(TAG, "降级重启调度也失败", e2)
+            }
         } catch (e: Exception) {
             Log.w(TAG, "onTaskRemoved 重启调度失败: ${e.message}", e)
         }
