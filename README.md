@@ -1,7 +1,7 @@
 # 手机信息悬浮窗
 
 > 实时监测电池温度与功耗的 Android 悬浮窗工具
-> 版本: 1.68 | 最低支持: Android 14 (API 34)
+> 版本: 1.69 | 最低支持: Android 14 (API 34)
 
 ────────────────────────────────────────
 
@@ -93,7 +93,22 @@ APK 输出路径:
 版本历史
 ────────────────────────────────────────
 
-  v1.68  (当前版本)
+  v1.69  (当前版本)
+          修复：BatteryMonitor 功耗缓存 NaN 污染导致通知不更新
+                lastNotifiedPower 初值由 NaN 改为 -Infinity，避免 abs(watts-NaN) 恒为 false；
+                功耗为 NaN 时不参与比较、不回写缓存，修复功耗从不可用转为有效时通知不触发
+          修复：onTaskRemoved 保活闹钟升级为 setExactAndAllowWhileIdle
+                与心跳保活一致突破 Doze，确保划掉应用后准时重启服务；
+                补 SecurityException 降级为 set，权限缺失时不崩溃
+          优化：前台通知文本资源化到 strings.xml
+                buildForegroundNotification 标题/正文改用 getString(R.string.*)，
+                符合字符串集中管理规范
+          修复：下载无 Content-Length 时进度卡 0%
+                服务器未返回 Content-Length（chunked 编码）时按已下载字节滚动进度
+                （每 50KB 进 1%，封顶 99%），完成由 Completed 状态接管
+          版本号升级
+
+  v1.68
           功耗显示样式与温度显示完全统一
           移除功耗文本充放电动态颜色逻辑（充电绿/放电橙），改为与温度文本一致的用户自定义颜色
           updatePower() 移除 isCharging 参数，颜色由 applyAppearance() 统一管理
