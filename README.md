@@ -108,6 +108,15 @@ APK 输出路径:
                 （每 50KB 进 1%，封顶 99%），完成由 Completed 状态接管
           版本号升级
 
+          操作日志（2026-08-15 会话）
+          修复：BatteryMonitor 功耗缓存 NaN 污染（lastNotifiedPower 初值 NaN→-Infinity，Nan 不参与比较/不回写）
+          修复：onTaskRemoved 保活闹钟 set→setExactAndAllowWhileIdle + SecurityException 降级
+          修复：通知文本资源化到 strings.xml
+          修复：下载无 Content-Length 时滚动进度（每 50KB 进 1%，封顶 99%）
+          新增：.gitignore（构建产物/敏感文件/CLAUDE.md）
+          发布：GitHub + Gitee force push 清理含 APK 历史，v1.69 Release 发布并上传 APK 附件
+          versionCode 31→33
+
   v1.68
           功耗显示样式与温度显示完全统一
           移除功耗文本充放电动态颜色逻辑（充电绿/放电橙），改为与温度文本一致的用户自定义颜色
