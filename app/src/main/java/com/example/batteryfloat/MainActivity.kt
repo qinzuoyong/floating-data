@@ -44,13 +44,13 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             // 读取主题模式设置
-            var themeMode by remember { mutableIntStateOf(prefs.getInt(PrefsKeys.THEME_MODE, 0)) }
+            var themeMode by remember { mutableIntStateOf(prefs.getInt(PrefsKeys.THEME_MODE, 1)) }
 
             // 监听主题设置变化
             DisposableEffect(Unit) {
                 val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
                     if (key == PrefsKeys.THEME_MODE) {
-                        themeMode = prefs.getInt(PrefsKeys.THEME_MODE, 0)
+                        themeMode = prefs.getInt(PrefsKeys.THEME_MODE, 1)
                     }
                 }
                 prefs.registerOnSharedPreferenceChangeListener(listener)

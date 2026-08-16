@@ -10,8 +10,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import com.example.batteryfloat.ui.theme.DesignSystem
 
 /**
  * 通用开关设置卡片
@@ -35,8 +34,8 @@ fun SettingSwitchCard(
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+        shape = RoundedCornerShape(DesignSystem.CornerL),
+        elevation = CardDefaults.cardElevation(defaultElevation = DesignSystem.ElevationNone),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
         )
@@ -44,7 +43,7 @@ fun SettingSwitchCard(
         Row(
             Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
+                .padding(DesignSystem.CardPadding),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
@@ -52,20 +51,27 @@ fun SettingSwitchCard(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(
                         modifier = Modifier
-                            .size(34.dp)
+                            .size(DesignSystem.SpacingXl + DesignSystem.SpacingXs)
                             .background(iconBackgroundColor, CircleShape),
                         contentAlignment = Alignment.Center
                     ) {
                         icon()
                     }
-                    Spacer(Modifier.width(10.dp))
-                    Text(title, fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
+                    Spacer(Modifier.width(DesignSystem.SpacingS))
+                    Text(
+                        title,
+                        fontWeight = FontWeight.SemiBold,
+                        style = MaterialTheme.typography.titleMedium
+                    )
                 }
                 Text(
                     subtitle,
-                    fontSize = 12.sp,
+                    fontSize = DesignSystem.FontSizeCaption,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(start = 44.dp, top = 2.dp)
+                    modifier = Modifier.padding(
+                        start = DesignSystem.SpacingXl + DesignSystem.SpacingS + DesignSystem.SpacingXs,
+                        top = DesignSystem.SpacingXs
+                    )
                 )
             }
             Switch(checked = checked, onCheckedChange = onCheckedChange)

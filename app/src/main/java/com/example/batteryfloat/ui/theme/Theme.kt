@@ -11,55 +11,55 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.platform.LocalContext
 
 private val DarkColorScheme = darkColorScheme(
-    primary = SkyBlueDarkPrimary,
-    onPrimary = SkyBlueDarkOnPrimary,
-    primaryContainer = SkyBlueDarkPrimaryContainer,
-    onPrimaryContainer = SkyBlueDarkOnPrimaryContainer,
-    secondary = SkyBlueDarkSecondary,
-    onSecondary = SkyBlueDarkOnSecondary,
-    secondaryContainer = SkyBlueDarkSecondaryContainer,
-    onSecondaryContainer = SkyBlueDarkOnSecondaryContainer,
-    tertiary = SkyBlueDarkTertiary,
-    onTertiary = SkyBlueDarkOnTertiary,
-    tertiaryContainer = SkyBlueDarkTertiaryContainer,
-    onTertiaryContainer = SkyBlueDarkOnTertiaryContainer,
-    background = SkyBlueDarkBackground,
-    surface = SkyBlueDarkSurface,
-    surfaceVariant = SkyBlueDarkSurfaceVariant,
-    onBackground = SkyBlueDarkOnBackground,
-    onSurface = SkyBlueDarkOnSurface,
-    outline = SkyBlueDarkOutline
+    primary = WarmDarkPrimary,
+    onPrimary = WarmDarkOnPrimary,
+    primaryContainer = WarmDarkPrimaryContainer,
+    onPrimaryContainer = WarmDarkOnPrimaryContainer,
+    secondary = WarmDarkSecondary,
+    onSecondary = WarmDarkOnSecondary,
+    secondaryContainer = WarmDarkSecondaryContainer,
+    onSecondaryContainer = WarmDarkOnSecondaryContainer,
+    tertiary = WarmDarkTertiary,
+    onTertiary = WarmDarkOnTertiary,
+    tertiaryContainer = WarmDarkTertiaryContainer,
+    onTertiaryContainer = WarmDarkOnTertiaryContainer,
+    background = WarmDarkBackground,
+    surface = WarmDarkSurface,
+    surfaceVariant = WarmDarkSurfaceVariant,
+    onBackground = WarmDarkOnBackground,
+    onSurface = WarmDarkOnSurface,
+    outline = WarmDarkOutline
 )
 
 private val LightColorScheme = lightColorScheme(
-    primary = SkyBlueLightPrimary,
-    onPrimary = SkyBlueLightOnPrimary,
-    primaryContainer = SkyBlueLightPrimaryContainer,
-    onPrimaryContainer = SkyBlueLightOnPrimaryContainer,
-    secondary = SkyBlueLightSecondary,
-    onSecondary = SkyBlueLightOnSecondary,
-    secondaryContainer = SkyBlueLightSecondaryContainer,
-    onSecondaryContainer = SkyBlueLightOnSecondaryContainer,
-    tertiary = SkyBlueLightTertiary,
-    onTertiary = SkyBlueLightOnTertiary,
-    tertiaryContainer = SkyBlueLightTertiaryContainer,
-    onTertiaryContainer = SkyBlueLightOnTertiaryContainer,
-    background = SkyBlueLightBackground,
-    surface = SkyBlueLightSurface,
-    surfaceVariant = SkyBlueLightSurfaceVariant,
-    onBackground = SkyBlueLightOnBackground,
-    onSurface = SkyBlueLightOnSurface,
-    outline = SkyBlueLightOutline
+    primary = WarmLightPrimary,
+    onPrimary = WarmLightOnPrimary,
+    primaryContainer = WarmLightPrimaryContainer,
+    onPrimaryContainer = WarmLightOnPrimaryContainer,
+    secondary = WarmLightSecondary,
+    onSecondary = WarmLightOnSecondary,
+    secondaryContainer = WarmLightSecondaryContainer,
+    onSecondaryContainer = WarmLightOnSecondaryContainer,
+    tertiary = WarmLightTertiary,
+    onTertiary = WarmLightOnTertiary,
+    tertiaryContainer = WarmLightTertiaryContainer,
+    onTertiaryContainer = WarmLightOnTertiaryContainer,
+    background = WarmLightBackground,
+    surface = WarmLightSurface,
+    surfaceVariant = WarmLightSurfaceVariant,
+    onBackground = WarmLightOnBackground,
+    onSurface = WarmLightOnSurface,
+    outline = WarmLightOutline
 )
 
 /**
  * BatteryFloating 主题
- * 优先使用 Android 12+ 动态取色（Monet），回退到天蓝自定义配色
+ * 默认使用自定义暖色配色，关闭动态取色，确保设计样式稳定生效
  */
 @Composable
 fun BatteryFloatingTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
-    dynamicColor: Boolean = true,
+    dynamicColor: Boolean = false,
     themeMode: Int = 0,
     content: @Composable () -> Unit
 ) {

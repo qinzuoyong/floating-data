@@ -2,15 +2,13 @@ package com.example.batteryfloat.ui
 
 import android.content.SharedPreferences
 import com.example.batteryfloat.PrefsKeys
+import com.example.batteryfloat.ui.theme.DesignSystem
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 
 /** 预设背景颜色方案 */
 private val BG_COLORS = listOf(
@@ -45,16 +43,15 @@ fun AppearanceScreen(prefs: SharedPreferences) {
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(scrollState)
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+            .padding(horizontal = DesignSystem.PagePadding),
+        verticalArrangement = Arrangement.spacedBy(DesignSystem.SpacingM)
     ) {
-        Text(
-            text = "外观定制",
-            fontSize = 22.sp,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onBackground,
-            modifier = Modifier.padding(top = 8.dp, bottom = 4.dp)
+        PageTitle(
+            title = "外观定制",
+            modifier = Modifier.padding(top = DesignSystem.SpacingL)
         )
+
+        SectionTitle(title = "悬浮窗外观")
 
         // 字体大小
         SliderSettingCard(
@@ -102,6 +99,6 @@ fun AppearanceScreen(prefs: SharedPreferences) {
             startLabel = "10%", midLabel = "50%", endLabel = "100%"
         )
 
-        Spacer(Modifier.height(32.dp))
+        Spacer(Modifier.height(DesignSystem.SpacingXl))
     }
 }

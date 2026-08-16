@@ -14,7 +14,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import com.example.batteryfloat.ui.theme.DesignSystem
 
 /**
  * 颜色选择器组件
@@ -34,14 +34,22 @@ fun ColorPickerSection(
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp)
+        shape = RoundedCornerShape(DesignSystem.CornerL),
+        elevation = CardDefaults.cardElevation(defaultElevation = DesignSystem.ElevationNone),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+        )
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Text(title, fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
-            Spacer(Modifier.height(8.dp))
+        Column(modifier = Modifier.padding(DesignSystem.CardPadding)) {
+            Text(
+                title,
+                fontWeight = FontWeight.SemiBold,
+                style = MaterialTheme.typography.titleMedium
+            )
+            Spacer(Modifier.height(DesignSystem.SpacingS))
             Row(
                 Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                horizontalArrangement = Arrangement.spacedBy(DesignSystem.SpacingS)
             ) {
                 colors.forEach { (name, colorInt) ->
                     val selected = selectedColor == colorInt
@@ -51,7 +59,7 @@ fun ColorPickerSection(
                     ) {
                         Box(
                             modifier = Modifier
-                                .size(36.dp)
+                                .size(DesignSystem.SpacingXl + DesignSystem.SpacingXs)
                                 .clip(CircleShape)
                                 .background(Color(colorInt))
                                 .let { modifier ->
@@ -65,10 +73,10 @@ fun ColorPickerSection(
                                 }
                                 .clickable { onColorSelected(colorInt) }
                         )
-                        Spacer(Modifier.height(4.dp))
+                        Spacer(Modifier.height(DesignSystem.SpacingXs))
                         Text(
                             name,
-                            fontSize = 9.sp,
+                            fontSize = DesignSystem.FontSizeCaption,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }

@@ -53,6 +53,7 @@ fun AppNavigation(
     val haptic = LocalHapticFeedback.current
 
     Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
         bottomBar = {
             NavigationBar(
                 containerColor = MaterialTheme.colorScheme.surface,

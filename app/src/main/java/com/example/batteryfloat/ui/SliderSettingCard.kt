@@ -6,8 +6,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import com.example.batteryfloat.ui.theme.DesignSystem
 
 /**
  * 滑块设置卡片
@@ -35,15 +34,22 @@ fun SliderSettingCard(
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+        shape = RoundedCornerShape(DesignSystem.CornerL),
+        elevation = CardDefaults.cardElevation(defaultElevation = DesignSystem.ElevationNone),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+        )
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Text(title, fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
-            Spacer(Modifier.height(4.dp))
+        Column(modifier = Modifier.padding(DesignSystem.CardPadding)) {
+            Text(
+                title,
+                fontWeight = FontWeight.SemiBold,
+                style = MaterialTheme.typography.titleMedium
+            )
+            Spacer(Modifier.height(DesignSystem.SpacingXs))
             Text(
                 currentValue,
-                fontSize = 13.sp,
+                fontSize = DesignSystem.FontSizeBody,
                 color = MaterialTheme.colorScheme.primary,
                 fontWeight = FontWeight.Medium
             )
@@ -58,9 +64,9 @@ fun SliderSettingCard(
                     Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Text(startLabel, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text(midLabel, fontSize = 11.sp, color = MaterialTheme.colorScheme.outline)
-                    Text(endLabel, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(startLabel, fontSize = DesignSystem.FontSizeCaption, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(midLabel, fontSize = DesignSystem.FontSizeCaption, color = MaterialTheme.colorScheme.outline)
+                    Text(endLabel, fontSize = DesignSystem.FontSizeCaption, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
         }

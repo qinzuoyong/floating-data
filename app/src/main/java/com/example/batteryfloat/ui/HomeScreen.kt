@@ -117,11 +117,11 @@ fun HomeScreen(
                 Icon(
                     Icons.AutoMirrored.Filled.ShowChart, 
                     contentDescription = "功耗", 
-                    tint = Color(0xFF1A73E8),  // 蓝色图标
+                    tint = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.size(24.dp)
                 ) 
             },
-            iconBackgroundColor = Color(0xFFE3F2FD),  // 浅蓝色圆形背景
+            iconBackgroundColor = MaterialTheme.colorScheme.primaryContainer,
             title = "功耗显示",
             subtitle = "开启后悬浮窗显示整机功耗（充电正值、耗电负值）",
             checked = showPower,
@@ -138,11 +138,11 @@ fun HomeScreen(
                 Icon(
                     Icons.Filled.Lock, 
                     contentDescription = "锁定", 
-                    tint = Color(0xFF7C4DFF),  // 紫色图标
+                    tint = MaterialTheme.colorScheme.secondary,
                     modifier = Modifier.size(24.dp)
                 ) 
             },
-            iconBackgroundColor = Color(0xFFEDE7F6),  // 浅紫色圆形背景
+            iconBackgroundColor = MaterialTheme.colorScheme.secondaryContainer,
             title = "锁定悬浮窗",
             subtitle = "双击悬浮窗可锁定/解锁位置",
             checked = lockDrag,
@@ -163,11 +163,11 @@ fun HomeScreen(
                 Icon(
                     Icons.Filled.VisibilityOff, 
                     contentDescription = "隐藏", 
-                    tint = Color(0xFFFF6D00),  // 橙色图标
+                    tint = MaterialTheme.colorScheme.tertiary,
                     modifier = Modifier.size(24.dp)
                 ) 
             },
-            iconBackgroundColor = Color(0xFFFFF3E0),  // 浅橙色圆形背景
+            iconBackgroundColor = MaterialTheme.colorScheme.tertiaryContainer,
             title = "隐藏后台",
             subtitle = "按 Home/返回键自动隐匿任务卡片",
             checked = hideRecents,
@@ -276,16 +276,21 @@ private fun AnimatedToggleButton(isRunning: Boolean, onClick: () -> Unit) {
         label = "btnScale"
     )
     
-    FilledTonalButton(
+    Button(
         onClick = {
             isPressed = true
             onClick()
         },
-        colors = ButtonDefaults.filledTonalButtonColors(
+        colors = ButtonDefaults.buttonColors(
             containerColor = if (isRunning) {
-                MaterialTheme.colorScheme.errorContainer
+                MaterialTheme.colorScheme.error
             } else {
-                MaterialTheme.colorScheme.primaryContainer
+                MaterialTheme.colorScheme.primary
+            },
+            contentColor = if (isRunning) {
+                MaterialTheme.colorScheme.onError
+            } else {
+                MaterialTheme.colorScheme.onPrimary
             }
         ),
         shape = RoundedCornerShape(DesignSystem.CornerM),

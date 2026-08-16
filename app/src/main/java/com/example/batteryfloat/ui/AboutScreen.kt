@@ -21,7 +21,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -193,18 +192,18 @@ private fun PermissionGuideCard(
             modifier = Modifier.padding(DesignSystem.CardPadding)
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                // 图标带绿色圆形背景
+                // 图标带暖橙圆形背景
                 Box(
                     modifier = Modifier
                         .size(40.dp)
                         .clip(CircleShape)
-                        .background(Color(0xFFE8F5E9)),  // 浅绿色背景
+                        .background(MaterialTheme.colorScheme.primaryContainer),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
                         Icons.Filled.VerifiedUser, 
                         contentDescription = null, 
-                        tint = Color(0xFF2E7D32),  // 绿色图标
+                        tint = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.size(24.dp)
                     )
                 }
@@ -218,24 +217,20 @@ private fun PermissionGuideCard(
             Spacer(Modifier.height(DesignSystem.SpacingM))
 
             // 悬浮窗权限（主要操作）
-            OutlinedButton(
+            PrimaryActionButton(
+                text = "开启悬浮窗权限",
                 onClick = onOpenOverlaySettings,
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(DesignSystem.CornerM)
-            ) {
-                Text("开启悬浮窗权限")
-            }
+                modifier = Modifier.fillMaxWidth()
+            )
 
             Spacer(Modifier.height(DesignSystem.SpacingS))
 
             // 忽略电池优化
-            OutlinedButton(
+            PrimaryActionButton(
+                text = "忽略电池优化",
                 onClick = onOpenBatterySettings,
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(DesignSystem.CornerM)
-            ) {
-                Text("忽略电池优化")
-            }
+                modifier = Modifier.fillMaxWidth()
+            )
 
             // Android 14+ 侧载应用受限设置引导
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
@@ -287,18 +282,18 @@ private fun BootSection(bootAutoStart: Boolean, onBootToggle: (Boolean) -> Unit)
             modifier = Modifier.padding(DesignSystem.CardPadding)
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                // 图标带蓝色圆形背景
+                // 图标带暖橙圆形背景
                 Box(
                     modifier = Modifier
                         .size(40.dp)
                         .clip(CircleShape)
-                        .background(Color(0xFFE3F2FD)),  // 浅蓝色背景
+                        .background(MaterialTheme.colorScheme.primaryContainer),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
                         Icons.Filled.Security, 
                         contentDescription = null, 
-                        tint = Color(0xFF1565C0),  // 蓝色图标
+                        tint = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.size(24.dp)
                     )
                 }
@@ -365,18 +360,18 @@ private fun UpdateCheckCard(isChecking: Boolean, onCheckUpdate: () -> Unit) {
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                // 图标带橙色圆形背景
+                // 图标带暖金圆形背景
                 Box(
                     modifier = Modifier
                         .size(40.dp)
                         .clip(CircleShape)
-                        .background(Color(0xFFFFF3E0)),  // 浅橙色背景
+                        .background(MaterialTheme.colorScheme.tertiaryContainer),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
                         Icons.Filled.SystemUpdateAlt, 
                         contentDescription = null, 
-                        tint = Color(0xFFE65100),  // 橙色图标
+                        tint = MaterialTheme.colorScheme.tertiary,
                         modifier = Modifier.size(24.dp)
                     )
                 }
@@ -394,16 +389,11 @@ private fun UpdateCheckCard(isChecking: Boolean, onCheckUpdate: () -> Unit) {
                     )
                 }
             }
-            FilledTonalButton(
-                onClick = onCheckUpdate, 
-                enabled = !isChecking, 
-                shape = RoundedCornerShape(DesignSystem.CornerM)
-            ) {
-                Text(
-                    if (isChecking) "检查中…" else "检查更新", 
-                    fontWeight = FontWeight.SemiBold
-                )
-            }
+            PrimaryActionButton(
+                text = if (isChecking) "检查中…" else "检查更新",
+                onClick = onCheckUpdate,
+                enabled = !isChecking
+            )
         }
     }
 }
@@ -438,14 +428,14 @@ private fun AboutInfoCard(onOpenExternalLink: (String, String) -> Unit = { _, _ 
                 Modifier
                     .size(56.dp)
                     .clip(CircleShape)
-                    .background(Color(0xFFF3E5F5)),  // 浅紫色背景
+                    .background(MaterialTheme.colorScheme.secondaryContainer),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
                     Icons.Filled.Info, 
                     contentDescription = null, 
                     modifier = Modifier.size(28.dp), 
-                    tint = Color(0xFF6A1B9A)  // 紫色图标
+                    tint = MaterialTheme.colorScheme.secondary
                 )
             }
             

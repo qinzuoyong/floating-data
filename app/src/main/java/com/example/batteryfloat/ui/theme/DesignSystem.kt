@@ -31,7 +31,7 @@ object DesignSystem {
     val FontSizeCaption = 12.sp
     val FontSizeBody = 14.sp
     val FontSizeHeading = 18.sp
-    val FontSizeTitle = 22.sp
+    val FontSizeTitle = 24.sp
 
     // ===== 动画时长（毫秒） =====
     const val AnimationDurationFast = 150
