@@ -12,6 +12,7 @@ import androidx.compose.ui.Modifier
 
 /** 预设背景颜色方案 */
 private val BG_COLORS = listOf(
+    "浅蓝" to 0xFFB3E5FC.toInt(), "天蓝" to 0xFF4FC3F7.toInt(),
     "黑色" to 0xFF000000.toInt(), "深灰" to 0xFF333333.toInt(),
     "灰色" to 0xFF666666.toInt(), "白色" to 0xFFFFFFFF.toInt(),
     "蓝色" to 0xFF1565C0.toInt(), "绿色" to 0xFF2E7D32.toInt(),
@@ -21,9 +22,9 @@ private val BG_COLORS = listOf(
 /** 预设字体颜色方案 */
 private val TEXT_COLORS = listOf(
     "白色" to 0xFFFFFFFF.toInt(), "黑色" to 0xFF000000.toInt(),
-    "黄色" to 0xFFFFEB3B.toInt(), "青色" to 0xFF00BCD4.toInt(),
-    "橙色" to 0xFFFF9800.toInt(), "红色" to 0xFFF44336.toInt(),
-    "绿色" to 0xFF4CAF50.toInt()
+    "深蓝" to 0xFF0D47A1.toInt(), "黄色" to 0xFFFFEB3B.toInt(),
+    "青色" to 0xFF00BCD4.toInt(), "橙色" to 0xFFFF9800.toInt(),
+    "红色" to 0xFFF44336.toInt(), "绿色" to 0xFF4CAF50.toInt()
 )
 
 /**
@@ -35,8 +36,8 @@ fun AppearanceScreen(prefs: SharedPreferences) {
     var fontSliderValue by remember { mutableFloatStateOf(prefs.getFloat(PrefsKeys.FONT_SIZE, 8f)) }
     var cornerSliderValue by remember { mutableFloatStateOf(prefs.getFloat(PrefsKeys.CORNER_RADIUS, 30f)) }
     var bgAlphaValue by remember { mutableFloatStateOf(prefs.getFloat(PrefsKeys.BG_ALPHA, 0.5f)) }
-    var bgColor by remember { mutableIntStateOf(prefs.getInt(PrefsKeys.BG_COLOR, 0xFF666666.toInt())) }
-    var textColor by remember { mutableIntStateOf(prefs.getInt(PrefsKeys.TEXT_COLOR, 0xFFFFFFFF.toInt())) }
+    var bgColor by remember { mutableIntStateOf(prefs.getInt(PrefsKeys.BG_COLOR, 0xFFB3E5FC.toInt())) }
+    var textColor by remember { mutableIntStateOf(prefs.getInt(PrefsKeys.TEXT_COLOR, 0xFF0D47A1.toInt())) }
 
     val scrollState = rememberScrollState()
     Column(

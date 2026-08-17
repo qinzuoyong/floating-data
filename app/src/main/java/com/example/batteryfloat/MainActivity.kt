@@ -41,6 +41,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        migrateFloatingDefaultColors()
 
         setContent {
             // 读取主题模式设置
@@ -145,6 +146,24 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         isLaunchingExternal = false
+    }
+
+    /**
+     * 旧版悬浮窗默认配色一次性迁移
+     * 仅当背景和文字仍是旧默认值（深灰底+白字）时，升级为浅蓝底+深蓝字。
+     */
+    private fun migrateFloatingDefaultColors() {
+        val oldDefaultBg = 0xFF666666.toInt()
+        val newDefaultBg = 0xFFB3E5FC.toInt()
+        val newDefaultText = 0xFF0D47A1.toInt()
+        val bgColor = prefs.getInt(PrefsKeys.BG_COLOR, oldDefaultBg)
+        val textColor = prefs.getInt(PrefsKeys.TEXT_COLOR, android.graphics.Color.WHITE)
+        if (bgColor == oldDefaultBg && textColor == android.graphics.Color.WHITE) {
+            prefs.edit()
+                .putInt(PrefsKeys.BG_COLOR, newDefaultBg)
+                .putInt(PrefsKeys.TEXT_COLOR, newDefaultText)
+                .apply()
+        }
     }
 
     /**
