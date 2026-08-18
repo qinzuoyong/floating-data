@@ -10,8 +10,7 @@ android {
         archivesName.set("yongge")
     }
 
-    // 使用 Android SDK 自带的 debug 密钥签名，无需自己创建密钥库
-    // 正式签名（用于 Release 构建，可绕过部分系统限制）
+    // 正式签名（Release 使用 release.keystore，无需手动签名）
     signingConfigs {
         create("releaseKey") {
             storeFile = file("../release.keystore")
@@ -38,7 +37,7 @@ android {
                 if (dst.exists()) dst.delete()
                 src.copyTo(dst, overwrite = true)
                 if (dst.exists()) {
-                    logger.lifecycle("APK copied: yongge.apk (release, signed with debug key)")
+                    logger.lifecycle("APK copied: yongge.apk (release, signed with release.keystore)")
                 } else {
                     logger.warn("APK copy failed")
                 }
