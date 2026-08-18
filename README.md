@@ -63,8 +63,12 @@ https://github.com/qinzuoyong/floating-data/releases
 构建命令:
   ./gradlew.bat assembleRelease --no-configuration-cache
 
+一键发布（构建正式版 + 清理 + 打 tag + 推送 + 发布）:
+  bash publish.sh "发布说明(可选)"
+
 APK 输出路径:
-  _build/app/outputs/apk/release/yongge.apk
+  release/yongge.apk   （正式版 APK）
+  release/mapping.txt  （R8 混淆映射，线上崩溃还原用）
 
 技术栈:
   Kotlin         2.2.10
