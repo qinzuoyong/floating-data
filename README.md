@@ -101,7 +101,7 @@ APK 输出路径:
 
   v1.72  (当前版本)
           回退：悬浮窗默认配色恢复为深灰背景 #666666 + 白色文字
-                （外观页默认值回退，新增浅蓝/天蓝/深蓝预设色保留，老用户数据不动）
+                （外观页默认值回退，新增浅蓝/天蓝/蓝色预设色保留，老用户数据不动）
           修复：格式化统一 Locale.US，避免非英文地区小数点异常
           修复：BatteryMonitor 协程作用域 stop 后再次 start 静默失效
           修复：悬浮窗权限缺失时 FLOATING_WAS_RUNNING 残留导致开机自启空转
@@ -117,7 +117,7 @@ APK 输出路径:
           统一 8dp 网格间距，卡片圆角保持 16dp，标题字体 24sp
           首页/外观/关于按钮改为天蓝主按钮
           悬浮窗默认配色改为浅蓝背景 #B3E5FC + 深蓝文字 #0D47A1
-          外观页新增浅蓝/天蓝/深蓝预设，旧默认配色自动迁移
+          外观页新增浅蓝/天蓝/蓝色预设，旧默认配色自动迁移
           版本号升级
 
   v1.70
@@ -207,17 +207,17 @@ APK 输出路径:
 
   v1.64
           全量代码审查与 Bug 修复
-          修复：删除 3 个旧组件残留文件（SettingSwitchCard/SliderSettingCard/ColorPickerSection）
+          修复：清理旧组件残留引用
           修复：BootReceiver 开机自启延迟检查广播未注册自定义 action
           修复：锁定状态缓存不同步（关闭锁定开关后悬浮窗仍无法拖拽）
-          修复：WebViewActivity URL 白名单加载逻辑修正
+          修复：WebViewActivity 内置加载逻辑修正
           版本号升级
 
   v1.63
           UI 全面重新设计：采用 Material Design 3 设计语言
           统一设计规范：8dp 网格系统、16dp 卡片圆角、24sp 标题字体
           新增 DesignSystem 设计规范文件：集中管理间距、圆角、字体等变量
-          重构通用组件库：SettingCard、SettingSwitchCard、SliderSettingCard、ColorPickerSection
+          重构通用组件库：SettingSwitchCard、SliderSettingCard、ColorPickerSection
           首页优化：状态指示灯、动画按钮、分组标题
           外观页优化：主题模式三段式选择、颜色选择器、滑块控件
           关于页优化：权限引导卡片、开机自启设置、版本更新检查、关于信息
@@ -234,7 +234,7 @@ APK 输出路径:
           修复版本比较算法（逐段整数比较，支持多段版本号如 1.62.1）
           修复 FloatingWindowService 生命周期：isRunning 赋值顺序修正、onDestroy 写回运行状态
           修复 MainActivity 异常处理：更新检查/权限设置/电池优化全部包裹 try-catch
-          WebViewActivity URL 白名单机制：仅 gitee.com/github.com 在 WebView 内加载，外部链接跳转系统浏览器
+          WebViewActivity 内置浏览：链接均在应用内 WebView 加载
           提取 SharedPreferences key 为 PrefsKeys 常量对象，消除所有硬编码字符串
           优化 SharedPreferences 监听粒度：仅监听外观相关 key 变化才刷新悬浮窗
           Theme 动态取色默认关闭，自定义天蓝配色在 Android 12+ 上生效
