@@ -5,9 +5,13 @@ build/
 
 # Gradle 缓存
 .gradle/
+gradle-daemon-jvm.properties
 
 # Android Studio / IntelliJ
 .idea/
+
+# 本地工具产物
+.dsh-vision-router/
 
 # Kotlin 编译缓存
 .kotlin/
