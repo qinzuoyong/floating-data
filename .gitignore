@@ -20,3 +20,7 @@ release.keystore
 
 # 项目规范文件（非源码，不提交）
 CLAUDE.md
+
+# 发布产物与一键发布脚本（本机，不进远程）
+release/
+publish.sh
