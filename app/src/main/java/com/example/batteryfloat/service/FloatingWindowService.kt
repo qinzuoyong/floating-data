@@ -33,7 +33,7 @@ import com.example.batteryfloat.view.FloatingWindowView
  * - 通过 BatteryMonitor 实时更新温度显示
  * - 前台通知常驻，防止被系统清理
  * - START_REDELIVER_INTENT 保证被杀后自动重建并重传 Intent
- * - AlarmManager 精确心跳每 5 分钟检查存活性（突破 Doze 限制）
+ * - AlarmManager 精确心跳每 15 分钟检查存活性（突破 Doze 限制）
  * - onTaskRemoved 通过 AlarmManager 延迟重启（兼容 Android 12+）
  *
  * v1.65 优化：
@@ -68,7 +68,7 @@ class FloatingWindowService : Service() {
         private const val TAG = "FloatingWindowService"
         const val CHANNEL_ID = "battery_temp_channel_v2"
         const val NOTIFICATION_ID = 1001
-        private const val HEARTBEAT_INTERVAL_MS = 5 * 60 * 1000L  // 5分钟心跳
+        private const val HEARTBEAT_INTERVAL_MS = 15 * 60 * 1000L  // 15分钟心跳
         const val PREF_FLOATING_RUNNING = PrefsKeys.FLOATING_WAS_RUNNING
 
         /** 外观/功能相关 key 集合，这些 key 变化时刷新悬浮窗外观和缓存 */
@@ -104,6 +104,7 @@ class FloatingWindowService : Service() {
         createNotificationChannel()
         windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
         scheduleHeartbeat()
+        KeepAliveJobService.schedule(this)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -175,6 +176,12 @@ class FloatingWindowService : Service() {
      * v1.65: 增加异常捕获，兼容 Android 12+ 前台服务启动限制
      */
     override fun onTaskRemoved(rootIntent: Intent?) {
+        // 服务仍存活时（如按 Home 键触发 finishAndRemoveTask）无需重启，避免无谓的服务重建
+        if (isRunning) {
+            Log.d(TAG, "onTaskRemoved: 服务仍在运行，跳过重启")
+            super.onTaskRemoved(rootIntent)
+            return
+        }
         Log.i(TAG, "onTaskRemoved: 应用被划掉，延迟重启")
         val restartIntent = Intent(applicationContext, FloatingWindowService::class.java)
         val pendingIntent = PendingIntent.getForegroundService(
@@ -214,10 +221,10 @@ class FloatingWindowService : Service() {
 
     /**
      * 设置 AlarmManager 精确心跳
-     * 每 5 分钟触发 onStartCommand，确保 Service 持续存活
+     * 每 15 分钟触发 onStartCommand，确保 Service 持续存活
      *
      * v1.65: 从 setRepeating 升级为 setExactAndAllowWhileIdle
-     * - setRepeating 在 Doze 模式下会被聚合延迟，实际触发远超 5 分钟
+     * - setRepeating 在 Doze 模式下会被聚合延迟，实际触发远超设定间隔
      * - setExactAndAllowWhileIdle 突破 Doze 限制，确保准时触发
      * - 该方法是一次性的，需在每次 onStartCommand 中重新调度
      * - Android 12+ 需要 USE_EXACT_ALARM 权限（已在 Manifest 声明）
@@ -292,11 +299,13 @@ class FloatingWindowService : Service() {
             } catch (e: SecurityException) {
                 Log.e(TAG, "添加悬浮窗失败：缺少悬浮窗权限", e)
                 isRunning = false
+                prefs.edit().putBoolean(PREF_FLOATING_RUNNING, false).apply()
                 stopSelf()
                 return
             } catch (e: Exception) {
                 Log.e(TAG, "添加悬浮窗失败: ${e.message}", e)
                 isRunning = false
+                prefs.edit().putBoolean(PREF_FLOATING_RUNNING, false).apply()
                 stopSelf()
                 return
             }

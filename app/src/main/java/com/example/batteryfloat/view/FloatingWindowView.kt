@@ -16,6 +16,7 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import com.example.batteryfloat.PrefsKeys
 import com.example.batteryfloat.R
+import java.util.Locale
 
 /**
  * 电池温度悬浮窗视图（双行版）
@@ -44,12 +45,6 @@ class FloatingWindowView(context: Context) : LinearLayout(context) {
         private const val PREF_LOCK_ENGAGED = PrefsKeys.LOCK_DRAG_ENGAGED
         /** 拖拽触发阈值（像素），超过此值视为拖拽 */
         private const val DRAG_THRESHOLD = 10
-        /** 旧版默认背景色（深灰），用于一次性迁移到浅蓝 */
-        private val OLD_DEFAULT_BG_COLOR = 0xFF666666.toInt()
-        /** 新版默认背景色（浅蓝） */
-        private val NEW_DEFAULT_BG_COLOR = 0xFFB3E5FC.toInt()
-        /** 新版默认文字色（深蓝） */
-        private val NEW_DEFAULT_TEXT_COLOR = 0xFF0D47A1.toInt()
         /** SharedPreferences key - 横屏 X */
         private const val PREF_POS_LAND_X = PrefsKeys.POS_LAND_X
         /** SharedPreferences key - 横屏 Y */
@@ -111,13 +106,12 @@ class FloatingWindowView(context: Context) : LinearLayout(context) {
     }
 
     private fun applyAppearance() {
-        migrateOldDefaultColors()
         val fontSize = prefs.getFloat(PrefsKeys.FONT_SIZE, 8f)
         val alpha = (prefs.getFloat(PrefsKeys.BG_ALPHA, 0.5f) * 255).toInt().coerceIn(0, 255)
-        val bgColor = prefs.getInt(PrefsKeys.BG_COLOR, NEW_DEFAULT_BG_COLOR)
+        val bgColor = prefs.getInt(PrefsKeys.BG_COLOR, 0xFF666666.toInt())
         val finalBg = Color.argb(alpha, Color.red(bgColor), Color.green(bgColor), Color.blue(bgColor))
         val cornerRadius = prefs.getFloat(PrefsKeys.CORNER_RADIUS, 30f)
-        val textColor = prefs.getInt(PrefsKeys.TEXT_COLOR, NEW_DEFAULT_TEXT_COLOR)
+        val textColor = prefs.getInt(PrefsKeys.TEXT_COLOR, Color.WHITE)
         val showPower = prefs.getBoolean(PrefsKeys.SHOW_POWER, true)
         // 同步内存缓存，后续触摸事件直接读取缓存变量
         lockEngaged = prefs.getBoolean(PREF_LOCK_ENGAGED, false)
@@ -152,7 +146,7 @@ class FloatingWindowView(context: Context) : LinearLayout(context) {
 
     fun updateTemperature(celsius: Float) {
         // 锁定状态通过边框指示，温度文本保持不变，与功耗文本对齐
-        tempText.text = String.format("%.1f\u00b0C", celsius)
+        tempText.text = String.format(Locale.US, "%.1f\u00b0C", celsius)
     }
 
     /**
@@ -165,7 +159,7 @@ class FloatingWindowView(context: Context) : LinearLayout(context) {
             return
         }
         // 格式化为带符号的功耗值（颜色由 applyAppearance() 统一管理，与温度一致）
-        powerText.text = String.format("%+.1fW", watts)
+        powerText.text = String.format(Locale.US, "%+.1fW", watts)
     }
 
     /**
@@ -294,22 +288,6 @@ class FloatingWindowView(context: Context) : LinearLayout(context) {
     override fun performClick(): Boolean {
         super.performClick()
         return true
-    }
-
-    /**
-     * 旧版默认配色一次性迁移
-     * 仅当背景和文字仍是旧默认值（深灰底+白字）时，升级为浅蓝底+深蓝字；
-     * 用户已自定义过的颜色不会被覆盖。
-     */
-    private fun migrateOldDefaultColors() {
-        val bgColor = prefs.getInt(PrefsKeys.BG_COLOR, OLD_DEFAULT_BG_COLOR)
-        val textColor = prefs.getInt(PrefsKeys.TEXT_COLOR, Color.WHITE)
-        if (bgColor == OLD_DEFAULT_BG_COLOR && textColor == Color.WHITE) {
-            prefs.edit()
-                .putInt(PrefsKeys.BG_COLOR, NEW_DEFAULT_BG_COLOR)
-                .putInt(PrefsKeys.TEXT_COLOR, NEW_DEFAULT_TEXT_COLOR)
-                .apply()
-        }
     }
 
     private fun dpToPx(dp: Int): Int {

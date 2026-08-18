@@ -46,6 +46,7 @@ fun AppNavigation(
     onStopService: () -> Unit,
     onOpenOverlaySettings: () -> Unit,
     onOpenBatterySettings: () -> Unit,
+    onOpenAutoStartSettings: () -> Unit,
     onOpenExternalLink: (String, String) -> Unit = { _, _ -> },
     onInstallApk: (File) -> Unit = {}
 ) {
@@ -112,6 +113,7 @@ fun AppNavigation(
                         prefs = prefs,
                         onOpenOverlaySettings = onOpenOverlaySettings,
                         onOpenBatterySettings = onOpenBatterySettings,
+                        onOpenAutoStartSettings = onOpenAutoStartSettings,
                         onOpenExternalLink = onOpenExternalLink,
                         onInstallApk = onInstallApk
                     )

@@ -1,7 +1,9 @@
 package com.example.batteryfloat.ui
 
+import android.content.Context
 import android.content.SharedPreferences
 import android.os.Build
+import android.os.PowerManager
 import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -50,6 +52,7 @@ fun AboutScreen(
     prefs: SharedPreferences,
     onOpenOverlaySettings: () -> Unit,
     onOpenBatterySettings: () -> Unit,
+    onOpenAutoStartSettings: () -> Unit,
     onOpenExternalLink: (String, String) -> Unit = { _, _ -> },
     onInstallApk: (File) -> Unit = {}
 ) {
@@ -86,7 +89,8 @@ fun AboutScreen(
         PermissionGuideCard(
             onOpenOverlaySettings = onOpenOverlaySettings,
             onOpenBatterySettings = onOpenBatterySettings,
-            onOpenRestrictedGuide = { showRestrictedGuide = true }
+            onOpenRestrictedGuide = { showRestrictedGuide = true },
+            onOpenAutoStartSettings = onOpenAutoStartSettings
         )
 
         // ===== 开机自启区 =====
@@ -178,8 +182,12 @@ fun AboutScreen(
 private fun PermissionGuideCard(
     onOpenOverlaySettings: () -> Unit,
     onOpenBatterySettings: () -> Unit,
-    onOpenRestrictedGuide: () -> Unit
+    onOpenRestrictedGuide: () -> Unit,
+    onOpenAutoStartSettings: () -> Unit
 ) {
+    val context = LocalContext.current
+    val powerManager = context.getSystemService(Context.POWER_SERVICE) as PowerManager
+    val isIgnoringBatteryOptimizations = powerManager.isIgnoringBatteryOptimizations(context.packageName)
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(DesignSystem.CornerL),
@@ -225,10 +233,19 @@ private fun PermissionGuideCard(
 
             Spacer(Modifier.height(DesignSystem.SpacingS))
 
-            // 忽略电池优化
+            // 忽略电池优化（按钮文案反映当前白名单状态）
             PrimaryActionButton(
-                text = "忽略电池优化",
+                text = if (isIgnoringBatteryOptimizations) "已忽略电池优化" else "忽略电池优化",
                 onClick = onOpenBatterySettings,
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            Spacer(Modifier.height(DesignSystem.SpacingS))
+
+            // 国产 ROM 自启动引导（锁屏保活）
+            PrimaryActionButton(
+                text = "开启自启动（锁屏保活）",
+                onClick = onOpenAutoStartSettings,
                 modifier = Modifier.fillMaxWidth()
             )
 

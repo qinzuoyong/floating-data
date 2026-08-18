@@ -11,6 +11,7 @@ import com.example.batteryfloat.R
 import com.example.batteryfloat.service.FloatingWindowService
 import com.example.batteryfloat.view.FloatingWindowView
 import kotlinx.coroutines.*
+import java.util.Locale
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
@@ -26,7 +27,7 @@ class BatteryMonitor(
 ) {
     private val TAG = "BatteryMonitor"
     // 使用 SupervisorJob 配合 CoroutineName，便于调试和取消管理
-    private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob() + CoroutineName("BatteryMonitor"))
+    private var scope = CoroutineScope(Dispatchers.Default + SupervisorJob() + CoroutineName("BatteryMonitor"))
     private val isRunning = AtomicBoolean(false)
 
     // ===== 缓存上次通知值，非显著变化时不更新通知 =====
@@ -50,6 +51,8 @@ class BatteryMonitor(
     fun start() {
         if (isRunning.get()) return
         isRunning.set(true)
+        // stop() 会 cancel 协程作用域；重新 start 前重建，避免协程在已取消作用域中静默失效
+        scope = CoroutineScope(Dispatchers.Default + SupervisorJob() + CoroutineName("BatteryMonitor"))
         scope.launch {
             while (isActive && isRunning.get()) {
                 try {
@@ -159,9 +162,9 @@ class BatteryMonitor(
 
     private fun updateNotification(celsius: Float, watts: Float) {
         try {
-            val powerStr = if (watts.isFinite()) String.format("%.1fW", watts) else "--W"
+            val powerStr = if (watts.isFinite()) String.format(Locale.US, "%.1fW", watts) else "--W"
             val notification = NotificationCompat.Builder(context, FloatingWindowService.CHANNEL_ID)
-                .setContentTitle(context.getString(R.string.notification_title, String.format("%.1f", celsius)))
+                .setContentTitle(context.getString(R.string.notification_title, String.format(Locale.US, "%.1f", celsius)))
                 .setContentText(powerStr)
                 .setSmallIcon(R.drawable.ic_launcher_foreground)
                 .setOngoing(true)

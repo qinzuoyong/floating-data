@@ -1,5 +1,6 @@
 package com.example.batteryfloat
 
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
@@ -41,7 +42,6 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        migrateFloatingDefaultColors()
 
         setContent {
             // 读取主题模式设置
@@ -89,6 +89,7 @@ class MainActivity : ComponentActivity() {
                         openOverlaySettingsWithGuide { showRestrictedGuide = true }
                     },
                     onOpenBatterySettings = { openBatteryOptimizationSettings() },
+                    onOpenAutoStartSettings = { openAutoStartSettings() },
                     onOpenExternalLink = { url, title ->
                         isLaunchingExternal = true
                         try {
@@ -149,24 +150,6 @@ class MainActivity : ComponentActivity() {
     }
 
     /**
-     * 旧版悬浮窗默认配色一次性迁移
-     * 仅当背景和文字仍是旧默认值（深灰底+白字）时，升级为浅蓝底+深蓝字。
-     */
-    private fun migrateFloatingDefaultColors() {
-        val oldDefaultBg = 0xFF666666.toInt()
-        val newDefaultBg = 0xFFB3E5FC.toInt()
-        val newDefaultText = 0xFF0D47A1.toInt()
-        val bgColor = prefs.getInt(PrefsKeys.BG_COLOR, oldDefaultBg)
-        val textColor = prefs.getInt(PrefsKeys.TEXT_COLOR, android.graphics.Color.WHITE)
-        if (bgColor == oldDefaultBg && textColor == android.graphics.Color.WHITE) {
-            prefs.edit()
-                .putInt(PrefsKeys.BG_COLOR, newDefaultBg)
-                .putInt(PrefsKeys.TEXT_COLOR, newDefaultText)
-                .apply()
-        }
-    }
-
-    /**
      * 智能打开悬浮窗权限设置页
      *
      * Android 14+ 对侧载应用的 SYSTEM_ALERT_WINDOW 权限实行「受限设置」管控，
@@ -211,6 +194,42 @@ class MainActivity : ComponentActivity() {
         } catch (e: Exception) {
             Log.w("MainActivity", "打开电池优化设置失败", e)
             android.widget.Toast.makeText(this, "无法打开电池优化设置", android.widget.Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    /**
+     * 打开国产 ROM 自启动设置页（锁屏保活引导）
+     * 依次尝试各厂商自启动管理页面，全部失败则回退到应用详情页。
+     */
+    private fun openAutoStartSettings() {
+        isLaunchingExternal = true
+        val candidates = listOf(
+            ComponentName("com.miui.securitycenter", "com.miui.permcenter.autostart.AutoStartManagementActivity"),
+            ComponentName("com.huawei.systemmanager", "com.huawei.systemmanager.startupmgr.ui.StartupNormalAppListActivity"),
+            ComponentName("com.huawei.systemmanager", "com.huawei.systemmanager.optimize.process.ProtectActivity"),
+            ComponentName("com.coloros.safecenter", "com.coloros.safecenter.permission.startup.StartupAppListActivity"),
+            ComponentName("com.oppo.safe", "com.oppo.safe.permission.startup.StartupAppListActivity"),
+            ComponentName("com.vivo.permissionmanager", "com.vivo.permissionmanager.activity.BgStartUpManagerActivity"),
+            ComponentName("com.iqoo.secure", "com.iqoo.secure.ui.phoneoptimize.AddWhiteListActivity"),
+            ComponentName("com.samsung.android.lool", "com.samsung.android.sm.ui.battery.BatteryActivity")
+        )
+        for (component in candidates) {
+            try {
+                startActivity(Intent().setComponent(component).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                return
+            } catch (_: Exception) {
+                // 尝试下一个厂商页面
+            }
+        }
+        // 全部失败 → 回退到应用详情页
+        try {
+            startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                data = Uri.parse("package:$packageName")
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            })
+        } catch (e: Exception) {
+            Log.w("MainActivity", "打开自启动设置失败", e)
+            android.widget.Toast.makeText(this, "请手动在系统设置中允许自启动", android.widget.Toast.LENGTH_SHORT).show()
         }
     }
 
