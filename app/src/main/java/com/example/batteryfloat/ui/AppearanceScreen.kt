@@ -5,10 +5,12 @@ import com.example.batteryfloat.PrefsKeys
 import com.example.batteryfloat.ui.theme.DesignSystem
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
 
 /** 预设背景颜色方案 */
 private val BG_COLORS = listOf(
@@ -29,7 +31,7 @@ private val TEXT_COLORS = listOf(
 
 /**
  * 外观页面 - 悬浮窗视觉定制
- * 字体大小 / 圆角 / 背景色 / 文字色 / 透明度
+ * 主题模式 / 字体大小 / 圆角 / 背景色 / 文字色 / 透明度
  */
 @Composable
 fun AppearanceScreen(prefs: SharedPreferences) {
@@ -38,6 +40,7 @@ fun AppearanceScreen(prefs: SharedPreferences) {
     var bgAlphaValue by remember { mutableFloatStateOf(prefs.getFloat(PrefsKeys.BG_ALPHA, 0.5f)) }
     var bgColor by remember { mutableIntStateOf(prefs.getInt(PrefsKeys.BG_COLOR, 0xFF666666.toInt())) }
     var textColor by remember { mutableIntStateOf(prefs.getInt(PrefsKeys.TEXT_COLOR, 0xFFFFFFFF.toInt())) }
+    var themeMode by remember { mutableIntStateOf(prefs.getInt(PrefsKeys.THEME_MODE, 1)) }
 
     val scrollState = rememberScrollState()
     Column(
@@ -50,6 +53,15 @@ fun AppearanceScreen(prefs: SharedPreferences) {
         PageTitle(
             title = "外观定制",
             modifier = Modifier.padding(top = DesignSystem.SpacingL)
+        )
+
+        SectionTitle(title = "主题模式")
+        ThemeModeSection(
+            themeMode = themeMode,
+            onThemeModeChange = {
+                themeMode = it
+                prefs.edit().putInt(PrefsKeys.THEME_MODE, it).apply()
+            }
         )
 
         SectionTitle(title = "悬浮窗外观")
@@ -101,5 +113,61 @@ fun AppearanceScreen(prefs: SharedPreferences) {
         )
 
         Spacer(Modifier.height(DesignSystem.SpacingXl))
+    }
+}
+
+/**
+ * 主题模式选择卡片
+ * 支持跟随系统 / 浅色 / 深色三种模式，写入 PrefsKeys.THEME_MODE
+ */
+@Composable
+private fun ThemeModeSection(
+    themeMode: Int,
+    onThemeModeChange: (Int) -> Unit
+) {
+    val options = listOf(
+        0 to "跟随系统",
+        1 to "浅色",
+        2 to "深色"
+    )
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(DesignSystem.CornerL),
+        elevation = CardDefaults.cardElevation(defaultElevation = DesignSystem.ElevationNone),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+        )
+    ) {
+        Column(modifier = Modifier.padding(DesignSystem.CardPadding)) {
+            Text(
+                text = "主题模式",
+                fontWeight = FontWeight.SemiBold,
+                style = MaterialTheme.typography.titleMedium
+            )
+            Spacer(Modifier.height(DesignSystem.SpacingS))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(DesignSystem.SpacingS)
+            ) {
+                options.forEach { (mode, label) ->
+                    FilterChip(
+                        selected = themeMode == mode,
+                        onClick = { onThemeModeChange(mode) },
+                        label = {
+                            Text(
+                                text = label,
+                                fontSize = DesignSystem.FontSizeBody
+                            )
+                        },
+                        modifier = Modifier.weight(1f),
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = MaterialTheme.colorScheme.primary,
+                            selectedLabelColor = MaterialTheme.colorScheme.onPrimary
+                        )
+                    )
+                }
+            }
+        }
     }
 }
