@@ -1,9 +1,11 @@
 package com.example.batteryfloat
 
+import android.Manifest
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -11,9 +13,12 @@ import android.provider.Settings
 import android.util.Log
 import android.view.KeyEvent
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.*
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import com.example.batteryfloat.service.FloatingWindowService
 import com.example.batteryfloat.ui.AppNavigation
@@ -66,6 +71,31 @@ class MainActivity : ComponentActivity() {
 
                 // Android 14+ 受限设置引导对话框状态
                 var showRestrictedGuide by remember { mutableStateOf(false) }
+
+                // Android 13+ 通知运行时权限（minSdk 34 恒需请求）：
+                // 未请求时权限默认拒绝，新装用户看不到电池温度通知和前台常驻通知
+                val notificationPermissionLauncher = rememberLauncherForActivityResult(
+                    ActivityResultContracts.RequestPermission()
+                ) { granted ->
+                    if (!granted) {
+                        android.widget.Toast.makeText(
+                            this@MainActivity,
+                            "未授予通知权限，电池温度通知将不可见（可在系统设置中开启）",
+                            android.widget.Toast.LENGTH_LONG
+                        ).show()
+                    }
+                }
+                LaunchedEffect(Unit) {
+                    if (ContextCompat.checkSelfPermission(
+                            this@MainActivity, Manifest.permission.POST_NOTIFICATIONS
+                        ) != PackageManager.PERMISSION_GRANTED
+                    ) {
+                        // 权限弹窗是独立 Activity，盖上来会触发 onUserLeaveHint；
+                        // 标记为外部跳转，避免「隐藏后台」把应用自己 finishAndRemoveTask 掉
+                        isLaunchingExternal = true
+                        notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                    }
+                }
 
                 // 启动时自动检查更新
                 LaunchedEffect(Unit) {
