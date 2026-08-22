@@ -4,12 +4,11 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
-import android.content.IntentFilter
-import android.os.BatteryManager
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.example.batteryfloat.MainActivity
 import com.example.batteryfloat.R
+import com.example.batteryfloat.data.BatteryProvider
 import com.example.batteryfloat.service.FloatingWindowService
 import com.example.batteryfloat.view.FloatingWindowView
 import kotlinx.coroutines.*
@@ -17,15 +16,15 @@ import java.util.Locale
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
- * 电池监控器
- * - 协程每 2 秒轮询电池数据（温度 + 功耗）
- * - 温度：通过 Android 标准 BatteryManager API 读取
- * - 功耗：BatteryManager.getIntProperty() 读取电压×电流
+ * 电池监控器（消费侧）
+ * - 协程每 2 秒经 [BatteryProvider] 采样电池数据（温度 + 功耗）
  * - 更新悬浮窗和前台通知
+ * - 采集实现下沉到 data 包（基础档 BasicBatteryProvider，增强档后续接入）
  */
 class BatteryMonitor(
     private val context: Context,
-    private val floatingView: FloatingWindowView
+    private val floatingView: FloatingWindowView,
+    private val provider: BatteryProvider
 ) {
     private val TAG = "BatteryMonitor"
     // 使用 SupervisorJob 配合 CoroutineName，便于调试和取消管理
@@ -38,9 +37,6 @@ class BatteryMonitor(
     // 导致功耗从"不可用"转为有效时通知不更新。-Infinity 与有限值比较为 true，能正确首帧触发。
     private var lastNotifiedTemp = -100f
     private var lastNotifiedPower = Float.NEGATIVE_INFINITY
-
-    /** 缓存 IntentFilter 对象，避免每 2 秒创建新对象 */
-    private val batteryIntentFilter = IntentFilter(Intent.ACTION_BATTERY_CHANGED)
 
     companion object {
         private const val POLL_INTERVAL_MS = 2000L
@@ -73,74 +69,11 @@ class BatteryMonitor(
         scope.cancel()
     }
 
-    /** 获取温度+功耗双数据（一次注册 Intent，共享数据） */
+    /** 经数据源采样一次，温度有效时驱动展示（语义与原实现一致） */
     private suspend fun fetchBatteryData() {
-        // 使用缓存的 IntentFilter，避免每次创建新对象
-        val batteryIntent = context.registerReceiver(
-            null, batteryIntentFilter
-        )
-
-        val temperature = getTemperatureFromIntent(batteryIntent)
-        val power = getPowerFromIntent(batteryIntent)
-        if (temperature >= 0) {
-            updateDisplay(temperature, power)
-        }
-    }
-
-    /** 从已注册的 Intent 中提取电池温度 */
-    private fun getTemperatureFromIntent(intent: Intent?): Float {
-        return try {
-            if (intent != null) {
-                val raw = intent.getIntExtra(BatteryManager.EXTRA_TEMPERATURE, -1)
-                if (raw > 0) raw / 10f else -1f
-            } else -1f
-        } catch (e: Exception) {
-            Log.e(TAG, "温度读取失败", e)
-            -1f
-        }
-    }
-
-    /**
-     * 从已注册的 Intent 中提取电压，结合 BatteryManager API 计算功耗
-     * 使用电池充电状态（BATTERY_STATUS_*）决定符号，避免制造商 currentNow 符号不一致
-     * 公式: P(W) = Voltage(mV) × |Current(μA)| / 1,000,000,000
-     * 充电 → 正值，放电 → 负值
-     */
-    private fun getPowerFromIntent(intent: Intent?): Float {
-        return try {
-            if (intent == null) return Float.NaN
-            val voltage = intent.getIntExtra(BatteryManager.EXTRA_VOLTAGE, -1)
-            if (voltage <= 0) return Float.NaN
-            val batteryManager = context.getSystemService(Context.BATTERY_SERVICE) as BatteryManager
-            val currentNow = batteryManager.getIntProperty(BatteryManager.BATTERY_PROPERTY_CURRENT_NOW)
-            if (currentNow == Int.MIN_VALUE) return Float.NaN
-            // 使用电池状态决定符号，而非依赖 currentNow 符号（不同制造商约定不一致）
-            val rawPower = (voltage.toFloat() * kotlin.math.abs(currentNow.toFloat())) / 1_000_000_000f
-            val charging = isCharging(intent)
-            when (charging) {
-                true -> rawPower        // 充电 → 正值
-                false -> -rawPower      // 放电 → 负值
-                null -> rawPower        // 未知 → 正值
-            }
-        } catch (e: Exception) {
-            Log.w(TAG, "功耗读取失败", e)
-            Float.NaN
-        }
-    }
-
-    /**
-     * 判断当前是否正在充电
-     * @return true 表示充电中，null 表示无法判断
-     */
-    private fun isCharging(intent: Intent?): Boolean? {
-        if (intent == null) return null
-        val status = intent.getIntExtra(BatteryManager.EXTRA_STATUS, BatteryManager.BATTERY_STATUS_UNKNOWN)
-        return when (status) {
-            BatteryManager.BATTERY_STATUS_CHARGING,
-            BatteryManager.BATTERY_STATUS_FULL -> true
-            BatteryManager.BATTERY_STATUS_DISCHARGING,
-            BatteryManager.BATTERY_STATUS_NOT_CHARGING -> false
-            else -> null
+        val sample = provider.sample() ?: return
+        if (sample.batteryTempC >= 0) {
+            updateDisplay(sample.batteryTempC, sample.powerW)
         }
     }
 

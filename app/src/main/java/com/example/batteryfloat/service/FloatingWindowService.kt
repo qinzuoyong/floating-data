@@ -24,6 +24,7 @@ import androidx.core.app.NotificationCompat
 import com.example.batteryfloat.MainActivity
 import com.example.batteryfloat.PrefsKeys
 import com.example.batteryfloat.R
+import com.example.batteryfloat.data.BasicBatteryProvider
 import com.example.batteryfloat.monitor.BatteryMonitor
 import com.example.batteryfloat.view.FloatingWindowView
 
@@ -364,7 +365,7 @@ class FloatingWindowService : Service() {
 
     private fun startMonitoring() {
         val view = floatingView ?: return
-        batteryMonitor = BatteryMonitor(this, view).also {
+        batteryMonitor = BatteryMonitor(this, view, BasicBatteryProvider(this)).also {
             it.start()
         }
     }
