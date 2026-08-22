@@ -3,6 +3,7 @@ package com.example.batteryfloat.service
 import android.accessibilityservice.AccessibilityService
 import android.content.ComponentName
 import android.content.Context
+import android.content.Intent
 import android.content.SharedPreferences
 import android.graphics.PixelFormat
 import android.provider.Settings
@@ -42,6 +43,8 @@ class KeepAliveAccessibilityService : AccessibilityService() {
         Log.i(TAG, "无障碍保活已连接")
         addAliveOverlay()
         tryRestoreFloatingWindow()
+        // 无障碍在位 → 停用周期兜底（15 分钟心跳闹钟 + 看门狗 Job），零周期唤醒省电
+        FloatingWindowService.upgradeKeepAlive(this)
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
@@ -56,6 +59,16 @@ class KeepAliveAccessibilityService : AccessibilityService() {
         removeAliveOverlay()
         Log.i(TAG, "无障碍保活已断开")
         Toast.makeText(applicationContext, "无障碍保活已关闭", Toast.LENGTH_SHORT).show()
+        // 无障碍退位 → 周期兜底层无缝顶上：重排看门狗，并借 onStartCommand 既有路径
+        // 重排心跳 + 补挂 1px 应用层 overlay（接替刚移除的无障碍 overlay）
+        if (FloatingWindowService.isRunning) {
+            KeepAliveJobService.schedule(applicationContext)
+            try {
+                startService(Intent(applicationContext, FloatingWindowService::class.java))
+            } catch (e: Exception) {
+                Log.w(TAG, "恢复周期保活失败: ${e.message}")
+            }
+        }
         super.onDestroy()
     }
 

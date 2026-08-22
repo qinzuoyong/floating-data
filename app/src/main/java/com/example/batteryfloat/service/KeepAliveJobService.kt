@@ -28,6 +28,8 @@ class KeepAliveJobService : JobService() {
          * @param context 上下文
          */
         fun schedule(context: Context) {
+            // 无障碍保活在位时进程由系统绑定保活（崩溃秒级重绑），看门狗周期唤醒空转无意义
+            if (KeepAliveAccessibilityService.isRunning) return
             try {
                 val scheduler = context.getSystemService(Context.JOB_SCHEDULER_SERVICE) as android.app.job.JobScheduler
                 val jobInfo = android.app.job.JobInfo.Builder(

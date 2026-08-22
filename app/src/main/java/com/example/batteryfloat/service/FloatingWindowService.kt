@@ -46,7 +46,6 @@ class FloatingWindowService : Service() {
     private lateinit var windowManager: WindowManager
     private var floatingView: FloatingWindowView? = null
     private var batteryMonitor: BatteryMonitor? = null
-    private var heartbeatPendingIntent: PendingIntent? = null
     private var prefsListener: SharedPreferences.OnSharedPreferenceChangeListener? = null
     private val prefs: SharedPreferences by lazy {
         getSharedPreferences(PrefsKeys.PREFS_NAME, Context.MODE_PRIVATE)
@@ -93,6 +92,33 @@ class FloatingWindowService : Service() {
         fun stop(context: Context) {
             val intent = Intent(context, FloatingWindowService::class.java)
             context.stopService(intent)
+        }
+
+        /** 心跳 PendingIntent(requestCode 1；schedule/cancel/upgradeKeepAlive 共用同一构造) */
+        private fun heartbeatPendingIntent(context: Context): PendingIntent =
+            PendingIntent.getForegroundService(
+                context,
+                1,
+                Intent(context, FloatingWindowService::class.java),
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+
+        private fun cancelHeartbeatAlarm(context: Context) {
+            try {
+                (context.getSystemService(Context.ALARM_SERVICE) as AlarmManager)
+                    .cancel(heartbeatPendingIntent(context))
+            } catch (e: Exception) {
+                Log.w(TAG, "取消心跳闹钟失败: ${e.message}")
+            }
+        }
+
+        /**
+         * 无障碍保活在位时调用：取消已排的周期兜底（心跳闹钟 + 看门狗 Job）
+         * 进程由系统绑定保活（崩溃秒级重绑），周期唤醒只浪费电
+         */
+        fun upgradeKeepAlive(context: Context) {
+            cancelHeartbeatAlarm(context)
+            KeepAliveJobService.cancel(context)
         }
     }
 
@@ -235,16 +261,11 @@ class FloatingWindowService : Service() {
      * - Android 12+ 需要 USE_EXACT_ALARM 权限（已在 Manifest 声明）
      */
     private fun scheduleHeartbeat() {
-        val intent = Intent(applicationContext, FloatingWindowService::class.java)
-        heartbeatPendingIntent = PendingIntent.getForegroundService(
-            applicationContext,
-            1,
-            intent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
+        // 无障碍保活在位时进程由系统绑定保活（崩溃秒级重绑），跳过 15 分钟周期唤醒以省电
+        if (KeepAliveAccessibilityService.isRunning) return
         val alarmManager = getSystemService(ALARM_SERVICE) as AlarmManager
         try {
-            val pendingIntent = heartbeatPendingIntent ?: return
+            val pendingIntent = heartbeatPendingIntent(applicationContext)
             // 使用 setExactAndAllowWhileIdle 突破 Doze 限制，确保 15 分钟准时触发
             alarmManager.setExactAndAllowWhileIdle(
                 AlarmManager.ELAPSED_REALTIME_WAKEUP,
@@ -256,7 +277,7 @@ class FloatingWindowService : Service() {
             // 权限不足时降级为 setRepeating，保证至少有基础保活
             Log.e(TAG, "设置精确心跳失败（权限不足），降级为普通闹钟", e)
             try {
-                val pendingIntent = heartbeatPendingIntent ?: return
+                val pendingIntent = heartbeatPendingIntent(applicationContext)
                 alarmManager.setRepeating(
                     AlarmManager.ELAPSED_REALTIME_WAKEUP,
                     SystemClock.elapsedRealtime() + HEARTBEAT_INTERVAL_MS,
@@ -273,11 +294,7 @@ class FloatingWindowService : Service() {
 
     /** 取消心跳 */
     private fun cancelHeartbeat() {
-        heartbeatPendingIntent?.let { pi ->
-            val alarmManager = getSystemService(ALARM_SERVICE) as AlarmManager
-            alarmManager.cancel(pi)
-        }
-        heartbeatPendingIntent = null
+        cancelHeartbeatAlarm(applicationContext)
     }
 
     // ===== 悬浮窗管理 =====
