@@ -164,7 +164,8 @@ class BatteryMonitor(
 
     private fun updateNotification(celsius: Float, watts: Float) {
         try {
-            val powerStr = if (watts.isFinite()) String.format(Locale.US, "%.1fW", watts) else "--W"
+            // 符号格式与悬浮窗一致(%+.1fW):正=充电,负=放电
+            val powerStr = if (watts.isFinite()) String.format(Locale.US, "%+.1fW", watts) else "--W"
             // 与服务初始前台通知一致，保留点击回到应用的跳转
             val contentIntent = PendingIntent.getActivity(
                 context,
@@ -174,7 +175,7 @@ class BatteryMonitor(
             )
             val notification = NotificationCompat.Builder(context, FloatingWindowService.CHANNEL_ID)
                 .setContentTitle(context.getString(R.string.notification_title, String.format(Locale.US, "%.1f", celsius)))
-                .setContentText(powerStr)
+                .setContentText(context.getString(R.string.notification_power_text, powerStr))
                 .setSmallIcon(R.drawable.ic_launcher_foreground)
                 .setContentIntent(contentIntent)
                 .setOngoing(true)
