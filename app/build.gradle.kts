@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
@@ -11,18 +13,23 @@ android {
     }
 
     // 正式签名（Release 使用 release.keystore，无需手动签名）
+    // 口令等敏感项从项目根的 keystore.properties 读取（已 gitignore，绝不硬编码进仓库）
+    val keystoreProps = Properties().apply {
+        val propsFile = rootProject.file("keystore.properties")
+        if (!propsFile.exists()) {
+            throw GradleException(
+                "缺少 keystore.properties：请在项目根按 CLAUDE.md 签名说明创建，" +
+                    "内容为 storeFile/storePassword/keyAlias/keyPassword 四行"
+            )
+        }
+        propsFile.inputStream().use { load(it) }
+    }
     signingConfigs {
         create("releaseKey") {
-            storeFile = file("../release.keystore")
-            storePassword = "yongge"
-            keyAlias = "release"
-            keyPassword = "yongge"
-        }
-        create("debugKey") {
-            storeFile = file(System.getProperty("user.home") + "/.android/debug.keystore")
-            storePassword = "android"
-            keyAlias = "androiddebugkey"
-            keyPassword = "android"
+            storeFile = rootProject.file(keystoreProps.getProperty("storeFile"))
+            storePassword = keystoreProps.getProperty("storePassword")
+            keyAlias = keystoreProps.getProperty("keyAlias")
+            keyPassword = keystoreProps.getProperty("keyPassword")
         }
     }
 

@@ -19,8 +19,9 @@ gradle-daemon-jvm.properties
 # 本机环境配置（含 SDK 路径，不进远程）
 local.properties
 
-# 签名密钥（敏感，绝不进远程）
+# 签名密钥与口令（敏感，绝不进远程）
 release.keystore
+keystore.properties
 
 # 项目规范文件（非源码，不提交）
 CLAUDE.md
