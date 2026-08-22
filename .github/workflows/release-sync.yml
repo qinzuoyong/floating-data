@@ -1,0 +1,119 @@
+# Gitee → GitHub Release 自动同步
+# 三层保障:
+#   L1 事件驱动:tag 推送(含仓库关联镜像同步过来的)立即同步 Release
+#   L2 定时自愈:每小时对账,缺 tag/Release/APK 则自动补齐(镜像服务失效也能自愈)
+#   L3 手动一键:workflow_dispatch 指定 tag 重跑,所有操作幂等
+# 失败告警:GitHub 默认给仓库所有者发送邮件
+name: Release Sync (Gitee → GitHub)
+
+on:
+  push:
+    tags: ['v*']
+  schedule:
+    - cron: '17 * * * *'  # 每小时对账(UTC)
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: '要同步的 tag(如 v1.73;留空则自动取 Gitee 最新 Release)'
+        required: false
+        default: ''
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout(提供 git 上下文)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: 确定目标 tag 与模式
+        env:
+          INPUT_TAG: ${{ github.event.inputs.tag }}
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          if [ -n "$INPUT_TAG" ]; then
+            echo "TAG=$INPUT_TAG" >> "$GITHUB_ENV"
+            echo "MODE=manual" >> "$GITHUB_ENV"
+          elif [ "$REF_TYPE" = "tag" ]; then
+            echo "TAG=$REF_NAME" >> "$GITHUB_ENV"
+            echo "MODE=tag-push" >> "$GITHUB_ENV"
+          else
+            TAG=$(curl -fsSL --retry 3 "https://gitee.com/api/v5/repos/qinzuoyong/floating-data/releases/latest" | jq -r '.tag_name // empty')
+            if [ -z "$TAG" ]; then echo "Gitee 无 Release,无事可做"; exit 0; fi
+            echo "TAG=$TAG" >> "$GITHUB_ENV"
+            echo "MODE=reconcile" >> "$GITHUB_ENV"
+          fi
+          echo "目标: $TAG"
+
+      - name: 对账预检(已同步则秒退,避免每小时重复上传)
+        if: env.MODE == 'reconcile'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          GITEE_SIZE=$(curl -fsSL --retry 3 "https://gitee.com/api/v5/repos/qinzuoyong/floating-data/releases/tags/$TAG" \
+            | jq -r '[.assets[]? | select(.name=="yongge.apk")][0].size // 0')
+          GH_SIZE=$(gh api "repos/$REPO/releases/tags/$TAG" 2>/dev/null | jq -r '[.assets[]? | select(.name=="yongge.apk")][0].size // 0' || echo 0)
+          echo "Gitee APK size=$GITEE_SIZE | GitHub asset size=$GH_SIZE"
+          if [ "$GITEE_SIZE" != "0" ] && [ "$GITEE_SIZE" = "$GH_SIZE" ]; then
+            echo "RECONCILE_SKIP=true" >> "$GITHUB_ENV"
+            echo "已同步,无需操作"
+          else
+            echo "RECONCILE_SKIP=false" >> "$GITHUB_ENV"
+            echo "检测到缺失,进入补齐流程"
+          fi
+
+      - name: 补齐 GitHub 缺失的 main(仅对账模式,仅允许快进)
+        if: env.MODE == 'reconcile' && env.RECONCILE_SKIP == 'false'
+        run: |
+          git fetch https://gitee.com/qinzuoyong/floating-data.git main
+          if git push origin FETCH_HEAD:refs/heads/main 2>/dev/null; then
+            echo "main 已同步(或本就最新)"
+          else
+            echo "main 非快进或无需更新,跳过(绝不强制覆盖)"
+          fi
+
+      - name: 补齐 GitHub 缺失的 tag(直接从 Gitee 拉取)
+        if: env.RECONCILE_SKIP != 'true'
+        run: |
+          if git ls-remote --tags origin "refs/tags/$TAG" | grep -q "refs/tags/$TAG"; then
+            echo "tag $TAG 已在 GitHub"
+          else
+            echo "tag $TAG 缺失,从 Gitee 拉取..."
+            git fetch https://gitee.com/qinzuoyong/floating-data.git "+refs/tags/$TAG:refs/tags/$TAG"
+            git push origin "refs/tags/$TAG"
+          fi
+
+      - name: 从 Gitee 下载 APK(带重试,应对 Release 晚就绪/瞬时故障)
+        if: env.RECONCILE_SKIP != 'true'
+        run: |
+          URL="https://gitee.com/qinzuoyong/floating-data/releases/download/$TAG/yongge.apk"
+          for i in $(seq 1 10); do
+            if curl -fL --connect-timeout 20 --retry 3 -o yongge.apk "$URL"; then
+              echo "APK 下载成功"; break
+            fi
+            echo "未就绪或瞬时失败,20 秒后重试($i/10)"; sleep 20
+          done
+          test -s yongge.apk || { echo "APK 下载最终失败,退出(不创建空 Release)"; exit 1; }
+          ls -l yongge.apk
+
+      - name: 创建/更新 GitHub Release 并上传 APK(幂等)
+        if: env.RECONCILE_SKIP != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          curl -fsSL --retry 3 "https://gitee.com/api/v5/repos/qinzuoyong/floating-data/releases/tags/$TAG" \
+            | jq -r '.body // "详见 README 版本历史"' > notes.md
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release 已存在,同步说明并覆盖附件"
+            gh release edit "$TAG" --notes-file notes.md
+          else
+            gh release create "$TAG" --title "$TAG" --notes-file notes.md --target main
+          fi
+          gh release upload "$TAG" yongge.apk --clobber
+          echo "同步完成: $TAG"
