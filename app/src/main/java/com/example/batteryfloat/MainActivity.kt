@@ -118,6 +118,7 @@ class MainActivity : ComponentActivity() {
                     onOpenOverlaySettings = {
                         openOverlaySettingsWithGuide { showRestrictedGuide = true }
                     },
+                    onOpenAccessibilitySettings = { openAccessibilitySettings() },
                     onOpenBatterySettings = { openBatteryOptimizationSettings() },
                     onOpenAutoStartSettings = { openAutoStartSettings() },
                     onOpenExternalLink = { url, title ->
@@ -260,6 +261,20 @@ class MainActivity : ComponentActivity() {
         } catch (e: Exception) {
             Log.w("MainActivity", "打开自启动设置失败", e)
             android.widget.Toast.makeText(this, "请手动在系统设置中允许自启动", android.widget.Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    /**
+     * 打开系统无障碍设置页（无障碍保活授权引导）
+     * 各 ROM 入口路径不一，统一跳通用入口，由用户找到本应用开启
+     */
+    private fun openAccessibilitySettings() {
+        isLaunchingExternal = true
+        try {
+            startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+        } catch (e: Exception) {
+            Log.w("MainActivity", "打开无障碍设置失败", e)
+            android.widget.Toast.makeText(this, "无法打开无障碍设置", android.widget.Toast.LENGTH_SHORT).show()
         }
     }
 

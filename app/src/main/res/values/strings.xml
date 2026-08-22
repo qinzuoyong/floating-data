@@ -6,4 +6,5 @@
     <string name="notification_foreground_title">电池温度监控</string>
     <string name="notification_foreground_text">悬浮窗运行中</string>
     <string name="temperature_loading">--°C</string>
+    <string name="keep_alive_a11y_desc">开启后可大幅提升后台存活率，保证悬浮窗常驻与开机自动恢复。本服务仅用于保活，不读取屏幕内容、不操作界面。</string>
 </resources>

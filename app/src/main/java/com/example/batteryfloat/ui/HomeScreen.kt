@@ -18,6 +18,7 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.PowerOff
 import androidx.compose.material.icons.automirrored.filled.ShowChart
 import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -36,6 +37,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.example.batteryfloat.PrefsKeys
 import com.example.batteryfloat.service.FloatingWindowService
+import com.example.batteryfloat.service.KeepAliveAccessibilityService
 import com.example.batteryfloat.ui.theme.DesignSystem
 
 /**
@@ -51,7 +53,8 @@ fun HomeScreen(
     prefs: SharedPreferences,
     onStartService: () -> Unit,
     onStopService: () -> Unit,
-    onOpenOverlaySettings: () -> Unit
+    onOpenOverlaySettings: () -> Unit,
+    onOpenAccessibilitySettings: () -> Unit
 ) {
     val context = LocalContext.current
     val haptic = LocalHapticFeedback.current
@@ -60,6 +63,10 @@ fun HomeScreen(
     var lockDrag by remember { mutableStateOf(prefs.getBoolean(PrefsKeys.LOCK_DRAG_ENABLED, false)) }
     var showPower by remember { mutableStateOf(prefs.getBoolean(PrefsKeys.SHOW_POWER, true)) }
     var hideRecents by remember { mutableStateOf(prefs.getBoolean(PrefsKeys.HIDE_RECENTS, true)) }
+    // 无障碍保活开关状态以系统 Settings.Secure 为准（应用无法程序化开启）
+    var a11yKeepAlive by remember {
+        mutableStateOf(KeepAliveAccessibilityService.isEnabledInSettings(context))
+    }
 
     // 页面恢复时刷新服务运行状态
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -67,6 +74,7 @@ fun HomeScreen(
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
                 isServiceRunning = FloatingWindowService.isRunning
+                a11yKeepAlive = KeepAliveAccessibilityService.isEnabledInSettings(context)
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -175,6 +183,45 @@ fun HomeScreen(
                 haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                 hideRecents = it
                 prefs.edit().putBoolean(PrefsKeys.HIDE_RECENTS, it).apply()
+            }
+        )
+
+        // 无障碍保活（GKD 同款机制）
+        SettingSwitchCard(
+            icon = {
+                Icon(
+                    Icons.Filled.Shield,
+                    contentDescription = "保活",
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(24.dp)
+                )
+            },
+            iconBackgroundColor = MaterialTheme.colorScheme.primaryContainer,
+            title = "无障碍保活",
+            subtitle = if (a11yKeepAlive) "运行中 · 仅保活，不读取屏幕内容"
+            else "推荐：重启后悬浮窗自动恢复，后台存活率大幅提升",
+            checked = a11yKeepAlive,
+            onCheckedChange = { enable ->
+                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                if (enable) {
+                    // 应用无法程序化开启无障碍，跳系统设置由用户授权；
+                    // Android 13+ 侧载受限时可提示用 adb install 重装解除
+                    Toast.makeText(
+                        context,
+                        "请在设置中找到「神奇悬浮窗」开启无障碍服务；若提示受限，请用 adb install 重装本应用",
+                        Toast.LENGTH_LONG
+                    ).show()
+                    onOpenAccessibilitySettings()
+                } else {
+                    val svc = KeepAliveAccessibilityService.instance
+                    if (svc != null) {
+                        svc.disableSelf()
+                        a11yKeepAlive = false
+                    } else {
+                        // 实例缺失（进程被杀后未重连等），回退到系统设置手动关闭
+                        onOpenAccessibilitySettings()
+                    }
+                }
             }
         )
 

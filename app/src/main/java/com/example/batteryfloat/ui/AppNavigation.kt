@@ -45,6 +45,7 @@ fun AppNavigation(
     onStartService: () -> Unit,
     onStopService: () -> Unit,
     onOpenOverlaySettings: () -> Unit,
+    onOpenAccessibilitySettings: () -> Unit,
     onOpenBatterySettings: () -> Unit,
     onOpenAutoStartSettings: () -> Unit,
     onOpenExternalLink: (String, String) -> Unit = { _, _ -> },
@@ -106,7 +107,8 @@ fun AppNavigation(
                         prefs = prefs,
                         onStartService = onStartService,
                         onStopService = onStopService,
-                        onOpenOverlaySettings = onOpenOverlaySettings
+                        onOpenOverlaySettings = onOpenOverlaySettings,
+                        onOpenAccessibilitySettings = onOpenAccessibilitySettings
                     )
                     1 -> AppearanceScreen(prefs = prefs)
                     2 -> AboutScreen(

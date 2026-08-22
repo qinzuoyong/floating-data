@@ -372,6 +372,8 @@ class FloatingWindowService : Service() {
      */
     private fun addAliveOverlay() {
         if (aliveView != null) return
+        // 无障碍保活运行时，更高层级的 TYPE_ACCESSIBILITY_OVERLAY 已承担保活，无需重复低层级窗口
+        if (KeepAliveAccessibilityService.isRunning) return
         val wm = getSystemService(WINDOW_SERVICE) as WindowManager
         val view = View(this)
         val lp = buildOverlayLayoutParams()
@@ -390,6 +392,8 @@ class FloatingWindowService : Service() {
     /** 保活覆盖层重试添加（延迟 3 秒后执行一次） */
     private fun tryAddAliveOverlayRetry() {
         if (aliveView != null) return
+        // 同 addAliveOverlay：无障碍 overlay 在位时跳过
+        if (KeepAliveAccessibilityService.isRunning) return
         val wm = getSystemService(WINDOW_SERVICE) as WindowManager
         val view = View(this)
         val lp = buildOverlayLayoutParams()
