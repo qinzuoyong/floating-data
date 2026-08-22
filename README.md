@@ -59,7 +59,7 @@ https://github.com/qinzuoyong/floating-data/releases
 环境要求:
   - Android Studio
   - JDK 17+
-  - Android SDK 35+
+  - Android SDK 36+
 
 构建命令:
   ./gradlew.bat assembleRelease --no-configuration-cache
@@ -74,12 +74,12 @@ APK 输出路径:
 技术栈:
   Kotlin         2.2.10
   AGP            9.2.1
-  Compile SDK    35
+  Compile SDK    36
   Min SDK        34 (Android 14)
   Target SDK     34
   Compose BOM    2026.02.01
   Material3      Yes
-  协程           1.7.3
+  协程           1.11.0
 
 ────────────────────────────────────────
 

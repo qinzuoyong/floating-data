@@ -53,7 +53,7 @@ android {
             }
         }
     }
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.yongge.batteryfloat"
@@ -111,5 +111,5 @@ dependencies {
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation("androidx.lifecycle:lifecycle-runtime-compose")
 
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
+    implementation(libs.kotlinx.coroutines.android)
 }
