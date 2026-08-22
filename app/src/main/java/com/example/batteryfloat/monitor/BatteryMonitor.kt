@@ -1,12 +1,14 @@
 package com.example.batteryfloat.monitor
 
 import android.app.NotificationManager
+import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.os.BatteryManager
 import android.util.Log
 import androidx.core.app.NotificationCompat
+import com.example.batteryfloat.MainActivity
 import com.example.batteryfloat.R
 import com.example.batteryfloat.service.FloatingWindowService
 import com.example.batteryfloat.view.FloatingWindowView
@@ -42,10 +44,10 @@ class BatteryMonitor(
 
     companion object {
         private const val POLL_INTERVAL_MS = 2000L
-        /** 温度变化超过此阈值才更新通知 */
-        private const val TEMP_THRESHOLD = 0.1f
+        /** 温度变化超过此阈值才更新通知（悬浮窗文本仍每 2 秒刷新，不受此阈值影响） */
+        private const val TEMP_THRESHOLD = 0.5f
         /** 功耗变化超过此阈值才更新通知 */
-        private const val POWER_THRESHOLD = 0.1f
+        private const val POWER_THRESHOLD = 0.5f
     }
 
     fun start() {
@@ -163,10 +165,18 @@ class BatteryMonitor(
     private fun updateNotification(celsius: Float, watts: Float) {
         try {
             val powerStr = if (watts.isFinite()) String.format(Locale.US, "%.1fW", watts) else "--W"
+            // 与服务初始前台通知一致，保留点击回到应用的跳转
+            val contentIntent = PendingIntent.getActivity(
+                context,
+                0,
+                Intent(context, MainActivity::class.java),
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
             val notification = NotificationCompat.Builder(context, FloatingWindowService.CHANNEL_ID)
                 .setContentTitle(context.getString(R.string.notification_title, String.format(Locale.US, "%.1f", celsius)))
                 .setContentText(powerStr)
                 .setSmallIcon(R.drawable.ic_launcher_foreground)
+                .setContentIntent(contentIntent)
                 .setOngoing(true)
                 .setPriority(NotificationCompat.PRIORITY_LOW)
                 .build()

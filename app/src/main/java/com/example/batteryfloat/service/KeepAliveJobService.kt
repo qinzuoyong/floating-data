@@ -43,6 +43,19 @@ class KeepAliveJobService : JobService() {
                 Log.w(TAG, "调度看门狗任务失败: ${e.message}")
             }
         }
+
+        /**
+         * 取消已调度的看门狗任务（用户主动关闭悬浮窗时调用，避免周期任务空转）
+         * @param context 上下文
+         */
+        fun cancel(context: Context) {
+            try {
+                val scheduler = context.getSystemService(Context.JOB_SCHEDULER_SERVICE) as android.app.job.JobScheduler
+                scheduler.cancel(JOB_ID)
+            } catch (e: Exception) {
+                Log.w(TAG, "取消看门狗任务失败: ${e.message}")
+            }
+        }
     }
 
     override fun onStartJob(params: JobParameters?): Boolean {

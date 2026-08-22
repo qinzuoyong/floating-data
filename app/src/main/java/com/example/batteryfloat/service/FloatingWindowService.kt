@@ -160,6 +160,11 @@ class FloatingWindowService : Service() {
         // 因为系统杀进程也会触发 onDestroy，但开机自启时需要恢复
         // 只在 HomeScreen 中用户手动关闭时才设置 false
         cancelHeartbeat()
+        // 用户主动关闭悬浮窗（HomeScreen 已把 FLOATING_WAS_RUNNING 置 false）时取消看门狗周期任务，
+        // 避免任务每 15 分钟空跑唤醒；系统杀进程时标志仍为 true，看门狗保活通道不受影响
+        if (!prefs.getBoolean(PREF_FLOATING_RUNNING, false)) {
+            KeepAliveJobService.cancel(this)
+        }
         stopMonitoring()
         removeFloatingWindow()
         removeAliveOverlay()
@@ -240,7 +245,7 @@ class FloatingWindowService : Service() {
         val alarmManager = getSystemService(ALARM_SERVICE) as AlarmManager
         try {
             val pendingIntent = heartbeatPendingIntent ?: return
-            // 使用 setExactAndAllowWhileIdle 突破 Doze 限制，确保 5 分钟准时触发
+            // 使用 setExactAndAllowWhileIdle 突破 Doze 限制，确保 15 分钟准时触发
             alarmManager.setExactAndAllowWhileIdle(
                 AlarmManager.ELAPSED_REALTIME_WAKEUP,
                 SystemClock.elapsedRealtime() + HEARTBEAT_INTERVAL_MS,
