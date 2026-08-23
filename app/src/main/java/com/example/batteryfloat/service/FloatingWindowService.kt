@@ -24,7 +24,7 @@ import androidx.core.app.NotificationCompat
 import com.example.batteryfloat.MainActivity
 import com.example.batteryfloat.PrefsKeys
 import com.example.batteryfloat.R
-import com.example.batteryfloat.data.BasicBatteryProvider
+import com.example.batteryfloat.data.PrivBatteryProvider
 import com.example.batteryfloat.monitor.BatteryMonitor
 import com.example.batteryfloat.view.FloatingWindowView
 
@@ -365,7 +365,8 @@ class FloatingWindowService : Service() {
 
     private fun startMonitoring() {
         val view = floatingView ?: return
-        batteryMonitor = BatteryMonitor(this, view, BasicBatteryProvider(this)).also {
+        // PrivBatteryProvider 内部持有基础档:通道未连接时整体委托,开关切换无需重启监控
+        batteryMonitor = BatteryMonitor(this, view, PrivBatteryProvider(this)).also {
             it.start()
         }
     }

@@ -234,7 +234,7 @@ fun HomeScreen(
             }
         )
 
-        // 高精度数据源(ADB 无线调试,批次 2:通道;批次 3 接数据)
+        // 高精度数据源(ADB 无线调试,批次 2 通道 + 批次 3 数据接入)
         SettingSwitchCard(
             icon = {
                 Icon(
@@ -248,9 +248,9 @@ fun HomeScreen(
             title = "高精度数据源 (ADB)",
             subtitle = when {
                 !adbEnabled -> "无线调试 shell 特权:热区/功率直读,默认关闭"
-                adbState == AdbState.CONNECTED -> "已连接 · 特权就绪(数据接入随下版本)"
+                adbState == AdbState.CONNECTED -> "已连接 · 高精度数据生效(功率直读/热区)"
                 adbState == AdbState.NOT_PAIRED -> "未配对——重新打开开关,按通知栏引导配对"
-                else -> "连接中 / 自动重连中…"
+                else -> "重连中,暂用基础数据源…"
             },
             checked = adbEnabled,
             onCheckedChange = { enable ->
