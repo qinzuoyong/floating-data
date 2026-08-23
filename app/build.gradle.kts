@@ -54,6 +54,7 @@ android {
         }
     }
     compileSdk = 36
+    ndkVersion = "29.0.14206865"
 
     defaultConfig {
         applicationId = "com.yongge.batteryfloat"
@@ -63,6 +64,12 @@ android {
         versionName = "1.74"
 
         // 只保留中文资源，剪掉多语言（AGP 9.x 移除 resConfigs，改用 androidResources.localeFilters 但需 initscript）
+
+        externalNativeBuild {
+            cmake {
+                arguments += "-DANDROID_STL=none"
+            }
+        }
     }
 
     buildTypes {
@@ -91,6 +98,14 @@ android {
     buildFeatures {
         compose = true
         buildConfig = true
+        prefab = true
+    }
+
+    externalNativeBuild {
+        cmake {
+            path = file("src/main/cpp/CMakeLists.txt")
+            version = "3.30.4"
+        }
     }
 
 
@@ -112,4 +127,10 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-runtime-compose")
 
     implementation(libs.kotlinx.coroutines.android)
+
+    // ADB 无线调试特权通道(批次 2)
+    implementation(libs.bouncycastle.bcpkix)          // AdbKey 自签证书
+    implementation(libs.lsposed.hiddenapibypass)      // 隐藏 API 豁免(Conscrypt TLS exporter)
+    implementation(libs.ndk.boringssl)                // prefab: 配对库加密后端
+    implementation(libs.ndk.libcxx)                   // prefab: native STL
 }

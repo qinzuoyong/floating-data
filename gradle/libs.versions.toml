@@ -6,6 +6,10 @@ activityCompose = "1.13.0"
 kotlin = "2.2.10"
 composeBom = "2026.02.01"
 coroutines = "1.11.0"
+bouncycastle = "1.80"
+hiddenapibypass = "6.1"
+ndkBoringssl = "20250114"
+ndkLibcxx = "27.0.12077973"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -15,6 +19,10 @@ androidx-compose-bom = { group = "androidx.compose", name = "compose-bom", versi
 androidx-compose-ui = { group = "androidx.compose.ui", name = "ui" }
 androidx-compose-material3 = { group = "androidx.compose.material3", name = "material3" }
 kotlinx-coroutines-android = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-android", version.ref = "coroutines" }
+bouncycastle-bcpkix = { group = "org.bouncycastle", name = "bcpkix-jdk18on", version.ref = "bouncycastle" }
+lsposed-hiddenapibypass = { group = "org.lsposed.hiddenapibypass", name = "hiddenapibypass", version.ref = "hiddenapibypass" }
+ndk-boringssl = { group = "io.github.vvb2060.ndk", name = "boringssl", version.ref = "ndkBoringssl" }
+ndk-libcxx = { group = "org.lsposed.libcxx", name = "libcxx", version.ref = "ndkLibcxx" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

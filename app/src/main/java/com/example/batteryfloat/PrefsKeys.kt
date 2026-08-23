@@ -45,6 +45,8 @@ object PrefsKeys {
     const val FLOATING_WAS_RUNNING = "floating_was_running"
     /** 隐藏后台任务卡片 */
     const val HIDE_RECENTS = "hide_recents"
+    /** ADB 无线调试高精度数据源开关(默认关,密钥另存 adb_prefs) */
+    const val ADB_PRIV_ENABLED = "adb_priv_enabled"
 
     // ===== UI 状态 =====
     /** 主题模式（0=跟随系统, 1=浅色, 2=深色） */

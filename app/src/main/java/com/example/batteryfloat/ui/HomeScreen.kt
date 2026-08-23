@@ -19,6 +19,7 @@ import androidx.compose.material.icons.filled.PowerOff
 import androidx.compose.material.icons.automirrored.filled.ShowChart
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.filled.Shield
+import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -36,6 +37,8 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.example.batteryfloat.PrefsKeys
+import com.example.batteryfloat.adb.AdbConnectionManager
+import com.example.batteryfloat.adb.AdbState
 import com.example.batteryfloat.service.FloatingWindowService
 import com.example.batteryfloat.service.KeepAliveAccessibilityService
 import com.example.batteryfloat.ui.theme.DesignSystem
@@ -67,6 +70,10 @@ fun HomeScreen(
     var a11yKeepAlive by remember {
         mutableStateOf(KeepAliveAccessibilityService.isEnabledInSettings(context))
     }
+    // ADB 高精度数据源(批次 2:通道开关与状态;批次 3 接入数据)
+    var adbEnabled by remember { mutableStateOf(prefs.getBoolean(PrefsKeys.ADB_PRIV_ENABLED, false)) }
+    var showAdbPairing by remember { mutableStateOf(false) }
+    val adbState by AdbConnectionManager.state.collectAsState()
 
     // 页面恢复时刷新服务运行状态
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -75,6 +82,7 @@ fun HomeScreen(
             if (event == Lifecycle.Event.ON_RESUME) {
                 isServiceRunning = FloatingWindowService.isRunning
                 a11yKeepAlive = KeepAliveAccessibilityService.isEnabledInSettings(context)
+                adbEnabled = prefs.getBoolean(PrefsKeys.ADB_PRIV_ENABLED, false)
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -225,8 +233,53 @@ fun HomeScreen(
             }
         )
 
+        // 高精度数据源(ADB 无线调试,批次 2:通道;批次 3 接数据)
+        SettingSwitchCard(
+            icon = {
+                Icon(
+                    Icons.Filled.Speed,
+                    contentDescription = "高精度",
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(24.dp)
+                )
+            },
+            iconBackgroundColor = MaterialTheme.colorScheme.primaryContainer,
+            title = "高精度数据源 (ADB)",
+            subtitle = when {
+                !adbEnabled -> "无线调试 shell 特权:热区/功率直读,默认关闭"
+                adbState == AdbState.CONNECTED -> "已连接 · 特权就绪(数据接入随下版本)"
+                adbState == AdbState.NOT_PAIRED -> "已启用但未配对,重新打开开关完成配对"
+                else -> "连接中 / 自动重连中…"
+            },
+            checked = adbEnabled,
+            onCheckedChange = { enable ->
+                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                if (enable) {
+                    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
+                        Toast.makeText(context, "本功能需要 Android 11 及以上", Toast.LENGTH_SHORT).show()
+                    } else {
+                        showAdbPairing = true
+                    }
+                } else {
+                    adbEnabled = false
+                    AdbConnectionManager.setEnabled(context, false)
+                }
+            }
+        )
+
         // 底部间距
         Spacer(Modifier.height(DesignSystem.SpacingXl))
+    }
+
+    if (showAdbPairing) {
+        AdbPairingDialog(
+            onDismiss = { showAdbPairing = false },
+            onSuccess = {
+                showAdbPairing = false
+                adbEnabled = true
+                AdbConnectionManager.setEnabled(context, true)
+            }
+        )
     }
 }
 

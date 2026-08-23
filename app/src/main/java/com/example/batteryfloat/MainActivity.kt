@@ -20,6 +20,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.*
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
+import com.example.batteryfloat.adb.AdbConnectionManager
 import com.example.batteryfloat.service.FloatingWindowService
 import com.example.batteryfloat.ui.AppNavigation
 import com.example.batteryfloat.ui.RestrictedSettingsDialog
@@ -47,6 +48,8 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        // ADB 特权通道幂等初始化(已启用则启动自动重连)
+        AdbConnectionManager.setup(this)
 
         setContent {
             // 读取主题模式设置

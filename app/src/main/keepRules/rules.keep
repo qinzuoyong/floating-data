@@ -7,3 +7,6 @@
 
 # 电池监控器保持回调接口
 -keep class com.example.batteryfloat.monitor.BatteryMonitor$* { *; }
+# ADB 无线调试(批次 2):JNI RegisterNatives 按类名绑定,不可混淆/改名
+-keep class com.example.batteryfloat.adb.AdbPairingClient { *; }
+-keep class com.example.batteryfloat.adb.PairingContext { *; }
