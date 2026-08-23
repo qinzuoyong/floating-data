@@ -108,36 +108,28 @@ object AdbConnectionManager {
     }
 
     /**
-     * 配对(由配对对话框驱动):NSD 发现 pairing 服务 → SPAKE2 配对 → 成功后自动连接
-     * @return true=配对成功(连接已在后台进行)
+     * 启动通知栏配对流程(配对对话框调用)。
+     * 编排见 AdbPairingService:先持续 NSD 发现端口,用户在通知栏直回配对码,码到即配。
      */
-    suspend fun pair(pairCode: String): Boolean {
-        val ctx = appContext ?: return false
-        val k = key ?: return false
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return false
-        _state.value = AdbState.PAIRING
-        return try {
-            val port = discoverPort(ctx, AdbMdns.TLS_PAIRING)
-            if (port == null) {
-                Log.w(TAG, "未发现配对服务(无线调试未开启?)")
-                _state.value = AdbState.NOT_PAIRED
-                return false
-            }
-            Log.i(TAG, "配对服务端口: $port")
-            val ok = AdbPairingClient("127.0.0.1", port, pairCode, k).use { it.start() }
-            Log.i(TAG, "配对结果: $ok")
-            _state.value = if (ok) AdbState.DISCONNECTED else AdbState.NOT_PAIRED
-            if (ok) {
-                startReconnectLoop()
-                scope.launch { connectOnceInternal() }
-            }
-            ok
-        } catch (e: Throwable) {
-            Log.w(TAG, "配对异常: ${e.message}", e)
-            _state.value = AdbState.NOT_PAIRED
-            false
+    fun startPairingService(context: Context) {
+        setup(context)
+        AdbPairingService.start(context)
+    }
+
+    /** 配对成功回调(AdbPairingService 调用):开关落盘 + 启动重连 + 立即连接 */
+    fun onPaired(context: Context) {
+        setup(context)
+        enabled = true
+        appContext!!.getSharedPreferences(PrefsKeys.PREFS_NAME, Context.MODE_PRIVATE)
+            .edit().putBoolean(PrefsKeys.ADB_PRIV_ENABLED, true).apply()
+        if (key != null) {
+            startReconnectLoop()
+            scope.launch { connectOnceInternal() }
         }
     }
+
+    /** 配对服务取用进程内缓存的 AdbKey(与连接使用同一密钥) */
+    fun peekKey(): AdbKey? = key
 
     /**
      * 执行特权 shell 命令并收集输出

@@ -122,6 +122,7 @@ class MainActivity : ComponentActivity() {
                         openOverlaySettingsWithGuide { showRestrictedGuide = true }
                     },
                     onOpenAccessibilitySettings = { openAccessibilitySettings() },
+                    onOpenDevSettings = { openDevelopmentSettings() },
                     onOpenBatterySettings = { openBatteryOptimizationSettings() },
                     onOpenAutoStartSettings = { openAutoStartSettings() },
                     onOpenExternalLink = { url, title ->
@@ -278,6 +279,22 @@ class MainActivity : ComponentActivity() {
         } catch (e: Exception) {
             Log.w("MainActivity", "打开无障碍设置失败", e)
             android.widget.Toast.makeText(this, "无法打开无障碍设置", android.widget.Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    /**
+     * 跳开发者选项并高亮「无线调试」(ADB 配对引导;fragment_args_key 为 Settings 搜索高亮技巧)
+     */
+    private fun openDevelopmentSettings() {
+        isLaunchingExternal = true
+        try {
+            startActivity(Intent(Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                putExtra(":settings:fragment_args_key", "toggle_adb_wireless")
+            })
+        } catch (e: Exception) {
+            Log.w("MainActivity", "打开开发者选项失败", e)
+            android.widget.Toast.makeText(this, "请手动前往开发者选项", android.widget.Toast.LENGTH_SHORT).show()
         }
     }
 

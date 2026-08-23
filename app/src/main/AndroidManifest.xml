@@ -79,6 +79,16 @@
             </intent-filter>
         </receiver>
 
+        <!-- ADB 无线调试配对前台服务:通知栏 RemoteInput 直回配对码(与系统配对弹窗同屏) -->
+        <service
+            android:name=".adb.AdbPairingService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="adb_wireless_pairing_interactive" />
+        </service>
+
         <!-- FileProvider：用于分享下载的 APK 给系统安装器 -->
         <provider
             android:name="androidx.core.content.FileProvider"

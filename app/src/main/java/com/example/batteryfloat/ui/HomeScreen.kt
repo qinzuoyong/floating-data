@@ -57,7 +57,8 @@ fun HomeScreen(
     onStartService: () -> Unit,
     onStopService: () -> Unit,
     onOpenOverlaySettings: () -> Unit,
-    onOpenAccessibilitySettings: () -> Unit
+    onOpenAccessibilitySettings: () -> Unit,
+    onOpenDevSettings: () -> Unit
 ) {
     val context = LocalContext.current
     val haptic = LocalHapticFeedback.current
@@ -248,7 +249,7 @@ fun HomeScreen(
             subtitle = when {
                 !adbEnabled -> "无线调试 shell 特权:热区/功率直读,默认关闭"
                 adbState == AdbState.CONNECTED -> "已连接 · 特权就绪(数据接入随下版本)"
-                adbState == AdbState.NOT_PAIRED -> "已启用但未配对,重新打开开关完成配对"
+                adbState == AdbState.NOT_PAIRED -> "未配对——重新打开开关,按通知栏引导配对"
                 else -> "连接中 / 自动重连中…"
             },
             checked = adbEnabled,
@@ -274,11 +275,7 @@ fun HomeScreen(
     if (showAdbPairing) {
         AdbPairingDialog(
             onDismiss = { showAdbPairing = false },
-            onSuccess = {
-                showAdbPairing = false
-                adbEnabled = true
-                AdbConnectionManager.setEnabled(context, true)
-            }
+            onOpenDevSettings = onOpenDevSettings
         )
     }
 }
