@@ -18,7 +18,7 @@ android {
         val propsFile = rootProject.file("keystore.properties")
         if (!propsFile.exists()) {
             throw GradleException(
-                "缺少 keystore.properties：请在项目根按 CLAUDE.md 签名说明创建，" +
+                "缺少 keystore.properties：请在项目根按 AGENTS.md 签名说明创建，" +
                     "内容为 storeFile/storePassword/keyAlias/keyPassword 四行"
             )
         }
@@ -60,8 +60,24 @@ android {
         applicationId = "com.yongge.batteryfloat"
         minSdk = 34
         targetSdk = 34
-        versionCode = 39
-        versionName = "1.75"
+        versionCode = 40
+        versionName = "1.76"
+
+        // 家人位置共享 A 方案：凭据从 local.properties 注入（gitignore，不进 Git）
+        val lpFile = rootProject.file("local.properties")
+        val lp = Properties().apply {
+            if (lpFile.exists()) lpFile.inputStream().use { load(it) }
+        }
+        val baiduAk = lp.getProperty("BAIDU_MAP_AK", "")
+        val turnUser = lp.getProperty("TURN_USER", "family")
+        val turnPass = lp.getProperty("TURN_PASS", "")
+        val signalUrl = lp.getProperty("SIGNAL_URL", "ws://47.94.212.176:8088")
+
+        buildConfigField("String", "BAIDU_MAP_AK", "\"${baiduAk}\"")
+        buildConfigField("String", "TURN_USER", "\"${turnUser}\"")
+        buildConfigField("String", "TURN_PASS", "\"${turnPass}\"")
+        buildConfigField("String", "SIGNAL_URL", "\"${signalUrl}\"")
+        manifestPlaceholders["BAIDU_MAP_AK"] = baiduAk
 
         // 只保留中文资源，剪掉多语言（AGP 9.x 移除 resConfigs，改用 androidResources.localeFilters 但需 initscript）
 
@@ -133,4 +149,10 @@ dependencies {
     implementation(libs.lsposed.hiddenapibypass)      // 隐藏 API 豁免(Conscrypt TLS exporter)
     implementation(libs.ndk.boringssl)                // prefab: 配对库加密后端
     implementation(libs.ndk.libcxx)                   // prefab: native STL
+
+    // 家人位置共享 A 方案（WebRTC P2P + 自建信令 + Coturn 兜底）
+    implementation(libs.webrtc.android)          // WebRTC 直连通道
+    implementation(libs.gson)                     // 信令/位置 JSON 编解码
+    implementation(libs.java.websocket)           // WebSocket 信令客户端
+    implementation(libs.baidu.map)                // 百度地图 SDK（家人位置展示）
 }

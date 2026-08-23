@@ -23,10 +23,12 @@ object Notifs {
 
     const val CHANNEL_BATTERY = "battery_temp_channel_v2"
     const val CHANNEL_PAIRING = "adb_pairing"
+    const val CHANNEL_FAMILY = "family_location"
 
     const val ID_FLOATING = 1001
     const val ID_HEALED = 2001
     const val ID_PAIRING = 2002
+    const val ID_FAMILY = 3001
 
     /** "n 秒后自动消失"所需的绝对时间戳(setTimeoutAfter 平台语义) */
     fun autoDismissAfter(ms: Long = 4_000L): Long = System.currentTimeMillis() + ms
@@ -60,6 +62,19 @@ object Notifs {
                 setAllowBubbles(false)
             }
         )
+        nm.createNotificationChannel(
+            NotificationChannel(
+                CHANNEL_FAMILY,
+                context.getString(R.string.notification_family_channel),
+                NotificationManager.IMPORTANCE_LOW
+            ).apply {
+                description = "家人位置共享前台服务"
+                setShowBadge(false)
+                setSound(null, null)
+                enableVibration(false)
+                lockscreenVisibility = Notification.VISIBILITY_SECRET
+            }
+        )
     }
 
     /** 悬浮窗前台常驻通知(FloatingWindowService) */
@@ -78,6 +93,26 @@ object Notifs {
             .setPriority(NotificationCompat.PRIORITY_MIN) // 最低优先级
             .setSilent(true) // 静默通知
             .setVisibility(NotificationCompat.VISIBILITY_SECRET) // 锁屏隐藏
+            .setContentIntent(pendingIntent)
+            .build()
+    }
+
+    /** 家人位置共享前台常驻通知(FamilyLocationService) */
+    fun familyForeground(context: Context): Notification {
+        val pendingIntent = PendingIntent.getActivity(
+            context,
+            0,
+            Intent(context, MainActivity::class.java),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        return NotificationCompat.Builder(context, CHANNEL_FAMILY)
+            .setContentTitle(context.getString(R.string.notification_family_title))
+            .setContentText(context.getString(R.string.notification_family_text))
+            .setSmallIcon(R.drawable.ic_launcher_foreground)
+            .setOngoing(true)
+            .setPriority(NotificationCompat.PRIORITY_MIN)
+            .setSilent(true)
+            .setVisibility(NotificationCompat.VISIBILITY_SECRET)
             .setContentIntent(pendingIntent)
             .build()
     }

@@ -140,7 +140,8 @@ class MainActivity : ComponentActivity() {
                     onInstallApk = { file ->
                         isLaunchingExternal = true
                         ApkDownloader.install(this, file)
-                    }
+                    },
+                    onBeforeExternalIntent = { isLaunchingExternal = true }
                 )
 
                 // Android 14+ 受限设置引导对话框

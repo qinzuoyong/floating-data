@@ -10,6 +10,10 @@ bouncycastle = "1.80"
 hiddenapibypass = "6.1"
 ndkBoringssl = "20250114"
 ndkLibcxx = "27.0.12077973"
+webrtc = "144.7559.12"
+gson = "2.14.0"
+javaWebsocket = "1.6.0"
+baiduMap = "8.2.0"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -23,6 +27,10 @@ bouncycastle-bcpkix = { group = "org.bouncycastle", name = "bcpkix-jdk18on", ver
 lsposed-hiddenapibypass = { group = "org.lsposed.hiddenapibypass", name = "hiddenapibypass", version.ref = "hiddenapibypass" }
 ndk-boringssl = { group = "io.github.vvb2060.ndk", name = "boringssl", version.ref = "ndkBoringssl" }
 ndk-libcxx = { group = "org.lsposed.libcxx", name = "libcxx", version.ref = "ndkLibcxx" }
+webrtc-android = { group = "io.github.webrtc-sdk", name = "android", version.ref = "webrtc" }
+gson = { group = "com.google.code.gson", name = "gson", version.ref = "gson" }
+java-websocket = { group = "org.java-websocket", name = "Java-WebSocket", version.ref = "javaWebsocket" }
+baidu-map = { group = "com.baidu.lbsyun", name = "BaiduMapSDK_Map", version.ref = "baiduMap" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

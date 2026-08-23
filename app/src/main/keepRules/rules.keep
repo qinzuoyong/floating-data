@@ -1,4 +1,4 @@
-﻿# R8 保留规则 — 电池温度悬浮窗
+# R8 保留规则 — 电池温度悬浮窗
 # 前台 Service 不被混淆
 -keep class com.example.batteryfloat.service.FloatingWindowService { *; }
 
@@ -10,3 +10,19 @@
 # ADB 无线调试(批次 2):JNI RegisterNatives 按类名绑定,不可混淆/改名
 -keep class com.example.batteryfloat.adb.AdbPairingClient { *; }
 -keep class com.example.batteryfloat.adb.PairingContext { *; }
+# 家人位置共享 A 方案
+# WebRTC 直连通道：PeerConnectionFactory 经 JNI 按类名绑定，不可混淆
+-keep class org.webrtc.** { *; }
+-keep interface org.webrtc.** { *; }
+# Gson 反射序列化
+-keep class com.google.gson.reflect.TypeToken { *; }
+-keep class * extends com.google.gson.reflect.TypeToken
+-keepattributes Signature
+-keepattributes *Annotation*
+# 信令协议数据类（Gson 反序列化目标）
+-keep class com.example.batteryfloat.p2p.** { *; }
+-keep class com.example.batteryfloat.family.** { *; }
+-keep class com.example.batteryfloat.location.** { *; }
+# 百度地图 SDK
+-keep class com.baidu.** { *; }
+-dontwarn com.baidu.**

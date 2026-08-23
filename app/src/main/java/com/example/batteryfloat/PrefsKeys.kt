@@ -1,4 +1,4 @@
-﻿package com.example.batteryfloat
+package com.example.batteryfloat
 
 /**
  * SharedPreferences key 集中管理
@@ -55,4 +55,16 @@ object PrefsKeys {
     const val THEME_MODE = "theme_mode"
     /** 受限设置引导已显示 */
     const val RESTRICTED_SETTINGS_GUIDED = "restricted_settings_guided"
+
+    // ===== 家人位置共享 =====
+    /** 6 位家庭码（同一家庭设备输入相同码配对） */
+    const val FAMILY_CODE = "family_code"
+    /** 我的备注名（注册信令展示给家人） */
+    const val FAMILY_MY_NAME = "family_my_name"
+    /** 我的设备唯一标识（生成一次后持久化） */
+    const val FAMILY_MY_UID = "family_my_uid"
+    /** 是否允许家人请求我的位置（隐私开关，默认允许） */
+    const val FAMILY_ALLOW_LOC_REQ = "family_allow_loc_req"
+    /** 成员列表 JSON（uid → 备注/上次位置/在线状态） */
+    const val FAMILY_MEMBERS = "family_members"
 }

@@ -8,4 +8,11 @@
     <string name="notification_foreground_text">悬浮窗运行中</string>
     <string name="temperature_loading">--°C</string>
     <string name="keep_alive_a11y_desc">开启后可大幅提升后台存活率，保证悬浮窗常驻与开机自动恢复。本服务仅用于保活，不读取屏幕内容、不操作界面。</string>
+    <string name="notification_family_channel">家人位置共享</string>
+    <string name="notification_family_title">家人位置共享运行中</string>
+    <string name="notification_family_text">保持连接，按需响应家人位置请求</string>
+    <string name="family_no_code">尚未加入家庭</string>
+    <string name="family_connecting">正在连接…</string>
+    <string name="family_connected">已连接</string>
+    <string name="family_offline">未连接</string>
 </resources>

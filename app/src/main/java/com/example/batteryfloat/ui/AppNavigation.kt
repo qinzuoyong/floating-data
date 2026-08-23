@@ -5,9 +5,11 @@ import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.FamilyRestroom
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.outlined.FamilyRestroom
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Settings
@@ -21,6 +23,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import java.io.File
+import com.example.batteryfloat.ui.family.FamilyScreen
 
 /** 底部导航 Tab 定义 */
 private data class NavTab(
@@ -32,12 +35,13 @@ private data class NavTab(
 private val tabs = listOf(
     NavTab("首页", Icons.Filled.Home, Icons.Outlined.Home),
     NavTab("外观", Icons.Filled.Settings, Icons.Outlined.Settings),
+    NavTab("家人", Icons.Filled.FamilyRestroom, Icons.Outlined.FamilyRestroom),
     NavTab("关于", Icons.Filled.Info, Icons.Outlined.Info)
 )
 
 /**
  * 底部导航主容器
- * 3 Tab：首页 / 外观 / 关于，带 AnimatedContent 页面切换
+ * 4 Tab：首页 / 外观 / 家人 / 关于，带 AnimatedContent 页面切换
  */
 @Composable
 fun AppNavigation(
@@ -50,7 +54,8 @@ fun AppNavigation(
     onOpenBatterySettings: () -> Unit,
     onOpenAutoStartSettings: () -> Unit,
     onOpenExternalLink: (String, String) -> Unit = { _, _ -> },
-    onInstallApk: (File) -> Unit = {}
+    onInstallApk: (File) -> Unit = {},
+    onBeforeExternalIntent: () -> Unit = {}
 ) {
     var selectedTab by remember { mutableIntStateOf(0) }
     val haptic = LocalHapticFeedback.current
@@ -113,7 +118,11 @@ fun AppNavigation(
                         onOpenDevSettings = onOpenDevSettings
                     )
                     1 -> AppearanceScreen(prefs = prefs)
-                    2 -> AboutScreen(
+                    2 -> FamilyScreen(
+                        prefs = prefs,
+                        onBeforeExternalIntent = onBeforeExternalIntent
+                    )
+                    3 -> AboutScreen(
                         prefs = prefs,
                         onOpenOverlaySettings = onOpenOverlaySettings,
                         onOpenBatterySettings = onOpenBatterySettings,
