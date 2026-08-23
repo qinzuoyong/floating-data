@@ -191,15 +191,16 @@ class AdbPairingService : Service() {
             }
         }
 
-        getSystemService(NotificationManager::class.java).notify(
-            NOTIFICATION_ID,
-            Notification.Builder(this, CHANNEL_ID)
-                .setSmallIcon(R.drawable.ic_launcher_foreground)
-                .setContentTitle(title)
-                .setContentText(text)
-                .setAutoCancel(true)
-                .build()
-        )
+        val builder = Notification.Builder(this, CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_launcher_foreground)
+            .setContentTitle(title)
+            .setContentText(text)
+            .setAutoCancel(true)
+        if (success) {
+            // 成功通知 4 秒后自动消失;失败通知保留供查看原因(点击关闭)
+            builder.setTimeoutAfter(System.currentTimeMillis() + 4000)
+        }
+        getSystemService(NotificationManager::class.java).notify(NOTIFICATION_ID, builder.build())
         stopSelf()
     }
 
