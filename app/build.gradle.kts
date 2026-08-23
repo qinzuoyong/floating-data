@@ -81,6 +81,16 @@ android {
 
         // 只保留中文资源，剪掉多语言（AGP 9.x 移除 resConfigs，改用 androidResources.localeFilters 但需 initscript）
 
+        // ABI 精简：正式包仅 arm64-v8a（Android 14+ 真机全覆盖），
+        // 避免 webrtc/百度 SDK 多 ABI 打包超 Gitee Release 附件 100MB 限制；
+        // 模拟器联调时加 -PdevEmulatorAbi 临时带上 x86_64（雷电）
+        ndk {
+            abiFilters += listOf("arm64-v8a")
+            if (project.hasProperty("devEmulatorAbi")) {
+                abiFilters += "x86_64"
+            }
+        }
+
         externalNativeBuild {
             cmake {
                 arguments += "-DANDROID_STL=none"
