@@ -39,6 +39,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.example.batteryfloat.PrefsKeys
 import com.example.batteryfloat.adb.AdbConnectionManager
 import com.example.batteryfloat.adb.AdbState
+import com.example.batteryfloat.service.A11ySelfHealer
 import com.example.batteryfloat.service.FloatingWindowService
 import com.example.batteryfloat.service.KeepAliveAccessibilityService
 import com.example.batteryfloat.ui.theme.DesignSystem
@@ -224,6 +225,8 @@ fun HomeScreen(
                 } else {
                     val svc = KeepAliveAccessibilityService.instance
                     if (svc != null) {
+                        // 先打「用户主动关」标记再 disableSelf:onDestroy 的自愈钩子据此跳过
+                        A11ySelfHealer.markUserDisabled(context, true)
                         svc.disableSelf()
                         a11yKeepAlive = false
                     } else {
@@ -247,9 +250,10 @@ fun HomeScreen(
             iconBackgroundColor = MaterialTheme.colorScheme.primaryContainer,
             title = "高精度数据源 (ADB)",
             subtitle = when {
-                !adbEnabled -> "无线调试 shell 特权:热区/功率直读,默认关闭"
-                adbState == AdbState.CONNECTED -> "已连接 · 高精度数据生效(功率直读/热区)"
+                !adbEnabled -> "无线调试 shell 特权:功率直读,默认关闭"
+                adbState == AdbState.CONNECTED -> "已连接 · 高精度数据生效(功率直读)"
                 adbState == AdbState.NOT_PAIRED -> "未配对——重新打开开关,按通知栏引导配对"
+                adbState == AdbState.AUTH_FAILED -> "设备已撤销信任——请点击下方「重新配对」"
                 else -> "重连中,暂用基础数据源…"
             },
             checked = adbEnabled,
@@ -258,6 +262,10 @@ fun HomeScreen(
                 if (enable) {
                     if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
                         Toast.makeText(context, "本功能需要 Android 11 及以上", Toast.LENGTH_SHORT).show()
+                    } else if (AdbConnectionManager.isPaired()) {
+                        // 已配对过:设备仍信任本机密钥,直接连接,不再走配对引导(Shizuku 同款策略)
+                        adbEnabled = true
+                        AdbConnectionManager.setEnabled(context, true)
                     } else {
                         showAdbPairing = true
                     }
@@ -267,6 +275,18 @@ fun HomeScreen(
                 }
             }
         )
+
+        // 设备撤销信任后自动重连已暂停,提供手动重新配对入口
+        if (adbState == AdbState.AUTH_FAILED) {
+            OutlinedButton(
+                onClick = { showAdbPairing = true },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = DesignSystem.SpacingL)
+            ) {
+                Text("重新配对")
+            }
+        }
 
         // 底部间距
         Spacer(Modifier.height(DesignSystem.SpacingXl))

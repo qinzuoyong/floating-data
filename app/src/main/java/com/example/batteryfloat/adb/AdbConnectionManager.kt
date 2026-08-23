@@ -10,6 +10,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import javax.net.ssl.SSLException
 
 /** 特权通道状态 */
 enum class AdbState {
@@ -24,7 +25,9 @@ enum class AdbState {
     /** 已配对但当前断开,自动重连中 */
     DISCONNECTED,
     /** 配对流程进行中 */
-    PAIRING
+    PAIRING,
+    /** 已配对但设备不再信任本机密钥(TLS 握手失败),需重新配对 */
+    AUTH_FAILED
 }
 
 /**
@@ -40,6 +43,8 @@ object AdbConnectionManager {
     private const val TAG = "AdbConnManager"
     private const val ADB_PREFS_NAME = "adb_prefs"
     private const val KEY_NAME = "batteryfloat@local"
+    /** 是否配对成功过(设备侧已信任本机公钥);设备撤销信任(握手失败)时清除 */
+    private const val PREF_PAIRED = "adb_paired"
 
     private const val DISCOVER_TIMEOUT_MS = 12_000L
     private const val EXEC_TIMEOUT_MS = 4_000L
@@ -116,10 +121,18 @@ object AdbConnectionManager {
         AdbPairingService.start(context)
     }
 
+    /** 是否与设备配对成功过;true 时 UI 开关可直接连接,无需再走配对引导 */
+    fun isPaired(): Boolean = keyStore?.getBoolean(PREF_PAIRED, false) ?: false
+
+    private fun setPaired(value: Boolean) {
+        keyStore?.edit()?.putBoolean(PREF_PAIRED, value)?.apply()
+    }
+
     /** 配对成功回调(AdbPairingService 调用):开关落盘 + 启动重连 + 立即连接 */
     fun onPaired(context: Context) {
         setup(context)
         enabled = true
+        setPaired(true)
         appContext!!.getSharedPreferences(PrefsKeys.PREFS_NAME, Context.MODE_PRIVATE)
             .edit().putBoolean(PrefsKeys.ADB_PRIV_ENABLED, true).apply()
         if (key != null) {
@@ -209,10 +222,27 @@ object AdbConnectionManager {
                 null
             }
         } catch (e: Throwable) {
-            Log.w(TAG, "连接失败: ${e.message}")
-            _state.value = AdbState.DISCONNECTED
+            if (isTlsAuthFailure(e)) {
+                // 握手失败=设备不再信任本机公钥(如撤销授权/无线调试数据被重置)
+                Log.w(TAG, "TLS 握手失败——设备不信任本机密钥,需重新配对: ${e.message}")
+                setPaired(false)
+                _state.value = AdbState.AUTH_FAILED
+            } else {
+                Log.w(TAG, "连接失败: ${e.message}")
+                _state.value = AdbState.DISCONNECTED
+            }
             null
         }
+    }
+
+    /** 是否 TLS 认证层失败(区别于端口不可达:后者是 SocketException,继续退避重连即可) */
+    private fun isTlsAuthFailure(e: Throwable): Boolean {
+        var t: Throwable? = e
+        while (t != null) {
+            if (t is SSLException) return true
+            t = t.cause
+        }
+        return false
     }
 
     /** NSD 发现指定类型服务端口(AdbMdns 内部已做本机接口过滤与端口占用校验) */
@@ -237,6 +267,11 @@ object AdbConnectionManager {
         reconnectJob = scope.launch {
             var backoff = RECONNECT_MIN_MS
             while (isActive && enabled) {
+                if (_state.value == AdbState.AUTH_FAILED) {
+                    // 设备已不信任密钥,重连无意义且与厂商管控拉锯;暂停等待用户重新配对
+                    Log.i(TAG, "设备不信任本机密钥,暂停自动重连(等待用户重新配对)")
+                    break
+                }
                 if (_state.value != AdbState.CONNECTED) {
                     val ok = connectMutex.withLock {
                         if (_state.value == AdbState.CONNECTED) true else connectOnceInternal() != null
@@ -250,7 +285,7 @@ object AdbConnectionManager {
 
     private fun onDisconnected() {
         closeClientQuietly()
-        if (_state.value != AdbState.NOT_PAIRED) {
+        if (_state.value != AdbState.NOT_PAIRED && _state.value != AdbState.AUTH_FAILED) {
             _state.value = AdbState.DISCONNECTED
         }
     }

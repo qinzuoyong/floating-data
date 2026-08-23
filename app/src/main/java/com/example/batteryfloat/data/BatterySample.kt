@@ -13,8 +13,4 @@ data class BatterySample(
     val voltageMv: Int,
     /** true=充电 false=放电 null=未知(决定功耗符号) */
     val charging: Boolean?,
-    /** SoC 温度(增强档数据源提供,基础档恒 null) */
-    val socTempC: Float? = null,
-    /** GPU 温度(增强档数据源提供,基础档恒 null) */
-    val gpuTempC: Float? = null,
 )
