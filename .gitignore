@@ -29,3 +29,6 @@ CLAUDE.md
 # 发布产物与一键发布脚本（本机，不进远程）
 release/
 publish.sh
+
+# Native 构建中间产物(NDK/CMake)
+app/.cxx/
