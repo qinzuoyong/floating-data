@@ -2,6 +2,7 @@ package com.example.batteryfloat
 
 import android.app.Application
 import android.os.Build
+import com.example.batteryfloat.adb.AdbConnectionManager
 import org.lsposed.hiddenapibypass.HiddenApiBypass
 
 /**
@@ -17,5 +18,8 @@ class App : Application() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
             HiddenApiBypass.setHiddenApiExemptions("")
         }
+        // 进程经任一入口(无障碍绑定/开机自启/前台服务)拉起时初始化 ADB 通道,
+        // 无障碍自愈的 pm grant/shell 写回不依赖 MainActivity 曾启动(幂等,已初始化则直接返回)
+        AdbConnectionManager.setup(this)
     }
 }

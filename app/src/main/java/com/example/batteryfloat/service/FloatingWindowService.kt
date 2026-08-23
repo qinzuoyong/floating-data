@@ -2,8 +2,6 @@ package com.example.batteryfloat.service
 
 import android.app.AlarmManager
 import android.app.Notification
-import android.app.NotificationChannel
-import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
@@ -20,12 +18,10 @@ import android.util.Log
 import android.view.Gravity
 import android.view.View
 import android.view.WindowManager
-import androidx.core.app.NotificationCompat
-import com.example.batteryfloat.MainActivity
 import com.example.batteryfloat.PrefsKeys
-import com.example.batteryfloat.R
 import com.example.batteryfloat.data.PrivBatteryProvider
 import com.example.batteryfloat.monitor.BatteryMonitor
+import com.example.batteryfloat.notif.Notifs
 import com.example.batteryfloat.view.FloatingWindowView
 
 /**
@@ -66,9 +62,12 @@ class FloatingWindowService : Service() {
         @Volatile
         var isRunning = false
         private const val TAG = "FloatingWindowService"
-        const val CHANNEL_ID = "battery_temp_channel_v2"
-        const val NOTIFICATION_ID = 1001
+        /** 通知渠道/ID 集中管理,见 Notifs(此处保留别名供既有引用使用) */
+        const val CHANNEL_ID = Notifs.CHANNEL_BATTERY
+        const val NOTIFICATION_ID = Notifs.ID_FLOATING
         private const val HEARTBEAT_INTERVAL_MS = 15 * 60 * 1000L  // 15分钟心跳
+        /** 无障碍自愈巡检间隔(兜底触发;即时场景由无障碍 onDestroy 钩子负责) */
+        private const val A11Y_PATROL_INTERVAL_MS = 5 * 60 * 1000L
         const val PREF_FLOATING_RUNNING = PrefsKeys.FLOATING_WAS_RUNNING
 
         /** 外观/功能相关 key 集合，这些 key 变化时刷新悬浮窗外观和缓存 */
@@ -123,15 +122,24 @@ class FloatingWindowService : Service() {
         }
     }
 
+    /** 无障碍自愈巡检:服务存续期间低频检查,覆盖 onDestroy 钩子没跑到的场景 */
+    private val a11yPatrolRunnable = object : Runnable {
+        override fun run() {
+            A11ySelfHealer.maybeHeal(this@FloatingWindowService, trigger = "patrol")
+            mainHandler.postDelayed(this, A11Y_PATROL_INTERVAL_MS)
+        }
+    }
+
     override fun onCreate() {
         super.onCreate()
         isRunning = true
         // 记录悬浮窗运行状态（供开机自启判断）
         prefs.edit().putBoolean(PREF_FLOATING_RUNNING, true).apply()
-        createNotificationChannel()
+        Notifs.ensureChannels(this)
         windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
         scheduleHeartbeat()
         KeepAliveJobService.schedule(this)
+        mainHandler.postDelayed(a11yPatrolRunnable, A11Y_PATROL_INTERVAL_MS)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -195,6 +203,7 @@ class FloatingWindowService : Service() {
         stopMonitoring()
         removeFloatingWindow()
         removeAliveOverlay()
+        mainHandler.removeCallbacks(a11yPatrolRunnable)
         // 取消注册 SharedPreferences 监听器，防止内存泄漏
         prefsListener?.let { prefs.unregisterOnSharedPreferenceChangeListener(it) }
         prefsListener = null
@@ -459,44 +468,5 @@ class FloatingWindowService : Service() {
 
     // ===== 通知管理 =====
 
-    private fun createNotificationChannel() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val manager = getSystemService(NotificationManager::class.java)
-            // 删除旧通道（importance 创建后不可更改，需用新 ID 重建）
-            manager.deleteNotificationChannel("battery_temp_channel")
-
-            val channel = NotificationChannel(
-                CHANNEL_ID,
-                getString(R.string.notification_channel_name),
-                NotificationManager.IMPORTANCE_LOW  // 低优先级，状态栏显示小图标，防止被一键清理杀死
-            ).apply {
-                description = "电池温度悬浮窗监控服务"
-                setShowBadge(false)
-                setSound(null, null)
-                enableVibration(false)
-                lockscreenVisibility = Notification.VISIBILITY_SECRET
-            }
-            manager.createNotificationChannel(channel)
-        }
-    }
-
-    private fun buildForegroundNotification(): Notification {
-        val pendingIntent = PendingIntent.getActivity(
-            this,
-            0,
-            Intent(this, MainActivity::class.java),
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-
-        return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle(getString(R.string.notification_foreground_title))
-            .setContentText(getString(R.string.notification_foreground_text))
-            .setSmallIcon(R.drawable.ic_launcher_foreground)
-            .setOngoing(true)
-            .setPriority(NotificationCompat.PRIORITY_MIN)  // 最低优先级
-            .setSilent(true)  // 静默通知
-            .setVisibility(NotificationCompat.VISIBILITY_SECRET)  // 锁屏隐藏
-            .setContentIntent(pendingIntent)
-            .build()
-    }
+    private fun buildForegroundNotification(): Notification = Notifs.floatingForeground(this)
 }

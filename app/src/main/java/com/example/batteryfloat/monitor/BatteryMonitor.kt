@@ -1,14 +1,11 @@
 package com.example.batteryfloat.monitor
 
 import android.app.NotificationManager
-import android.app.PendingIntent
 import android.content.Context
-import android.content.Intent
 import android.util.Log
-import androidx.core.app.NotificationCompat
-import com.example.batteryfloat.MainActivity
 import com.example.batteryfloat.R
 import com.example.batteryfloat.data.BatteryProvider
+import com.example.batteryfloat.notif.Notifs
 import com.example.batteryfloat.service.FloatingWindowService
 import com.example.batteryfloat.view.FloatingWindowView
 import kotlinx.coroutines.*
@@ -99,21 +96,12 @@ class BatteryMonitor(
         try {
             // 符号格式与悬浮窗一致(%+.1fW):正=充电,负=放电
             val powerStr = if (watts.isFinite()) String.format(Locale.US, "%+.1fW", watts) else "--W"
-            // 与服务初始前台通知一致，保留点击回到应用的跳转
-            val contentIntent = PendingIntent.getActivity(
+            // 与服务初始前台通知一致,保留点击回到应用的跳转
+            val notification = Notifs.floatingUpdate(
                 context,
-                0,
-                Intent(context, MainActivity::class.java),
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                context.getString(R.string.notification_title, String.format(Locale.US, "%.1f", celsius)),
+                context.getString(R.string.notification_power_text, powerStr)
             )
-            val notification = NotificationCompat.Builder(context, FloatingWindowService.CHANNEL_ID)
-                .setContentTitle(context.getString(R.string.notification_title, String.format(Locale.US, "%.1f", celsius)))
-                .setContentText(context.getString(R.string.notification_power_text, powerStr))
-                .setSmallIcon(R.drawable.ic_launcher_foreground)
-                .setContentIntent(contentIntent)
-                .setOngoing(true)
-                .setPriority(NotificationCompat.PRIORITY_LOW)
-                .build()
             val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             nm.notify(FloatingWindowService.NOTIFICATION_ID, notification)
         } catch (e: Exception) {

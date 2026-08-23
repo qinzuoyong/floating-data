@@ -3,8 +3,8 @@
  * Copyright (C) 2021 RikkaApps
  * Licensed under the Apache License, Version 2.0
  *
- * 适配点:R.string → 中文内联;GlobalScope → 自有 scope;密钥复用 AdbConnectionManager;
- *        startForeground 使用 specialUse 类型(targetSdk 34 要求)
+ * 适配点:GlobalScope → 自有 scope;密钥复用 AdbConnectionManager;
+ *        startForeground 使用 specialUse 类型(targetSdk 34 要求);通知构建集中到 Notifs
  *
  * 配对主路径(与 Shizuku 一致):前台服务 + 通知栏 RemoteInput 直回配对码,
  * 与系统「使用配对码配对设备」弹窗同屏可见,免切换应用/免分屏。
@@ -13,7 +13,6 @@
 package com.example.batteryfloat.adb
 
 import android.app.Notification
-import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.RemoteInput
@@ -21,10 +20,9 @@ import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
-import android.os.Build
 import android.os.IBinder
 import android.util.Log
-import com.example.batteryfloat.R
+import com.example.batteryfloat.notif.Notifs
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -36,9 +34,7 @@ class AdbPairingService : Service() {
 
     companion object {
 
-        const val CHANNEL_ID = "adb_pairing"
         private const val TAG = "AdbPairingService"
-        private const val NOTIFICATION_ID = 2002
 
         private const val REPLY_REQUEST_ID = 1
         private const val STOP_REQUEST_ID = 2
@@ -71,23 +67,13 @@ class AdbPairingService : Service() {
         if (port > 0) {
             // 端口写入通知 reply intent:即使服务在用户输码前被回收,端口也不丢(Shizuku 同款设计)
             getSystemService(NotificationManager::class.java)
-                .notify(NOTIFICATION_ID, createInputNotification(port))
+                .notify(Notifs.ID_PAIRING, createInputNotification(port))
         }
     }
 
     override fun onCreate() {
         super.onCreate()
-        getSystemService(NotificationManager::class.java).createNotificationChannel(
-            NotificationChannel(
-                CHANNEL_ID,
-                "ADB 配对",
-                NotificationManager.IMPORTANCE_HIGH
-            ).apply {
-                setSound(null, null)
-                setShowBadge(false)
-                setAllowBubbles(false)
-            }
-        )
+        Notifs.ensureChannels(this)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -109,13 +95,13 @@ class AdbPairingService : Service() {
         if (notification != null) {
             try {
                 startForeground(
-                    NOTIFICATION_ID, notification,
+                    Notifs.ID_PAIRING, notification,
                     ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
                 )
             } catch (e: Throwable) {
                 Log.e(TAG, "startForeground 失败", e)
                 getSystemService(NotificationManager::class.java)
-                    .notify(NOTIFICATION_ID, notification)
+                    .notify(Notifs.ID_PAIRING, notification)
             }
         }
         return START_REDELIVER_INTENT
@@ -191,16 +177,9 @@ class AdbPairingService : Service() {
             }
         }
 
-        val builder = Notification.Builder(this, CHANNEL_ID)
-            .setSmallIcon(R.drawable.ic_launcher_foreground)
-            .setContentTitle(title)
-            .setContentText(text)
-            .setAutoCancel(true)
-        if (success) {
-            // 成功通知 4 秒后自动消失;失败通知保留供查看原因(点击关闭)
-            builder.setTimeoutAfter(System.currentTimeMillis() + 4000)
-        }
-        getSystemService(NotificationManager::class.java).notify(NOTIFICATION_ID, builder.build())
+        // 成功通知 4 秒后自动消失;失败通知保留供查看原因(点击关闭)
+        getSystemService(NotificationManager::class.java)
+            .notify(Notifs.ID_PAIRING, Notifs.pairingResult(this, title, text, success))
         stopSelf()
     }
 
@@ -237,31 +216,15 @@ class AdbPairingService : Service() {
     }
 
     private val searchingNotification: Notification by lazy {
-        Notification.Builder(this, CHANNEL_ID)
-            .setSmallIcon(R.drawable.ic_launcher_foreground)
-            .setContentTitle("正在搜索配对服务…")
-            .setContentText("请先在系统设置中打开「无线调试 → 使用配对码配对设备」")
-            .setOngoing(true)
-            .addAction(stopNotificationAction)
-            .build()
+        Notifs.pairingSearching(this, stopNotificationAction)
     }
 
     private fun createInputNotification(port: Int): Notification {
-        return Notification.Builder(this, CHANNEL_ID)
-            .setSmallIcon(R.drawable.ic_launcher_foreground)
-            .setContentTitle("已发现配对服务")
-            .setContentText("点击「输入配对码」,直接回复系统弹窗显示的 6 位数字")
-            .setOngoing(true)
-            .addAction(replyNotificationAction(port))
-            .build()
+        return Notifs.pairingInput(this, replyNotificationAction(port))
     }
 
     private val workingNotification: Notification by lazy {
-        Notification.Builder(this, CHANNEL_ID)
-            .setSmallIcon(R.drawable.ic_launcher_foreground)
-            .setContentTitle("正在配对…")
-            .setOngoing(true)
-            .build()
+        Notifs.pairingWorking(this)
     }
 
     override fun onBind(intent: Intent?): IBinder? = null

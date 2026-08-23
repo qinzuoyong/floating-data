@@ -47,6 +47,8 @@ object PrefsKeys {
     const val HIDE_RECENTS = "hide_recents"
     /** ADB 无线调试高精度数据源开关(默认关,密钥另存 adb_prefs) */
     const val ADB_PRIV_ENABLED = "adb_priv_enabled"
+    /** 用户在应用内主动关闭无障碍保活(此时系统侧被关视为用户意图,自愈不触发) */
+    const val A11Y_USER_DISABLED = "a11y_user_disabled"
 
     // ===== UI 状态 =====
     /** 主题模式（0=跟随系统, 1=浅色, 2=深色） */

@@ -40,6 +40,8 @@ class KeepAliveAccessibilityService : AccessibilityService() {
         super.onServiceConnected()
         instance = this
         isRunning = true
+        // 系统绑定成功 = 处于用户开启状态,清除「应用内主动关」标记(允许自愈)
+        A11ySelfHealer.markUserDisabled(this, false)
         Log.i(TAG, "无障碍保活已连接")
         addAliveOverlay()
         tryRestoreFloatingWindow()
@@ -69,6 +71,8 @@ class KeepAliveAccessibilityService : AccessibilityService() {
                 Log.w(TAG, "恢复周期保活失败: ${e.message}")
             }
         }
+        // 若非用户主动关闭(markUserDisabled 未置位),3 秒后自愈写回
+        A11ySelfHealer.maybeHeal(applicationContext, trigger = "onDestroy", delayMs = 3_000)
         super.onDestroy()
     }
 
