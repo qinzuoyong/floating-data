@@ -68,6 +68,12 @@ https://github.com/qinzuoyong/floating-data/releases
 
 构建命令:
   ./gradlew.bat assembleRelease --no-configuration-cache
+  # 模拟器(雷电 x86_64)联调时追加参数，带上 x86_64 ABI：
+  ./gradlew.bat assembleRelease --no-configuration-cache -PdevEmulatorAbi
+
+APK 说明:
+  - 正式包仅含 arm64-v8a（Android 14+ 真机全覆盖），约 39MB（百度 JS 地图 + 信令，无 WebRTC/原生地图 SDK）
+  - 加 -PdevEmulatorAbi 后含 arm64-v8a + x86_64（约 74MB，仅用于模拟器联调，不发布）
 
 一键发布（构建正式版 + 清理 + 打 tag + 推送 + 发布）:
   bash publish.sh "发布说明(可选)"
