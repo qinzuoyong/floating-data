@@ -74,6 +74,8 @@ fun FamilyMapScreen(
 
     var myLoc by remember { mutableStateOf<MapPoint?>(null) }
     var locating by remember { mutableStateOf(false) }
+    // JS 逆地理编码结果：uid → 详细地址（如 上海市浦东新区XX路XX号）
+    var address by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
 
     // 打开地图页时取一次我的位置
@@ -101,7 +103,10 @@ fun FamilyMapScreen(
                 targets = listOf(
                     MapPoint(live.lastLat!!, live.lastLng!!, title = live.uid)
                 ),
-                modifier = Modifier.fillMaxSize()
+                modifier = Modifier.fillMaxSize(),
+                onAddress = { uid, addr ->
+                    if (uid == live.uid) address = addr
+                }
             )
         } else {
             // 无位置：占位
@@ -149,11 +154,20 @@ fun FamilyMapScreen(
                             fontWeight = FontWeight.SemiBold
                         )
                         Spacer(Modifier.height(DesignSystem.SpacingXs))
+                        // 详细地址优先（JS 逆地理编码），未就绪时回退坐标
                         Text(
-                            text = locationDetail(live),
-                            style = MaterialTheme.typography.bodySmall,
+                            text = address ?: locationDetail(live),
+                            style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
+                        if (address != null) {
+                            Spacer(Modifier.height(DesignSystem.SpacingXs))
+                            Text(
+                                text = locationDetail(live),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                         if (distanceText != null) {
                             Spacer(Modifier.height(DesignSystem.SpacingXs))
                             Text(

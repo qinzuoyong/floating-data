@@ -38,6 +38,13 @@ class WebMapProvider : MapProvider {
         fun onMapReady() {
             Log.i(TAG, "MAP READY")
         }
+
+        /** JS 逆地理编码结果：坐标 → 详细地址 */
+        @JavascriptInterface
+        fun onAddress(uid: String, address: String) {
+            Log.i(TAG, "address: " + uid + " = " + address)
+            holder.onAddress?.invoke(uid, address)
+        }
     }
 
     @SuppressLint("SetJavaScriptEnabled")
@@ -45,9 +52,11 @@ class WebMapProvider : MapProvider {
     override fun FamilyMap(
         myLocation: MapPoint?,
         targets: List<MapPoint>,
-        modifier: Modifier
+        modifier: Modifier,
+        onAddress: (String, String) -> Unit
     ) {
         val holder = remember { WebMapHolder() }
+        holder.onAddress = onAddress
 
         DisposableEffect(Unit) {
             onDispose {
@@ -146,6 +155,8 @@ class WebMapProvider : MapProvider {
     private class WebMapHolder {
         var webView: WebView? = null
         var latestJson: String? = null
+        /** JS 逆地理编码结果回调（uid → 详细地址） */
+        var onAddress: ((String, String) -> Unit)? = null
     }
 
     private companion object {

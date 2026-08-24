@@ -6,7 +6,8 @@
 <title>家人位置</title>
 <style>
   html, body { height: 100%; margin: 0; padding: 0; }
-  #map { height: 100%; width: 100%; }
+  /* 地图容器：absolute 铺满视口（Android WebView 下 vh 单位可能失效，JS 侧还会显式设高度） */
+  #map { position: absolute; top: 0; left: 0; right: 0; bottom: 0; }
   #error { display: none; position: absolute; top: 42%; width: 100%; text-align: center; color: #666; font-size: 14px; }
 </style>
 </head>
@@ -32,11 +33,19 @@
     );
   }
 
+  var geocoder = null;
+
   function initMap() {
+    var el = document.getElementById("map");
+    var h = window.innerHeight || 800;
+    el.style.height = h + 'px';
+    el.style.width = '100%';
+    geocoder = new BMap.Geocoder();
     map = new BMap.Map("map");
     map.centerAndZoom(new BMap.Point(116.404, 39.915), 12);
     map.enableScrollWheelZoom(true);
     document.getElementById("error").style.display = "none";
+    try { map.resize(); } catch (e) {}
     try { AndroidBridge.onMapReady(); } catch (e) {}
     // 页面就绪后主动拉取原生最新数据（覆盖 update 早于加载完成的情况）
     try {
@@ -63,6 +72,17 @@
         points.push(p2);
       }
     }
+    // 逆地理编码：坐标 → 详细地址（如 上海市浦东新区XX路XX号），回传原生显示
+    if (data && data.my) {
+      addressOf(new BMap.Point(data.my.lng, data.my.lat), "me");
+    }
+    if (data && data.targets) {
+      for (var i = 0; i < data.targets.length; i++) {
+        var t = data.targets[i];
+        addressOf(new BMap.Point(t.lng, t.lat), t.title || ("target-" + i));
+      }
+    }
+
     if (points.length >= 2) {
       map.addOverlay(new BMap.Polyline(points, {
         strokeColor: "#1E88E5", strokeWeight: 4, strokeOpacity: 0.8
@@ -72,6 +92,22 @@
       map.centerAndZoom(points[0], 15);
     }
   }
+
+  // 单点逆地理编码：BMap.Geocoder 将坐标转为地址，经 AndroidBridge 回传原生
+  function addressOf(point, uid) {
+    if (!geocoder) return;
+    geocoder.getLocation(point, function (result) {
+      if (result && result.address) {
+        try {
+          AndroidBridge.onAddress(uid, result.address);
+        } catch (e) { /* 原生桥未就绪时忽略 */ }
+      }
+    });
+  }
+</script>
+<script>
+  // 强制瓦片走 https（百度 JS API 默认跟随页面协议；避免 http 明文链路的不稳定性）
+  window.BMAP_PROTOCOL = "https";
 </script>
 <script type="text/javascript" src="https://api.map.baidu.com/getscript?v=3.0&ak=__AK__&services=&t=20260814111607"></script>
 <script>

@@ -22,11 +22,13 @@ interface MapProvider {
      * @param myLocation 我的位置（蓝点，可空——定位失败时只显示家人）
      * @param targets 家人位置列表（红点，>=2 个时自动缩放至全部可见）
      * @param modifier 修饰符
+     * @param onAddress 逆地理编码结果回调（uid → 详细地址；JS 地图异步编码后回传）
      */
     @Composable
     fun FamilyMap(
         myLocation: MapPoint?,
         targets: List<MapPoint>,
-        modifier: Modifier = Modifier
+        modifier: Modifier = Modifier,
+        onAddress: (String, String) -> Unit = { _, _ -> }
     )
 }
