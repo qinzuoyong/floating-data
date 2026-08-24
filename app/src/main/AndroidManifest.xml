@@ -15,7 +15,6 @@
     <!-- 家人位置共享：定位权限（按需前台定位 + 后台常驻连接） -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
-    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
     <!-- signature 级权限,安装后默认拒绝;由内置 ADB 通道执行 pm grant 自授(无障碍自愈用),见 A11ySelfHealer -->
     <uses-permission

@@ -29,6 +29,7 @@ object Notifs {
     const val ID_HEALED = 2001
     const val ID_PAIRING = 2002
     const val ID_FAMILY = 3001
+    const val ID_FAMILY_NOTICE = 3002
 
     /** "n 秒后自动消失"所需的绝对时间戳(setTimeoutAfter 平台语义) */
     fun autoDismissAfter(ms: Long = 4_000L): Long = System.currentTimeMillis() + ms
@@ -113,6 +114,24 @@ object Notifs {
             .setPriority(NotificationCompat.PRIORITY_MIN)
             .setSilent(true)
             .setVisibility(NotificationCompat.VISIBILITY_SECRET)
+            .setContentIntent(pendingIntent)
+            .build()
+    }
+
+    /** 家人共享启动失败提示（权限缺失等；点击进入应用） */
+    fun familyStoppedNotice(context: Context, text: String): Notification {
+        val pendingIntent = PendingIntent.getActivity(
+            context,
+            1,
+            Intent(context, MainActivity::class.java),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        return NotificationCompat.Builder(context, CHANNEL_FAMILY)
+            .setContentTitle("家人位置共享未启动")
+            .setContentText(text)
+            .setSmallIcon(R.drawable.ic_launcher_foreground)
+            .setAutoCancel(true)
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .setContentIntent(pendingIntent)
             .build()
     }

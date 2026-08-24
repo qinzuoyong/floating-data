@@ -104,6 +104,13 @@ class FamilyLocationService : Service() {
 
         if (!hasLoc) {
             Log.w(TAG, "location permission not granted")
+            runCatching {
+                val nm = getSystemService(android.app.NotificationManager::class.java)
+                nm.notify(
+                    Notifs.ID_FAMILY_NOTICE,
+                    Notifs.familyStoppedNotice(this, "缺少定位权限，请允许后重试")
+                )
+            }
             return false
         }
         return try {
@@ -216,8 +223,24 @@ class FamilyLocationService : Service() {
         /** 信令连接状态（服务内收集，UI 观察） */
         val connection: StateFlow<SignalClient.State> = _connection.asStateFlow()
 
-        /** 启动/重建家人共享前台服务 */
+        /**
+         * 启动/重建家人共享前台服务
+         *
+         * 权限前置校验：缺少定位权限时不启动服务（避免 Android 14
+         * startForegroundService 后 5 秒未完成 startForeground 导致
+         * ForegroundServiceDidNotStartInTimeException 崩溃），由 UI 层引导授权。
+         */
         fun start(context: Context) {
+            val hasLoc = ContextCompat.checkSelfPermission(
+                context, Manifest.permission.ACCESS_FINE_LOCATION
+            ) == PackageManager.PERMISSION_GRANTED ||
+                ContextCompat.checkSelfPermission(
+                    context, Manifest.permission.ACCESS_COARSE_LOCATION
+                ) == PackageManager.PERMISSION_GRANTED
+            if (!hasLoc) {
+                Log.w(TAG, "start skipped: 缺少定位权限")
+                return
+            }
             ContextCompat.startForegroundService(
                 context,
                 Intent(context, FamilyLocationService::class.java).setAction(ACTION_START)

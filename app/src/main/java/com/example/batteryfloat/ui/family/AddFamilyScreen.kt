@@ -15,6 +15,11 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import android.Manifest
+import android.content.Context
+import android.content.pm.PackageManager
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
@@ -24,6 +29,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -31,6 +37,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import android.widget.Toast
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
@@ -50,7 +57,10 @@ import com.example.batteryfloat.ui.theme.DesignSystem
  * 家庭码规则：6 位数字；两台设备输入相同码即配对（信令按房间隔离）。
  */
 @Composable
-fun AddFamilyScreen(onDone: () -> Unit) {
+fun AddFamilyScreen(
+    onDone: () -> Unit,
+    onBeforeExternalIntent: () -> Unit = {}
+) {
     val context = LocalContext.current
     val prefs = context.getSharedPreferences(PrefsKeys.PREFS_NAME, android.content.Context.MODE_PRIVATE)
     val store = remember { FamilyStore.get(context) }
@@ -59,6 +69,34 @@ fun AddFamilyScreen(onDone: () -> Unit) {
     var name by remember { mutableStateOf(prefs.getString(PrefsKeys.FAMILY_MY_NAME, "") ?: "") }
     var allowLoc by remember { mutableStateOf(store.allowLocReq()) }
     var error by remember { mutableStateOf<String?>(null) }
+
+
+    // 提交：保存家庭信息并启动服务（仅权限已就绪时调用）
+    val doSubmit: () -> Unit = {
+        prefs.edit()
+            .putString(PrefsKeys.FAMILY_CODE, code)
+            .putString(PrefsKeys.FAMILY_MY_NAME, name.trim())
+            .apply()
+        store.setFamilyCode(code)
+        store.setMyName(name)
+        store.setAllowLocReq(allowLoc)
+        // 单一 start：服务 setup() 幂等重建连接（家庭码变化自动生效）
+        FamilyLocationService.start(context)
+        onDone()
+    }
+
+    // 提交前主动请求定位权限：授权成功自动继续提交，拒绝则提示并停留
+    val permissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { result ->
+        if (result[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
+            result[Manifest.permission.ACCESS_COARSE_LOCATION] == true
+        ) {
+            doSubmit()
+        } else {
+            Toast.makeText(context, "需要定位权限才能使用家人位置共享", Toast.LENGTH_LONG).show()
+        }
+    }
 
     Column(
         modifier = Modifier
@@ -141,17 +179,18 @@ fun AddFamilyScreen(onDone: () -> Unit) {
                             error = context.getString(R.string.family_code_invalid)
                             return@PrimaryActionButton
                         }
-                        prefs.edit()
-                            .putString(PrefsKeys.FAMILY_CODE, code)
-                            .putString(PrefsKeys.FAMILY_MY_NAME, name.trim())
-                            .apply()
-                        store.setFamilyCode(code)
-                        store.setMyName(name)
-                        store.setAllowLocReq(allowLoc)
-                        // 重启服务以新家庭码注册
-                        FamilyLocationService.stop(context)
-                        FamilyLocationService.start(context)
-                        onDone()
+                        if (!hasLocationPermission(context)) {
+                            // 权限弹窗是独立 Activity，标记外部跳转防 onUserLeaveHint finish
+                            onBeforeExternalIntent()
+                            permissionLauncher.launch(
+                                arrayOf(
+                                    Manifest.permission.ACCESS_FINE_LOCATION,
+                                    Manifest.permission.ACCESS_COARSE_LOCATION
+                                )
+                            )
+                            return@PrimaryActionButton
+                        }
+                        doSubmit()
                     },
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -160,4 +199,19 @@ fun AddFamilyScreen(onDone: () -> Unit) {
 
         Spacer(Modifier.height(DesignSystem.SpacingL))
     }
+}
+
+/**
+ * 检查是否已持有定位权限（FINE 或 COARSE）
+ *
+ * @param context 上下文
+ * @return true 已持有
+ */
+private fun hasLocationPermission(context: Context): Boolean {
+    return androidx.core.content.ContextCompat.checkSelfPermission(
+        context, Manifest.permission.ACCESS_FINE_LOCATION
+    ) == PackageManager.PERMISSION_GRANTED ||
+        androidx.core.content.ContextCompat.checkSelfPermission(
+            context, Manifest.permission.ACCESS_COARSE_LOCATION
+        ) == PackageManager.PERMISSION_GRANTED
 }

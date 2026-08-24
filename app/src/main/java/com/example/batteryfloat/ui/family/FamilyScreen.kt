@@ -95,10 +95,10 @@ fun FamilyScreen(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { _ -> }
     LaunchedEffect(Unit) {
+        // 仅请求前台定位 + 通知权限（后台位置权限无需：前台服务响应定位用 while-in-use 即可）
         val missing = listOf(
             Manifest.permission.ACCESS_FINE_LOCATION,
             Manifest.permission.ACCESS_COARSE_LOCATION,
-            Manifest.permission.ACCESS_BACKGROUND_LOCATION,
             Manifest.permission.POST_NOTIFICATIONS
         ).filter { p ->
             androidx.core.content.ContextCompat.checkSelfPermission(context, p) != PackageManager.PERMISSION_GRANTED
@@ -119,7 +119,9 @@ fun FamilyScreen(
             onDone = {
                 route = FamilyRoute.List
                 serviceOn = true
-            }
+            },
+            // 权限弹窗会触发 MainActivity.onUserLeaveHint，需标记外部跳转防 finish
+            onBeforeExternalIntent = onBeforeExternalIntent
         )
         FamilyRoute.List -> FamilyListContent(
             context = context,
