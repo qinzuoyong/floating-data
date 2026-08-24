@@ -18,25 +18,26 @@
 
   // 标记图标：我的位置蓝色圆点，家人红色圆点（SVG data URI，无外部资源依赖）
   function myIcon() {
-    return new BMapGL.Icon(
+    return new BMap.Icon(
       "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24'><circle cx='12' cy='12' r='9' fill='%231E88E5' stroke='white' stroke-width='2'/></svg>",
-      new BMapGL.Size(24, 24),
-      { anchor: new BMapGL.Size(12, 12) }
+      new BMap.Size(24, 24),
+      { anchor: new BMap.Size(12, 12) }
     );
   }
   function familyIcon() {
-    return new BMapGL.Icon(
+    return new BMap.Icon(
       "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24'><circle cx='12' cy='12' r='9' fill='%23E53935' stroke='white' stroke-width='2'/></svg>",
-      new BMapGL.Size(24, 24),
-      { anchor: new BMapGL.Size(12, 12) }
+      new BMap.Size(24, 24),
+      { anchor: new BMap.Size(12, 12) }
     );
   }
 
   function initMap() {
-    map = new BMapGL.Map("map");
-    map.centerAndZoom(new BMapGL.Point(116.404, 39.915), 12);
+    map = new BMap.Map("map");
+    map.centerAndZoom(new BMap.Point(116.404, 39.915), 12);
     map.enableScrollWheelZoom(true);
     document.getElementById("error").style.display = "none";
+    try { AndroidBridge.onMapReady(); } catch (e) {}
     // 页面就绪后主动拉取原生最新数据（覆盖 update 早于加载完成的情况）
     try {
       var raw = AndroidBridge.getData();
@@ -50,20 +51,20 @@
     map.clearOverlays();
     var points = [];
     if (data && data.my) {
-      var p = new BMapGL.Point(data.my.lng, data.my.lat);
-      map.addOverlay(new BMapGL.Marker(p, { icon: myIcon() }));
+      var p = new BMap.Point(data.my.lng, data.my.lat);
+      map.addOverlay(new BMap.Marker(p, { icon: myIcon() }));
       points.push(p);
     }
     if (data && data.targets) {
       for (var i = 0; i < data.targets.length; i++) {
         var t = data.targets[i];
-        var p2 = new BMapGL.Point(t.lng, t.lat);
-        map.addOverlay(new BMapGL.Marker(p2, { icon: familyIcon() }));
+        var p2 = new BMap.Point(t.lng, t.lat);
+        map.addOverlay(new BMap.Marker(p2, { icon: familyIcon() }));
         points.push(p2);
       }
     }
     if (points.length >= 2) {
-      map.addOverlay(new BMapGL.Polyline(points, {
+      map.addOverlay(new BMap.Polyline(points, {
         strokeColor: "#1E88E5", strokeWeight: 4, strokeOpacity: 0.8
       }));
       map.setViewport(points);
@@ -72,6 +73,35 @@
     }
   }
 </script>
-<script type="text/javascript" src="https://api.map.baidu.com/api?v=3.0&ak=__AK__&callback=initMap"></script>
+<script type="text/javascript" src="https://api.map.baidu.com/getscript?v=3.0&ak=__AK__&services=&t=20260814111607"></script>
+<script>
+  // getscript 直接静态引入（绕过 api?v=3.0 的 document.write 引导层，避免 WebView 时序问题）。
+  // 脚本加载执行后 BMap 即全局可用：轮询等待就绪后调用 initMap，超时显示错误提示。
+  (function () {
+    // 诊断：BMap 依赖 WebGL，检测环境支持情况
+    try {
+      var probeCanvas = document.createElement('canvas');
+      var gl = probeCanvas.getContext('webgl') || probeCanvas.getContext('experimental-webgl');
+      console.log('WEBGL: ' + (gl ? 'yes' : 'no'));
+    } catch (e) {
+      console.log('WEBGL: error ' + e.message);
+    }
+    var tries = 0;
+    var timer = setInterval(function () {
+      tries++;
+      if (typeof BMap !== 'undefined') {
+        clearInterval(timer);
+        try {
+          initMap();
+        } catch (e) {
+          document.getElementById('error').style.display = 'block';
+        }
+      } else if (tries > 150) {
+        clearInterval(timer);
+        document.getElementById('error').style.display = 'block';
+      }
+    }, 100);
+  })();
+</script>
 </body>
 </html>

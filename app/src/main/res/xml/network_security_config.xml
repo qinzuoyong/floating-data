@@ -4,5 +4,9 @@
     <base-config cleartextTrafficPermitted="false" />
     <domain-config cleartextTrafficPermitted="true">
         <domain includeSubdomains="false">47.94.212.176</domain>
+        <!-- 家人共享地图 WebView 的 Referer 载体域名（baseURL，仅作来源标识，不实际访问） -->
+        <domain includeSubdomains="false">familymap.gcdar.com</domain>
+        <!-- 百度 JS API 的 qt=verify / 错误上报走 http 明文（getscript 内部硬编码），需放行 -->
+        <domain includeSubdomains="false">api.map.baidu.com</domain>
     </domain-config>
 </network-security-config>
