@@ -77,7 +77,9 @@ class WebMapProvider : MapProvider {
                             view: WebView?,
                             request: android.webkit.WebResourceRequest?
                         ): android.webkit.WebResourceResponse? {
-                            if (request != null && request.url.toString().contains("baidu")) {
+                            if (request != null &&
+                                (request.url.toString().contains("baidu") || request.url.toString().contains("bdimg"))
+                            ) {
                                 Log.i(TAG, "req: " + request.url)
                             }
                             return null

@@ -8,5 +8,7 @@
         <domain includeSubdomains="false">familymap.gcdar.com</domain>
         <!-- 百度 JS API 的 qt=verify / 错误上报走 http 明文（getscript 内部硬编码），需放行 -->
         <domain includeSubdomains="false">api.map.baidu.com</domain>
+        <!-- 百度地图瓦片域名 apimaponline0-3.bdimg.com（http 明文），放行全部子域 -->
+        <domain includeSubdomains="true">bdimg.com</domain>
     </domain-config>
 </network-security-config>
