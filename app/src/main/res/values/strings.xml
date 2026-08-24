@@ -11,8 +11,38 @@
     <string name="notification_family_channel">家人位置共享</string>
     <string name="notification_family_title">家人位置共享运行中</string>
     <string name="notification_family_text">保持连接，按需响应家人位置请求</string>
-    <string name="family_no_code">尚未加入家庭</string>
-    <string name="family_connecting">正在连接…</string>
+
+    <!-- 家人位置共享 -->
+    <string name="family_title">家人位置</string>
+    <string name="family_join_hint">和家人的设备输入同一个 6 位家庭码，即可互相查看位置</string>
+    <string name="family_join_button">创建 / 加入家庭</string>
+    <string name="family_code_label">家庭码 %1$s</string>
+    <string name="family_my_name_label">我的备注名：%1$s</string>
+    <string name="family_unset">未设置</string>
+    <string name="family_allow_loc_req">允许家人请求我的位置</string>
+    <string name="family_change_hint">更换家庭：点击下方「加入新家庭」重新输入家庭码</string>
+    <string name="family_join_new">加入新家庭</string>
+    <string name="family_members_title">家人列表</string>
+    <string name="family_empty_hint">暂无家人，让家人设备也输入家庭码 %1$s</string>
+    <string name="family_delete_member">删除成员</string>
+    <string name="family_last_loc_none">上次位置：暂无</string>
+    <string name="family_last_loc_prefix">上次位置：%1$s</string>
+    <string name="family_accuracy_suffix">（精度 ±%1$dm）</string>
+    <string name="family_get_location">获取位置</string>
+    <string name="family_map">地图</string>
+    <string name="family_service_off">服务未开启</string>
     <string name="family_connected">已连接</string>
-    <string name="family_offline">未连接</string>
+    <string name="family_connecting">正在连接…</string>
+    <string name="family_not_connected">未连接</string>
+    <string name="family_add_title">创建 / 加入家庭</string>
+    <string name="family_pair_hint">配对方式：两台设备输入同一个 6 位家庭码，即可互相查看位置。</string>
+    <string name="family_code_input_hint">家庭码（6 位数字）</string>
+    <string name="family_name_input_hint">我的备注名（展示给家人）</string>
+    <string name="family_allow_loc_req_desc">关闭后不响应位置请求，只能查看家人位置</string>
+    <string name="family_join_submit">加入家庭并开启共享</string>
+    <string name="family_code_invalid">请输入 6 位数字家庭码</string>
+    <string name="family_back">返回</string>
+    <string name="family_map_no_location">暂无位置，点击下方「重新获取」</string>
+    <string name="family_map_refresh">重新获取位置</string>
+    <string name="family_distance_prefix">距离：%1$s</string>
 </resources>

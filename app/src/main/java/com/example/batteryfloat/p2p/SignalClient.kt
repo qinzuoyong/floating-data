@@ -20,7 +20,7 @@ import java.net.URI
  * WebSocket 信令客户端（对接自建 /opt/family-signal 服务）
  *
  * 特性：自动重连（指数退避 2s→30s）、心跳、注册/登出、
- * loc-req / loc-res / signal 三种中继发送。所有回调在 [scope] 所在调度器投递。
+ * loc-req / loc-res 两种中继发送。所有回调在 [scope] 所在调度器投递。
  */
 class SignalClient(
     private val url: String,
@@ -46,7 +46,7 @@ class SignalClient(
     /** 消息回调（在 Main 线程） */
     var onMessage: ((SignalMessage) -> Unit)? = null
 
-    /** 连接断开回调（含主动断开；用于清理 WebRTC 通道） */
+    /** 连接断开回调（含主动断开；供上层感知掉线） */
     var onDisconnected: ((String) -> Unit)? = null
 
     private var client: WebSocketClient? = null
@@ -86,17 +86,6 @@ class SignalClient(
     }
 
     // ===== 发送 =====
-
-    /** 发送 WebRTC 信令（offer/answer/ice）给指定成员 */
-    fun sendSignal(to: String, payload: RtcSignalPayload) {
-        sendRaw(
-            JsonObject().apply {
-                addProperty("type", SignalTypes.SIGNAL)
-                addProperty("to", to)
-                add("payload", gson.toJsonTree(payload))
-            }
-        )
-    }
 
     /** 请求指定成员的位置 */
     fun sendLocReq(to: String) {

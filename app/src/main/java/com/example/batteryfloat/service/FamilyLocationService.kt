@@ -15,12 +15,9 @@ import com.example.batteryfloat.BuildConfig
 import com.example.batteryfloat.family.FamilyStore
 import com.example.batteryfloat.location.OnDemandLocationProvider
 import com.example.batteryfloat.notif.Notifs
-import com.example.batteryfloat.p2p.PeerInfo
-import com.example.batteryfloat.p2p.RtcSignalPayload
 import com.example.batteryfloat.p2p.SignalClient
 import com.example.batteryfloat.p2p.SignalMessage
 import com.example.batteryfloat.p2p.SignalTypes
-import com.example.batteryfloat.p2p.WebRtcP2pChannel
 import com.google.gson.Gson
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -33,11 +30,10 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
- * 家人位置共享前台服务
+ * 家人位置共享前台服务（纯信令中继，无 WebRTC）
  *
  * 职责：常驻后台保持信令连接（WebSocket）→ 按需响应家人位置请求
- * （一次性定位 → 信令回传 + WebRTC DataChannel 点对点广播）；
- * 收到家人位置时写入 [FamilyStore]，Compose UI 实时观察。
+ * （一次性定位 → 信令回传）；收到家人位置时写入 [FamilyStore]，Compose UI 实时观察。
  *
  * 权限前置：需已授予定位权限（FINE/COARSE）与通知权限，否则降级提示。
  */
@@ -49,7 +45,6 @@ class FamilyLocationService : Service() {
     private var store: FamilyStore? = null
     private var provider: OnDemandLocationProvider? = null
     private var signal: SignalClient? = null
-    private var rtc: WebRtcP2pChannel? = null
 
     override fun onCreate() {
         super.onCreate()
@@ -92,7 +87,6 @@ class FamilyLocationService : Service() {
     override fun onDestroy() {
         Log.i(TAG, "onDestroy")
         signal?.disconnect()
-        rtc?.disposeAll()
         workScope.cancel()
         super.onDestroy()
     }
@@ -143,32 +137,11 @@ class FamilyLocationService : Service() {
 
         // 重建通道（幂等：先清理旧连接）
         signal?.disconnect()
-        rtc?.disposeAll()
-        rtc = null
 
         val sig = SignalClient(BuildConfig.SIGNAL_URL).also {
             it.onMessage = ::handleSignal
-            it.onDisconnected = { _ ->
-                rtc?.disposeAll()
-                rtc = null
-            }
         }
         signal = sig
-
-        if (WebRtcP2pChannel.isSupportedAbi()) {
-            rtc = WebRtcP2pChannel(
-                context = this,
-                scope = workScope,
-                signal = sig,
-                myUid = s.myUid()
-            ).also { ch ->
-                ch.onLocationUpdate = { fromUid, loc ->
-                    s.updateLocation(fromUid, loc)
-                }
-            }
-        } else {
-            Log.i(TAG, "WebRTC 不可用（x86 模拟器），使用信令中继模式")
-        }
 
         workScope.launch {
             sig.state.collect { _connection.value = it }
@@ -185,22 +158,17 @@ class FamilyLocationService : Service() {
                 val peers = msg.peers ?: emptyList()
                 Log.i(TAG, "registered, peers=" + peers.size)
                 for (peer in peers) {
-                    // 成员入库不依赖 WebRTC：信令中继模式下 rtc 为 null，仅跳过 P2P 通道
                     s.upsertMember(peer.uid, peer.name, peer.online)
-                    rtc?.onPeerOnline(peer)
                 }
             }
 
             SignalTypes.PRESENCE -> {
                 val uid = msg.uid ?: return
                 val online = msg.online == true
-                val ch = rtc
                 if (online) {
                     s.upsertMember(uid, msg.name ?: "", true)
-                    ch?.onPeerOnline(PeerInfo(uid = uid, name = msg.name ?: "", online = true))
                 } else {
                     s.markOffline(uid)
-                    ch?.onPeerOffline(uid)
                 }
             }
 
@@ -216,7 +184,6 @@ class FamilyLocationService : Service() {
                     }
                     if (loc != null) {
                         signal?.sendLocRes(from, loc)
-                        rtc?.broadcastLocation(loc)
                     } else {
                         Log.w(TAG, "location unavailable, cannot answer " + from)
                     }
@@ -229,13 +196,6 @@ class FamilyLocationService : Service() {
                 if (loc != null) {
                     s.updateLocation(from, loc)
                 }
-            }
-
-            SignalTypes.SIGNAL -> {
-                val from = msg.from ?: return
-                val payload = msg.payload ?: return
-                val rtcSig = gson.fromJson(payload, RtcSignalPayload::class.java)
-                rtc?.onRtcSignal(from, rtcSig)
             }
 
             SignalTypes.ERROR -> {

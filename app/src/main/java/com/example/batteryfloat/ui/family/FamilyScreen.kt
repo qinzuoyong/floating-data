@@ -30,7 +30,6 @@ import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.outlined.People
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -47,8 +46,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.example.batteryfloat.R
 import com.example.batteryfloat.PrefsKeys
 import com.example.batteryfloat.family.FamilyMember
 import com.example.batteryfloat.family.FamilyStore
@@ -60,9 +61,6 @@ import com.example.batteryfloat.ui.theme.DesignSystem
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-
-/** 地图边界内边距（dp），供 BaiduMapProvider 缩放使用 */
-const val FAMILY_MAP_PADDING_DP = 64
 
 /** 家人 Tab 内部路由 */
 private sealed interface FamilyRoute {
@@ -168,7 +166,7 @@ private fun FamilyListContent(
             .padding(DesignSystem.PagePadding),
         verticalArrangement = Arrangement.spacedBy(DesignSystem.SpacingM)
     ) {
-        item { SectionTitle("家人位置") }
+        item { SectionTitle(stringResource(R.string.family_title)) }
 
         if (familyCode.isBlank()) {
             // 未加入家庭：引导创建/加入
@@ -192,13 +190,13 @@ private fun FamilyListContent(
                         )
                         Spacer(Modifier.height(DesignSystem.SpacingM))
                         Text(
-                            text = "和家人的设备输入同一个 6 位家庭码，即可互相查看位置",
+                            text = stringResource(R.string.family_join_hint),
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Spacer(Modifier.height(DesignSystem.SpacingL))
                         PrimaryActionButton(
-                            text = "创建 / 加入家庭",
+                            text = stringResource(R.string.family_join_button),
                             onClick = onAddFamily,
                             icon = {
                                 Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(18.dp))
@@ -223,7 +221,7 @@ private fun FamilyListContent(
                         ) {
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    text = "家庭码 " + familyCode,
+                                    text = stringResource(R.string.family_code_label, familyCode),
                                     style = MaterialTheme.typography.titleMedium,
                                     fontWeight = FontWeight.SemiBold
                                 )
@@ -241,7 +239,10 @@ private fun FamilyListContent(
                         }
                         Spacer(Modifier.height(DesignSystem.SpacingM))
                         Text(
-                            text = "我的备注名：" + myName.ifBlank { "未设置" },
+                            text = stringResource(
+                                R.string.family_my_name_label,
+                                myName.ifBlank { stringResource(R.string.family_unset) }
+                            ),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -252,7 +253,7 @@ private fun FamilyListContent(
                         ) {
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    text = "允许家人请求我的位置",
+                                    text = stringResource(R.string.family_allow_loc_req),
                                     style = MaterialTheme.typography.bodyMedium
                                 )
                             }
@@ -266,13 +267,13 @@ private fun FamilyListContent(
                         }
                         Spacer(Modifier.height(DesignSystem.SpacingM))
                         Text(
-                            text = "更换家庭：点击下方「加入新家庭」重新输入家庭码",
+                            text = stringResource(R.string.family_change_hint),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Spacer(Modifier.height(DesignSystem.SpacingS))
                         PrimaryActionButton(
-                            text = "加入新家庭",
+                            text = stringResource(R.string.family_join_new),
                             onClick = onAddFamily,
                             modifier = Modifier.fillMaxWidth()
                         )
@@ -283,11 +284,11 @@ private fun FamilyListContent(
 
         // 成员列表
         if (familyCode.isNotBlank()) {
-            item { SectionTitle("家人列表") }
+            item { SectionTitle(stringResource(R.string.family_members_title)) }
             if (members.isEmpty()) {
                 item {
                     Text(
-                        text = "暂无家人，让家人设备也输入家庭码 " + familyCode,
+                        text = stringResource(R.string.family_empty_hint, familyCode),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -339,7 +340,7 @@ private fun MemberCard(
                 IconButton(onClick = onRemove) {
                     Icon(
                         Icons.Filled.Delete,
-                        contentDescription = "删除成员",
+                        contentDescription = stringResource(R.string.family_delete_member),
                         tint = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
@@ -353,7 +354,7 @@ private fun MemberCard(
             Spacer(Modifier.height(DesignSystem.SpacingM))
             Row(horizontalArrangement = Arrangement.spacedBy(DesignSystem.SpacingS)) {
                 PrimaryActionButton(
-                    text = "获取位置",
+                    text = stringResource(R.string.family_get_location),
                     onClick = onRequestLocation,
                     modifier = Modifier.weight(1f),
                     icon = {
@@ -367,21 +368,29 @@ private fun MemberCard(
                 ) {
                     Icon(Icons.Filled.Map, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(DesignSystem.SpacingS))
-                    Text("地图")
+                    Text(stringResource(R.string.family_map))
                 }
             }
         }
     }
 }
 
-/** 上次位置文案：无记录 / 相对时间 + 精度 */
+/**
+ * 上次位置文案：无记录或「相对时间 + 精度」
+ *
+ * @param member 成员
+ * @return 展示文案
+ */
+@Composable
 private fun lastLocationText(member: FamilyMember): String {
-    val ts = member.lastTs ?: return "上次位置：暂无"
-    val acc = member.lastAccuracy?.let { "（精度 ±" + it.toInt() + "m）" } ?: ""
-    return "上次位置：" + formatRelativeTime(ts) + acc
+    val ts = member.lastTs ?: return stringResource(R.string.family_last_loc_none)
+    val acc = member.lastAccuracy?.let {
+        stringResource(R.string.family_accuracy_suffix, it.toInt())
+    } ?: ""
+    return stringResource(R.string.family_last_loc_prefix, formatRelativeTime(ts) + acc)
 }
 
-/** 相对时间：<1 分钟=刚刚，<60 分钟=x 分钟前，<24h=x 小时前，否则 yyyy-MM-dd HH:mm */
+/** 相对时间：<1 分钟=刚刚，<60 分钟=x 分钟前，<24h=x 小时前，否则 MM-dd HH:mm */
 internal fun formatRelativeTime(ts: Long): String {
     val now = System.currentTimeMillis()
     val diff = now - ts
@@ -393,15 +402,18 @@ internal fun formatRelativeTime(ts: Long): String {
     }
 }
 
+/** 连接状态文案（字符串资源） */
+@Composable
 private fun connectionText(state: SignalClient.State, serviceOn: Boolean): String {
-    if (!serviceOn) return "服务未开启"
+    if (!serviceOn) return stringResource(R.string.family_service_off)
     return when (state) {
-        is SignalClient.State.Connected -> "已连接"
-        is SignalClient.State.Connecting -> "正在连接…"
-        else -> "未连接"
+        is SignalClient.State.Connected -> stringResource(R.string.family_connected)
+        is SignalClient.State.Connecting -> stringResource(R.string.family_connecting)
+        else -> stringResource(R.string.family_not_connected)
     }
 }
 
+/** 连接状态颜色：未开启灰、已连接绿、其余错误色 */
 @Composable
 private fun connectionColor(state: SignalClient.State, serviceOn: Boolean): Color {
     if (!serviceOn) return MaterialTheme.colorScheme.onSurfaceVariant

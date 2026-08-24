@@ -69,15 +69,10 @@ android {
             if (lpFile.exists()) lpFile.inputStream().use { load(it) }
         }
         val baiduAk = lp.getProperty("BAIDU_MAP_AK", "")
-        val turnUser = lp.getProperty("TURN_USER", "family")
-        val turnPass = lp.getProperty("TURN_PASS", "")
-        val signalUrl = lp.getProperty("SIGNAL_URL", "ws://47.94.212.176:8088")
+        val signalUrl = lp.getProperty("SIGNAL_URL", "ws://47.94.212.176/family-signal")
 
         buildConfigField("String", "BAIDU_MAP_AK", "\"${baiduAk}\"")
-        buildConfigField("String", "TURN_USER", "\"${turnUser}\"")
-        buildConfigField("String", "TURN_PASS", "\"${turnPass}\"")
         buildConfigField("String", "SIGNAL_URL", "\"${signalUrl}\"")
-        manifestPlaceholders["BAIDU_MAP_AK"] = baiduAk
 
         // 只保留中文资源，剪掉多语言（AGP 9.x 移除 resConfigs，改用 androidResources.localeFilters 但需 initscript）
 
@@ -160,9 +155,7 @@ dependencies {
     implementation(libs.ndk.boringssl)                // prefab: 配对库加密后端
     implementation(libs.ndk.libcxx)                   // prefab: native STL
 
-    // 家人位置共享 A 方案（WebRTC P2P + 自建信令 + Coturn 兜底）
-    implementation(libs.webrtc.android)          // WebRTC 直连通道
+    // 家人位置共享（纯信令中继 + WebView 地图，无 WebRTC/百度原生 SDK）
     implementation(libs.gson)                     // 信令/位置 JSON 编解码
     implementation(libs.java.websocket)           // WebSocket 信令客户端
-    implementation(libs.baidu.map)                // 百度地图 SDK（家人位置展示）
 }

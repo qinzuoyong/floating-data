@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>家人位置</title>
+<style>
+  html, body { height: 100%; margin: 0; padding: 0; }
+  #map { height: 100%; width: 100%; }
+  #error { display: none; position: absolute; top: 42%; width: 100%; text-align: center; color: #666; font-size: 14px; }
+</style>
+</head>
+<body>
+<div id="map"></div>
+<div id="error">地图加载失败：请检查网络与 AK 配置</div>
+<script>
+  var map = null;
+
+  // 标记图标：我的位置蓝色圆点，家人红色圆点（SVG data URI，无外部资源依赖）
+  function myIcon() {
+    return new BMapGL.Icon(
+      "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24'><circle cx='12' cy='12' r='9' fill='%231E88E5' stroke='white' stroke-width='2'/></svg>",
+      new BMapGL.Size(24, 24),
+      { anchor: new BMapGL.Size(12, 12) }
+    );
+  }
+  function familyIcon() {
+    return new BMapGL.Icon(
+      "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24'><circle cx='12' cy='12' r='9' fill='%23E53935' stroke='white' stroke-width='2'/></svg>",
+      new BMapGL.Size(24, 24),
+      { anchor: new BMapGL.Size(12, 12) }
+    );
+  }
+
+  function initMap() {
+    map = new BMapGL.Map("map");
+    map.centerAndZoom(new BMapGL.Point(116.404, 39.915), 12);
+    map.enableScrollWheelZoom(true);
+    document.getElementById("error").style.display = "none";
+    // 页面就绪后主动拉取原生最新数据（覆盖 update 早于加载完成的情况）
+    try {
+      var raw = AndroidBridge.getData();
+      if (raw) applyData(JSON.parse(raw));
+    } catch (e) { /* 原生桥未就绪时等待 applyData 推送 */ }
+  }
+
+  // 原生侧数据更新入口：data = { my: {lat,lng}|null, targets: [{lat,lng,title}] }
+  function applyData(data) {
+    if (!map) return;
+    map.clearOverlays();
+    var points = [];
+    if (data && data.my) {
+      var p = new BMapGL.Point(data.my.lng, data.my.lat);
+      map.addOverlay(new BMapGL.Marker(p, { icon: myIcon() }));
+      points.push(p);
+    }
+    if (data && data.targets) {
+      for (var i = 0; i < data.targets.length; i++) {
+        var t = data.targets[i];
+        var p2 = new BMapGL.Point(t.lng, t.lat);
+        map.addOverlay(new BMapGL.Marker(p2, { icon: familyIcon() }));
+        points.push(p2);
+      }
+    }
+    if (points.length >= 2) {
+      map.addOverlay(new BMapGL.Polyline(points, {
+        strokeColor: "#1E88E5", strokeWeight: 4, strokeOpacity: 0.8
+      }));
+      map.setViewport(points);
+    } else if (points.length === 1) {
+      map.centerAndZoom(points[0], 15);
+    }
+  }
+</script>
+<script type="text/javascript" src="https://api.map.baidu.com/api?v=3.0&ak=__AK__&callback=initMap"></script>
+</body>
+</html>

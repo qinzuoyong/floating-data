@@ -32,8 +32,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import com.example.batteryfloat.R
 import com.example.batteryfloat.PrefsKeys
 import com.example.batteryfloat.family.FamilyStore
 import com.example.batteryfloat.service.FamilyLocationService
@@ -67,9 +69,9 @@ fun AddFamilyScreen(onDone: () -> Unit) {
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onDone) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.family_back))
             }
-            SectionTitle("创建 / 加入家庭")
+            SectionTitle(stringResource(R.string.family_add_title))
         }
 
         Card(
@@ -83,7 +85,7 @@ fun AddFamilyScreen(onDone: () -> Unit) {
                 verticalArrangement = Arrangement.spacedBy(DesignSystem.SpacingM)
             ) {
                 Text(
-                    text = "配对方式：两台设备输入同一个 6 位家庭码，即可互相查看位置。",
+                    text = stringResource(R.string.family_pair_hint),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -94,7 +96,7 @@ fun AddFamilyScreen(onDone: () -> Unit) {
                         code = input.filter { it.isDigit() }.take(6)
                         error = null
                     },
-                    label = { Text("家庭码（6 位数字）") },
+                    label = { Text(stringResource(R.string.family_code_input_hint)) },
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
                     isError = error != null,
@@ -105,7 +107,7 @@ fun AddFamilyScreen(onDone: () -> Unit) {
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it.take(16) },
-                    label = { Text("我的备注名（展示给家人）") },
+                    label = { Text(stringResource(R.string.family_name_input_hint)) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -116,12 +118,12 @@ fun AddFamilyScreen(onDone: () -> Unit) {
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = "允许家人请求我的位置",
+                            text = stringResource(R.string.family_allow_loc_req),
                             style = MaterialTheme.typography.bodyMedium,
                             fontWeight = FontWeight.Medium
                         )
                         Text(
-                            text = "关闭后不响应位置请求，只能查看家人位置",
+                            text = stringResource(R.string.family_allow_loc_req_desc),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -133,10 +135,10 @@ fun AddFamilyScreen(onDone: () -> Unit) {
                 }
 
                 PrimaryActionButton(
-                    text = "加入家庭并开启共享",
+                    text = stringResource(R.string.family_join_submit),
                     onClick = {
                         if (code.length != 6) {
-                            error = "请输入 6 位数字家庭码"
+                            error = context.getString(R.string.family_code_invalid)
                             return@PrimaryActionButton
                         }
                         prefs.edit()
