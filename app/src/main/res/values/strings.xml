@@ -45,4 +45,18 @@
     <string name="family_map_no_location">暂无位置，点击下方「重新获取」</string>
     <string name="family_map_refresh">重新获取位置</string>
     <string name="family_distance_prefix">距离：%1$s</string>
+    <string name="family_edit_note_desc">修改备注</string>
+    <string name="family_edit_note_title">修改备注</string>
+    <string name="family_edit_note_label">备注名</string>
+    <string name="family_edit_note_hint">仅本机可见，不影响对方</string>
+    <string name="action_confirm">确定</string>
+    <string name="action_cancel">取消</string>
+    <string name="family_leave">退出家庭</string>
+    <string name="family_leave_title">退出家庭</string>
+    <string name="family_leave_confirm">退出后家人将无法查看你的位置，成员列表会被清空。确定退出？</string>
+    <string name="family_join_requests">加入申请</string>
+    <string name="family_join_approve">批准</string>
+    <string name="family_join_reject">拒绝</string>
+    <string name="family_join_pending_hint">等待创建人审核，请稍候…</string>
+    <string name="family_join_rejected_hint">加入申请被拒绝，请联系创建人</string>
 </resources>
