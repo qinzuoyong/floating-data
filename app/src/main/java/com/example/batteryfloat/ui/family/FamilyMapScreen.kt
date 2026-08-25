@@ -50,6 +50,7 @@ import com.example.batteryfloat.map.WebMapProvider
 import com.example.batteryfloat.ui.PrimaryActionButton
 import com.example.batteryfloat.ui.theme.DesignSystem
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -78,8 +79,9 @@ fun FamilyMapScreen(
     var address by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
 
-    // 打开地图页时取一次我的位置
+    // 打开地图页时自动请求家人位置 + 取我的位置（先粗后精）
     LaunchedEffect(Unit) {
+        onRefresh()
         refreshMyLocation(context, scope, locating, { locating = it }, { myLoc = it })
     }
 
@@ -228,10 +230,11 @@ private fun refreshMyLocation(
 
     setLocating(true)
     scope.launch {
-        val loc = withContext(Dispatchers.Default) {
-            OnDemandLocationProvider(context).getCurrentLocation()
+        withContext(Dispatchers.Default) {
+            OnDemandLocationProvider(context).currentLocationFlow().collect { loc ->
+                setMyLoc(MapPoint(loc.lat, loc.lng, title = "me"))
+            }
         }
-        setMyLoc(loc?.let { MapPoint(it.lat, it.lng, title = "me") })
         setLocating(false)
     }
 }

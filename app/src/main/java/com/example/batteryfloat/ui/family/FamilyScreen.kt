@@ -93,7 +93,18 @@ fun FamilyScreen(
     // 必须先经 onBeforeExternalIntent 标记"外部跳转"，避免 HIDE_RECENTS 把应用 finish 掉
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
-    ) { _ -> }
+    ) { result ->
+        // 授权后：未加入家庭则引导加入，已加入则自动开启服务
+        if (result.values.any { it }) {
+            val code = prefs.getString(PrefsKeys.FAMILY_CODE, "") ?: ""
+            if (code.isBlank()) {
+                route = FamilyRoute.Add
+            } else {
+                FamilyLocationService.start(context)
+                serviceOn = true
+            }
+        }
+    }
     LaunchedEffect(Unit) {
         // 仅请求前台定位 + 通知权限（后台位置权限无需：前台服务响应定位用 while-in-use 即可）
         val missing = listOf(
@@ -106,6 +117,10 @@ fun FamilyScreen(
         if (missing.isNotEmpty()) {
             onBeforeExternalIntent()
             permissionLauncher.launch(missing.toTypedArray())
+        } else if ((prefs.getString(PrefsKeys.FAMILY_CODE, "") ?: "").isNotBlank() && !isServiceRunning(context)) {
+            // 已授权且已加入家庭：自动开启位置共享服务，保证可被家人请求到位置
+            FamilyLocationService.start(context)
+            serviceOn = true
         }
     }
 
@@ -118,6 +133,8 @@ fun FamilyScreen(
         FamilyRoute.Add -> AddFamilyScreen(
             onDone = {
                 route = FamilyRoute.List
+                // 加入家庭后自动开启位置共享服务
+                FamilyLocationService.start(context)
                 serviceOn = true
             },
             // 权限弹窗会触发 MainActivity.onUserLeaveHint，需标记外部跳转防 finish
