@@ -19,15 +19,17 @@
 
   // 标记图标：我的位置蓝色圆点，家人红色圆点（SVG data URI，无外部资源依赖）
   function myIcon() {
+    // 蓝色圆点（base64 PNG，WebView 下比 data URI SVG 更可靠）
     return new BMap.Icon(
-      "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24'><circle cx='12' cy='12' r='9' fill='%231E88E5' stroke='white' stroke-width='2'/></svg>",
+      "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAYAAADgdz34AAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAAHcSURBVEhL5VU9SwNBEE1paWklaQQLf0CwSmmnlaQSG8HCImAjVrFKCiGVpLFSUAiIpBAUBC2EFEIECwOiiEiMaDSJRnMSd0besRuT2XzcWdj44BV3u/Pe7OzsbiDwb8DMQWYOt3BUzvkViChKRGfcAUR0w8wxZh6QcX2BDIkoa8ScBnH21mnysaZajfJEFJIaXcHMs0opB8EQWsi88HCiYHF6q8S5wmfTCKuRWhaQuVLkiqfP33ksWbSEJRPHVayQ9GoiUrMNpiybuZol1IvLBxVTriIzD0ldF9hQTLqrfPHI6r0l0o/YG22yK7Vd6K7guZ1nK9gLx1MPP7shOwu1x9+qo6xAP7wqNcwq2ruKmacwsH9Zt4L8MHPxYQzm2wzwAwPoHBnkh+gobZCSBhEMIAMZ5IfrpzVjEJUGIQyghjLID83BI6KJNgNtUsYgukEGeiFaG1eKxqDUh0EKI0fXjhXshWvZN5N9Xmq7wAlUitxmXtwrWwK9OLnxZDIHwlK7CbPZ1bqimXTJEupEiOP06+zjUtMCEW2bVHpdeKi5KYsWx7vh7W1g5iUiqptg3DNowZXDCidPXt1vnPoW8bhncQP56HSCvj2719wLsPn6HY7p8uGZxNUSlHP/HN99IB7WBQ3q9AAAAABJRU5ErkJggg==",
       new BMap.Size(24, 24),
       { anchor: new BMap.Size(12, 12) }
     );
   }
   function familyIcon() {
+    // 红色圆点（base64 PNG）
     return new BMap.Icon(
-      "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24'><circle cx='12' cy='12' r='9' fill='%23E53935' stroke='white' stroke-width='2'/></svg>",
+      "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAYAAADgdz34AAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAAHeSURBVEhL5VU9SwNBELW0tLRM6R8QIhYGQbASsUqpYBEQJIKgIEIEIWAhFmJALMRCbdRCG7HRxjSKhUJKbUwCniZeoknQm5F37sZkNh93FjY+eM3NzpvZ2bmZjo5/A2YOMHOohj3yzK9ARFEiuuEGIKJ7Zo4xc6f0awtkSETJqlilwuXrqyody6oNlCKioNRoCmYedxynDGcIvSwu8GNfr0FrKsKVu9tqINxGahlwM1fibyfHnBkaNIQlXzfWcUNStwlLzTroshQPDwyhVsyvxHW5MszcLXVd4EFx6DOd5vRAvyHSjngbFeRIartQXcHPc7OGsxdmx0Z+XkN2FmqPr07BNhz98OPBzRG3qO8qZh6FoXRxbjj54fvZqQ4QqQuADzCgc6STH6KjVICEDBCGARlIJz8s7u/qAFEZIAgDaiid/FD/eEQ0XBdABcnBiG6Qjl6I1sZIUeiS+giQgKWcvDScvbCws62zT0ltF/gDyXGyOJRbXjIEWvFpckJnDoSkdhX6sR3bJmtm2hBqRIjj71fZx6WmASLa06m0GniouS6LEsfe8LYbmHmeiEraGXMGLZhfW2V7a/N7JxTsWnFMO2/iGnLpNIKans1r7gV4fLWHY6p8WJMYLQF59s/xBVDC8691EJ8nAAAAAElFTkSuQmCC",
       new BMap.Size(24, 24),
       { anchor: new BMap.Size(12, 12) }
     );
@@ -57,6 +59,7 @@
   // 原生侧数据更新入口：data = { my: {lat,lng}|null, targets: [{lat,lng,title}] }
   function applyData(data) {
     if (!map) return;
+    console.log('applyData: my=' + (data && data.my ? 1 : 0) + ' targets=' + (data && data.targets ? data.targets.length : 0));
     map.clearOverlays();
     var points = [];
     if (data && data.my) {
@@ -97,6 +100,7 @@
   function addressOf(point, uid) {
     if (!geocoder) return;
     geocoder.getLocation(point, function (result) {
+      console.log('addr: uid=' + uid + ' result=' + (result ? (result.address ? 'HAS_ADDRESS' : 'NO_ADDRESS') : 'NULL'));
       if (result && result.address) {
         try {
           AndroidBridge.onAddress(uid, result.address);
@@ -114,14 +118,6 @@
   // getscript 直接静态引入（绕过 api?v=3.0 的 document.write 引导层，避免 WebView 时序问题）。
   // 脚本加载执行后 BMap 即全局可用：轮询等待就绪后调用 initMap，超时显示错误提示。
   (function () {
-    // 诊断：BMap 依赖 WebGL，检测环境支持情况
-    try {
-      var probeCanvas = document.createElement('canvas');
-      var gl = probeCanvas.getContext('webgl') || probeCanvas.getContext('experimental-webgl');
-      console.log('WEBGL: ' + (gl ? 'yes' : 'no'));
-    } catch (e) {
-      console.log('WEBGL: error ' + e.message);
-    }
     var tries = 0;
     var timer = setInterval(function () {
       tries++;

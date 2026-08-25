@@ -20,6 +20,8 @@
 -keep class com.example.batteryfloat.p2p.** { *; }
 -keep class com.example.batteryfloat.family.** { *; }
 -keep class com.example.batteryfloat.location.** { *; }
+# 地图数据类(MapData/MapPoint)是 WebView 跨 JS 边界的 Gson 契约,字段名不可混淆
+-keep class com.example.batteryfloat.map.** { *; }
 # 百度地图 SDK
 -keep class com.baidu.** { *; }
 -dontwarn com.baidu.**
