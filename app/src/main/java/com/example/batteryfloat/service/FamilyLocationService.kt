@@ -69,6 +69,16 @@ class FamilyLocationService : Service() {
                 if (uid.isNotBlank()) requestMemberLocation(uid)
                 return START_STICKY
             }
+            ACTION_APPROVE_JOIN -> {
+                val uid = intent.getStringExtra(EXTRA_JOIN_UID) ?: ""
+                if (uid.isNotBlank()) signal?.sendJoinApprove(uid)
+                return START_STICKY
+            }
+            ACTION_REJECT_JOIN -> {
+                val uid = intent.getStringExtra(EXTRA_JOIN_UID) ?: ""
+                if (uid.isNotBlank()) signal?.sendJoinReject(uid)
+                return START_STICKY
+            }
             else -> {
                 // ACTION_START（含重复点击）= 全量重建连接（家庭码可能已变更）
                 setup()
@@ -164,9 +174,27 @@ class FamilyLocationService : Service() {
             SignalTypes.REGISTERED -> {
                 val peers = msg.peers ?: emptyList()
                 Log.i(TAG, "registered, peers=" + peers.size)
+                // 注册成功（创建人或被批准）：清除等待审核状态
+                s.setJoinState(FamilyStore.JoinState.NONE)
                 for (peer in peers) {
                     s.upsertMember(peer.uid, peer.name, peer.online)
                 }
+            }
+
+            SignalTypes.JOIN_PENDING -> {
+                Log.i(TAG, "加入申请已提交，等待创建人审核")
+                s.setJoinState(FamilyStore.JoinState.PENDING)
+            }
+
+            SignalTypes.JOIN_REJECTED -> {
+                Log.i(TAG, "加入申请被拒绝")
+                s.setJoinState(FamilyStore.JoinState.REJECTED)
+            }
+
+            SignalTypes.JOIN_REQUEST -> {
+                val uid = msg.uid ?: return
+                Log.i(TAG, "收到加入申请: " + (msg.name ?: uid))
+                s.addPendingJoin(uid, msg.name ?: "")
             }
 
             SignalTypes.PRESENCE -> {
@@ -217,7 +245,10 @@ class FamilyLocationService : Service() {
         const val ACTION_START = "com.yongge.batteryfloat.action.FAMILY_START"
         const val ACTION_STOP = "com.yongge.batteryfloat.action.FAMILY_STOP"
         const val ACTION_REQUEST_LOCATION = "com.yongge.batteryfloat.action.FAMILY_REQ_LOC"
+        const val ACTION_APPROVE_JOIN = "com.yongge.batteryfloat.action.FAMILY_APPROVE_JOIN"
+        const val ACTION_REJECT_JOIN = "com.yongge.batteryfloat.action.FAMILY_REJECT_JOIN"
         const val EXTRA_UID = "uid"
+        const val EXTRA_JOIN_UID = "join_uid"
 
         private val _connection = MutableStateFlow<SignalClient.State>(SignalClient.State.Idle)
         /** 信令连接状态（服务内收集，UI 观察） */
@@ -260,6 +291,24 @@ class FamilyLocationService : Service() {
                 Intent(context, FamilyLocationService::class.java)
                     .setAction(ACTION_REQUEST_LOCATION)
                     .putExtra(EXTRA_UID, uid)
+            )
+        }
+
+        /** 创建人批准加入申请 */
+        fun approveJoin(context: Context, uid: String) {
+            context.startService(
+                Intent(context, FamilyLocationService::class.java)
+                    .setAction(ACTION_APPROVE_JOIN)
+                    .putExtra(EXTRA_JOIN_UID, uid)
+            )
+        }
+
+        /** 创建人拒绝加入申请 */
+        fun rejectJoin(context: Context, uid: String) {
+            context.startService(
+                Intent(context, FamilyLocationService::class.java)
+                    .setAction(ACTION_REJECT_JOIN)
+                    .putExtra(EXTRA_JOIN_UID, uid)
             )
         }
     }

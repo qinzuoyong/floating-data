@@ -11,10 +11,24 @@ import com.google.gson.JsonObject
 object SignalTypes {
     /** 客户端 → 服务器：注册/上线 */
     const val REGISTER = "register"
-    /** 服务器 → 客户端：注册回执（携带同房在线成员） */
+    /** 服务器 → 客户端：注册回执（携带同房在线成员；创建人直接收到，加入者批准后收到） */
     const val REGISTERED = "registered"
     /** 服务器 → 客户端：成员上下线广播（全房间） */
     const val PRESENCE = "presence"
+    /** 客户端 → 服务器：查询家庭码是否被占用 */
+    const val ROOM_CHECK = "room-check"
+    /** 服务器 → 客户端：家庭码占用结果 */
+    const val ROOM_CHECK_RES = "room-check-res"
+    /** 服务器 → 客户端：加入者等待创建人审核 */
+    const val JOIN_PENDING = "join-pending"
+    /** 服务器 → 客户端：通知创建人有新的加入申请 */
+    const val JOIN_REQUEST = "join-request"
+    /** 客户端 → 服务器：创建人批准加入 */
+    const val JOIN_APPROVE = "join-approve"
+    /** 客户端 → 服务器：创建人拒绝加入 */
+    const val JOIN_REJECT = "join-reject"
+    /** 服务器 → 客户端：加入申请被拒绝 */
+    const val JOIN_REJECTED = "join-rejected"
     /** 请求某成员位置（中继） */
     const val LOC_REQ = "loc-req"
     /** 位置应答（中继给请求方） */
@@ -41,7 +55,11 @@ data class SignalMessage(
     val peers: List<PeerInfo>? = null,
     val payload: JsonObject? = null,
     val code: String? = null,
-    val message: String? = null
+    val message: String? = null,
+    /** room-check-res：家庭码是否被占用 */
+    val exists: Boolean? = null,
+    /** room-check-res：创建人备注名 */
+    val ownerName: String? = null
 )
 
 /** 房间内成员摘要（注册回执与 presence 使用） */

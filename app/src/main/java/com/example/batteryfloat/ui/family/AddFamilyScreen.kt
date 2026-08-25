@@ -42,9 +42,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import com.example.batteryfloat.BuildConfig
 import com.example.batteryfloat.R
 import com.example.batteryfloat.PrefsKeys
 import com.example.batteryfloat.family.FamilyStore
+import com.example.batteryfloat.p2p.SignalClient
 import com.example.batteryfloat.service.FamilyLocationService
 import com.example.batteryfloat.ui.PrimaryActionButton
 import com.example.batteryfloat.ui.SectionTitle
@@ -80,9 +82,23 @@ fun AddFamilyScreen(
         store.setFamilyCode(code)
         store.setMyName(name)
         store.setAllowLocReq(allowLoc)
+        // 加入/更换家庭：清空旧家庭成员，避免残留旧房间成员
+        store.clearMembers()
         // 单一 start：服务 setup() 幂等重建连接（家庭码变化自动生效）
         FamilyLocationService.start(context)
         onDone()
+    }
+
+    // 提交前查询家庭码占用情况（仅提示用途，不影响流程；失败按已占用处理走加入流程）
+    val joinWithCheck: () -> Unit = {
+        SignalClient(BuildConfig.SIGNAL_URL).checkRoom(code) { exists, ownerName ->
+            if (!exists) {
+                Toast.makeText(context, "家庭码可用，将创建新家庭", Toast.LENGTH_SHORT).show()
+            } else if (ownerName != null) {
+                Toast.makeText(context, "已加入" + ownerName + "的家庭", Toast.LENGTH_SHORT).show()
+            }
+            doSubmit()
+        }
     }
 
     // 提交前主动请求定位权限：授权成功自动继续提交，拒绝则提示并停留
@@ -92,7 +108,7 @@ fun AddFamilyScreen(
         if (result[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
             result[Manifest.permission.ACCESS_COARSE_LOCATION] == true
         ) {
-            doSubmit()
+            joinWithCheck()
         } else {
             Toast.makeText(context, "需要定位权限才能使用家人位置共享", Toast.LENGTH_LONG).show()
         }
@@ -190,7 +206,7 @@ fun AddFamilyScreen(
                             )
                             return@PrimaryActionButton
                         }
-                        doSubmit()
+                        joinWithCheck()
                     },
                     modifier = Modifier.fillMaxWidth()
                 )

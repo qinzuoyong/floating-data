@@ -32,8 +32,10 @@ class SignalClient(
         data object Idle : State
         /** 正在连接 */
         data object Connecting : State
-        /** 已连接并注册成功 */
+        /** 已连接并注册成功（创建人或已批准成员） */
         data class Connected(val room: String, val uid: String) : State
+        /** 已注册但等待创建人审核（加入者） */
+        data class PendingApproval(val room: String) : State
         /** 连接断开（reason 用于日志） */
         data class Disconnected(val reason: String) : State
     }
@@ -108,6 +110,70 @@ class SignalClient(
         )
     }
 
+    /** 创建人批准加入申请 */
+    fun sendJoinApprove(targetUid: String) {
+        sendRaw(
+            JsonObject().apply {
+                addProperty("type", SignalTypes.JOIN_APPROVE)
+                addProperty("uid", targetUid)
+            }
+        )
+    }
+
+    /** 创建人拒绝加入申请 */
+    fun sendJoinReject(targetUid: String) {
+        sendRaw(
+            JsonObject().apply {
+                addProperty("type", SignalTypes.JOIN_REJECT)
+                addProperty("uid", targetUid)
+            }
+        )
+    }
+
+    /**
+     * 查询家庭码是否被占用（独立临时连接，不注册；用于创建/加入家庭前提示）
+     *
+     * @param room 6 位家庭码
+     * @param onResult 结果回调（Main 线程）：exists=是否已有家庭，ownerName=创建人备注名
+     */
+    fun checkRoom(room: String, onResult: (exists: Boolean, ownerName: String?) -> Unit) {
+        val checker = object : WebSocketClient(URI.create(url)) {
+            override fun onOpen(handshakedata: ServerHandshake?) {
+                send(
+                    gson.toJson(
+                        JsonObject().apply {
+                            addProperty("type", SignalTypes.ROOM_CHECK)
+                            addProperty("room", room)
+                        }
+                    )
+                )
+            }
+
+            override fun onMessage(message: String?) {
+                val raw = message ?: return
+                val msg = try {
+                    gson.fromJson(raw, SignalMessage::class.java)
+                } catch (e: Exception) {
+                    return
+                }
+                if (msg.type == SignalTypes.ROOM_CHECK_RES) {
+                    val exists = msg.exists == true
+                    scope.launch {
+                        onResult(exists, msg.ownerName)
+                        runCatching { close() }
+                    }
+                }
+            }
+
+            override fun onClose(code: Int, reason: String?, remote: Boolean) {}
+            override fun onError(ex: Exception?) {}
+        }
+        runCatching { checker.connect() }
+            .onFailure {
+                scope.launch { onResult(true, null) } // 查询失败按"已占用"处理（走加入流程兜底）
+            }
+    }
+
     // ===== 内部 =====
 
     private fun sendRaw(obj: JsonObject) {
@@ -155,6 +221,10 @@ class SignalClient(
                 when (msg.type) {
                     SignalTypes.REGISTERED -> {
                         _state.value = State.Connected(room, uid)
+                        scope.launch { onMessage?.invoke(msg) }
+                    }
+                    SignalTypes.JOIN_PENDING -> {
+                        _state.value = State.PendingApproval(room)
                         scope.launch { onMessage?.invoke(msg) }
                     }
                     else -> scope.launch { onMessage?.invoke(msg) }

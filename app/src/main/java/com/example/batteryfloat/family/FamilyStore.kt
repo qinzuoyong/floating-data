@@ -53,6 +53,17 @@ class FamilyStore private constructor(context: Context) {
     /** 成员 uid → 成员（含上次位置/在线状态），UI 观察入口 */
     val members: StateFlow<Map<String, FamilyMember>> = _members.asStateFlow()
 
+    /** 加入审核状态（加入者视角：NONE=正常/未申请，PENDING=等待创建人审核，REJECTED=被拒绝） */
+    enum class JoinState { NONE, PENDING, REJECTED }
+
+    private val _pendingJoins = MutableStateFlow<Map<String, String>>(emptyMap())
+    /** 待审核的加入申请（uid → 备注名），创建人视角，UI 观察入口 */
+    val pendingJoins: StateFlow<Map<String, String>> = _pendingJoins.asStateFlow()
+
+    private val _joinState = MutableStateFlow(JoinState.NONE)
+    /** 我的加入审核状态（加入者视角），UI 观察入口 */
+    val joinState: StateFlow<JoinState> = _joinState.asStateFlow()
+
     init {
         loadMembers()
     }
@@ -153,6 +164,28 @@ class FamilyStore private constructor(context: Context) {
         val current = _members.value[uid] ?: FamilyMember(uid = uid)
         _members.value = _members.value + (uid to current.copy(note = note.trim()))
         persistMembers()
+    }
+
+    // ===== 加入审核 =====
+
+    /** 记录一条加入申请（创建人视角，信令 join-request 到达时调用） */
+    fun addPendingJoin(uid: String, name: String) {
+        // 服务器要求审核说明本地残留的旧成员记录已过期：先移除，避免列表 key 冲突
+        if (_members.value.containsKey(uid)) {
+            _members.value = _members.value - uid
+            persistMembers()
+        }
+        _pendingJoins.value = _pendingJoins.value + (uid to name)
+    }
+
+    /** 移除加入申请（创建人批准/拒绝后调用） */
+    fun removePendingJoin(uid: String) {
+        _pendingJoins.value = _pendingJoins.value - uid
+    }
+
+    /** 更新我的加入审核状态（加入者视角：join-pending / join-rejected / registered） */
+    fun setJoinState(state: JoinState) {
+        _joinState.value = state
     }
 
     // ===== 内部 =====
