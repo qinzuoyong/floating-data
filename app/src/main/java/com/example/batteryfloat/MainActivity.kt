@@ -11,8 +11,8 @@ import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import android.util.Log
-import android.view.KeyEvent
 import androidx.activity.ComponentActivity
+import androidx.activity.OnBackPressedCallback
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -47,6 +47,18 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // 返回键统一走 OnBackPressedDispatcher（与 Compose BackHandler 协调：子页面优先级更高）：
+        // 无子页面消费时执行「隐藏后台」退出（防止最近任务泄露）
+        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                if (prefs.getBoolean(PrefsKeys.HIDE_RECENTS, true)) {
+                    Log.i("MainActivity", "隐藏后台(返回键): finishAndRemoveTask")
+                    finishAndRemoveTask()
+                } else {
+                    finish()
+                }
+            }
+        })
         enableEdgeToEdge()
         // ADB 特权通道幂等初始化(已启用则启动自动重连)
         AdbConnectionManager.setup(this)
@@ -311,12 +323,4 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
-        if (keyCode == KeyEvent.KEYCODE_BACK && prefs.getBoolean(PrefsKeys.HIDE_RECENTS, true)) {
-            Log.i("MainActivity", "隐藏后台(返回键): finishAndRemoveTask")
-            finishAndRemoveTask()
-            return true
-        }
-        return super.onKeyDown(keyCode, event)
     }
-}

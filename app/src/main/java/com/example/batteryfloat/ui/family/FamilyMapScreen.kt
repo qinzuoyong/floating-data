@@ -3,6 +3,7 @@ package com.example.batteryfloat.ui.family
 import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -84,6 +85,9 @@ fun FamilyMapScreen(
         onRefresh()
         refreshMyLocation(context, scope, locating, { locating = it }, { myLoc = it })
     }
+
+    // 系统返回键与左上角返回箭头一致：回列表页（不退出应用）
+    BackHandler(onBack = onBack)
 
     // 距离：我的位置与家人位置（两者齐备时显示）
     val distanceText = remember(myLoc, live.lastLat, live.lastLng) {

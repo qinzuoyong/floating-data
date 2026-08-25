@@ -53,7 +53,8 @@ class OnDemandLocationProvider(private val context: Context) {
                 val payload = LocationPayload(
                     lat = loc.latitude,
                     lng = loc.longitude,
-                    ts = loc.time,
+                    // 以收到本次定位的时刻为准，避免 mock/异常定位源的旧时间戳
+                    ts = System.currentTimeMillis(),
                     accuracy = loc.accuracy ?: 0f
                 )
                 synchronized(lock) {
@@ -87,7 +88,7 @@ class OnDemandLocationProvider(private val context: Context) {
                 return LocationPayload(
                     lat = last.latitude,
                     lng = last.longitude,
-                    ts = last.time,
+                    ts = System.currentTimeMillis(),
                     accuracy = last.accuracy ?: 0f
                 )
             }
