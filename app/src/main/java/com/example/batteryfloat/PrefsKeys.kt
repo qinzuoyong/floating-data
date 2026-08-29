@@ -49,6 +49,8 @@ object PrefsKeys {
     const val ADB_PRIV_ENABLED = "adb_priv_enabled"
     /** ADB 通道连通后自动开启所需权限(WRITE_SECURE_SETTINGS/无障碍/悬浮窗,默认关) */
     const val ADB_AUTO_GRANT = "adb_auto_grant"
+    /** Shizuku 授权请求已发起过(用户拒绝后不重复弹窗) */
+    const val SHIZUKU_PERM_REQUESTED = "shizuku_perm_requested"
     /** 用户在应用内主动关闭无障碍保活(此时系统侧被关视为用户意图,自愈不触发) */
     const val A11Y_USER_DISABLED = "a11y_user_disabled"
 

@@ -249,6 +249,8 @@ object AdbConnectionManager {
                 // 幂等自动授权引导(独立协程:其内部 exec 会走 ensureConnected,
                 // 若在持锁协程内调用会重入 connectMutex 死锁)
                 AdbAutoGrant.onConnected(ctx)
+                // 借本通道拉起 Shizuku 常驻服务(无线调试关闭后特权能力的载体)
+                ShizukuChannel.onConnected(ctx)
                 c
             } else {
                 Log.w(TAG, "连接自检失败: $id")

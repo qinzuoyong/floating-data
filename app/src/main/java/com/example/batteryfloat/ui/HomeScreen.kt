@@ -39,6 +39,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.example.batteryfloat.PrefsKeys
 import com.example.batteryfloat.adb.AdbConnectionManager
 import com.example.batteryfloat.adb.AdbState
+import com.example.batteryfloat.adb.PrivShell
 import com.example.batteryfloat.service.A11ySelfHealer
 import com.example.batteryfloat.service.FloatingWindowService
 import com.example.batteryfloat.service.KeepAliveAccessibilityService
@@ -76,6 +77,8 @@ fun HomeScreen(
     var adbEnabled by remember { mutableStateOf(prefs.getBoolean(PrefsKeys.ADB_PRIV_ENABLED, false)) }
     // ADB 连通后自动开启所需权限(方案二,默认关)
     var adbAutoGrant by remember { mutableStateOf(prefs.getBoolean(PrefsKeys.ADB_AUTO_GRANT, false)) }
+    // Shizuku 常驻服务可用性(页面恢复时刷新;生效时无线调试可关)
+    var shizukuAlive by remember { mutableStateOf(PrivShell.shizukuReady()) }
     var showAdbPairing by remember { mutableStateOf(false) }
     val adbState by AdbConnectionManager.state.collectAsState()
 
@@ -88,6 +91,9 @@ fun HomeScreen(
                 a11yKeepAlive = KeepAliveAccessibilityService.isEnabledInSettings(context)
                 adbEnabled = prefs.getBoolean(PrefsKeys.ADB_PRIV_ENABLED, false)
                 adbAutoGrant = prefs.getBoolean(PrefsKeys.ADB_AUTO_GRANT, false)
+                shizukuAlive = PrivShell.shizukuReady()
+                // Shizuku 服务在跑但未授权时弹一次管理器授权对话框(永久授权)
+                PrivShell.requestPermissionIfNeeded(context)
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -257,6 +263,7 @@ fun HomeScreen(
                 adbState == AdbState.CONNECTED -> "已连接 · 高精度数据生效(功率直读)"
                 adbState == AdbState.NOT_PAIRED -> "未配对——重新打开开关,按通知栏引导配对"
                 adbState == AdbState.AUTH_FAILED -> "设备已撤销信任——请点击下方「重新配对」"
+                shizukuAlive -> "Shizuku 常驻通道生效 · 无线调试可关闭"
                 else -> {
                     val ago = AdbConnectionManager.lastSuccessAgoText()
                     if (ago != null) "重连中,暂用基础数据源(最近成功 $ago)"

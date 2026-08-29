@@ -8,7 +8,7 @@ import android.provider.Settings
 import android.util.Log
 import androidx.core.content.ContextCompat
 import com.example.batteryfloat.PrefsKeys
-import com.example.batteryfloat.adb.AdbConnectionManager
+import com.example.batteryfloat.adb.PrivShell
 import com.example.batteryfloat.notif.Notifs
 import kotlinx.coroutines.*
 import java.util.concurrent.atomic.AtomicBoolean
@@ -104,8 +104,9 @@ object A11ySelfHealer {
     private suspend fun writeBack(ctx: Context): Boolean {
         // 主路径:已持权直接写
         if (hasSecureWritePermission(ctx)) return writeSelfDirect(ctx)
-        // 权限未到手:借内置 ADB 通道自授(通道离线 exec 返回 null,自然走辅路径)
-        if (AdbConnectionManager.exec(
+        // 权限未到手:借特权通道自授(PrivShell:Shizuku 优先/内置 ADB 后备;
+        // 全部离线时返回 null,自然走辅路径)
+        if (PrivShell.exec(
                 "pm grant ${ctx.packageName} android.permission.WRITE_SECURE_SETTINGS"
             ) != null && hasSecureWritePermission(ctx)
         ) {
@@ -114,7 +115,7 @@ object A11ySelfHealer {
         }
         // 辅路径:shell 域直接写(追加保留既有服务)
         Log.i(TAG, "pm grant 不可用,退化 shell 写回")
-        return AdbConnectionManager.exec(buildShellWriteCmd(ctx)) != null
+        return PrivShell.exec(buildShellWriteCmd(ctx)) != null
     }
 
     private fun hasSecureWritePermission(ctx: Context): Boolean =

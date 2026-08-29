@@ -1,8 +1,7 @@
 package com.example.batteryfloat.data
 
 import android.content.Context
-import com.example.batteryfloat.adb.AdbConnectionManager
-import com.example.batteryfloat.adb.AdbState
+import com.example.batteryfloat.adb.PrivShell
 
 /**
  * 高精度电池数据源(ADB shell 特权档)
@@ -24,8 +23,9 @@ class PrivBatteryProvider(context: Context) : BatteryProvider {
 
     override suspend fun sample(): BatterySample? {
         val base = basic.sample() ?: return null
-        if (AdbConnectionManager.state.value != AdbState.CONNECTED) return base
-        val out = AdbConnectionManager.exec(READ_CMD) ?: return base
+        // 门控改为"任一特权通道可用":Shizuku 常驻服务在跑时,无线调试关闭也可直读
+        if (!PrivShell.canExec()) return base
+        val out = PrivShell.exec(READ_CMD) ?: return base
         return merge(base, out)
     }
 

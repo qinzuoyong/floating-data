@@ -51,7 +51,7 @@ object AdbAutoGrant {
     /** 步骤 1:WRITE_SECURE_SETTINGS 自授 */
     private suspend fun grantSecureSettings(ctx: Context) {
         if (hasPermission(ctx, "android.permission.WRITE_SECURE_SETTINGS")) return
-        val out = AdbConnectionManager.exec(
+        val out = PrivShell.exec(
             "pm grant ${ctx.packageName} android.permission.WRITE_SECURE_SETTINGS"
         )
         if (hasPermission(ctx, "android.permission.WRITE_SECURE_SETTINGS")) {
@@ -73,7 +73,7 @@ object AdbAutoGrant {
     /** 步骤 3:悬浮窗权限 appop 放行 */
     private suspend fun grantOverlay(ctx: Context) {
         if (Settings.canDrawOverlays(ctx)) return
-        val out = AdbConnectionManager.exec(
+        val out = PrivShell.exec(
             "appops set ${ctx.packageName} SYSTEM_ALERT_WINDOW allow"
         )
         if (Settings.canDrawOverlays(ctx)) {
@@ -87,7 +87,7 @@ object AdbAutoGrant {
     private suspend fun grantLocation(ctx: Context) {
         for (perm in LOCATION_PERMISSIONS) {
             if (hasPermission(ctx, perm)) continue
-            val out = AdbConnectionManager.exec("pm grant ${ctx.packageName} $perm")
+            val out = PrivShell.exec("pm grant ${ctx.packageName} $perm")
             if (hasPermission(ctx, perm)) {
                 Log.i(TAG, "已授予 $perm")
             } else {
