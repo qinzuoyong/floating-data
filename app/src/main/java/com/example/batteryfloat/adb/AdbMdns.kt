@@ -161,32 +161,37 @@ class AdbMdns(
     }
 
     private fun onServiceResolved(resolvedService: NsdServiceInfo) {
-        // 本机接口枚举与端口探测是阻塞 IO,移出 NSD 回调(主线程)执行
-        executor.execute {
-            val isLocal = try {
-                NetworkInterface.getNetworkInterfaces()
-                    .asSequence()
-                    .any { networkInterface ->
-                        networkInterface.inetAddresses
-                            .asSequence()
-                            .any { resolvedService.host.hostAddress == it.hostAddress }
-                    }
-            } catch (e: Exception) {
-                Log.w(TAG, "本机接口枚举失败: ${e.message}")
-                false
-            }
-            if (!isLocal || !running) return@execute
-            val portFree = isPortAvailable(resolvedService.port)
-            if (portFree && running) {
-                mainHandler.post {
-                    if (running && !serviceFound) {
-                        serviceFound = true
-                        serviceName = resolvedService.serviceName
-                        mainHandler.removeCallbacks(refreshRunnable)
-                        observer(resolvedService.port)
+        // 本机接口枚举与端口探测是阻塞 IO,移出 NSD 回调(主线程)执行;
+        // stop() 会关闭线程池,窗口结束后的迟到回调在这里被拒绝——丢弃即可,绝不能崩
+        try {
+            executor.execute {
+                val isLocal = try {
+                    NetworkInterface.getNetworkInterfaces()
+                        .asSequence()
+                        .any { networkInterface ->
+                            networkInterface.inetAddresses
+                                .asSequence()
+                                .any { resolvedService.host.hostAddress == it.hostAddress }
+                        }
+                } catch (e: Exception) {
+                    Log.w(TAG, "本机接口枚举失败: ${e.message}")
+                    false
+                }
+                if (!isLocal || !running) return@execute
+                val portFree = isPortAvailable(resolvedService.port)
+                if (portFree && running) {
+                    mainHandler.post {
+                        if (running && !serviceFound) {
+                            serviceFound = true
+                            serviceName = resolvedService.serviceName
+                            mainHandler.removeCallbacks(refreshRunnable)
+                            observer(resolvedService.port)
+                        }
                     }
                 }
             }
+        } catch (_: java.util.concurrent.RejectedExecutionException) {
+            Log.v(TAG, "发现窗口已结束,丢弃迟到解析结果")
         }
     }
 
