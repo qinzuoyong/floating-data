@@ -37,46 +37,70 @@ class OnDemandLocationProvider(private val context: Context) {
      * - NETWORK 先回（快、误差大）→ 先发射粗位置，蓝点快速出现
      * - GPS 后回（精确）→ 若 accuracy 更小则发射，蓝点更新到精确位置
      * - GPS 先回（室外）→ 直接精确，后到的 NETWORK 粗位置因 accuracy 更大被丢弃
+     * - 全部 Provider 超时无果 → 兜底发射 lastKnown（有总比没有好）
      *
-     * @param timeoutMs 单 Provider 等待上限
+     * 调用方应收集整条流：每个发射都比上一个更精确（先粗后精多次回传依赖此语义）。
+     *
+     * @param timeoutMs 单 Provider 等待上限（GPS 冷启动较慢，默认给足精化窗口）
      */
-    fun currentLocationFlow(timeoutMs: Long = 6_000L): Flow<LocationPayload> = channelFlow {
+    fun currentLocationFlow(timeoutMs: Long = 12_000L): Flow<LocationPayload> = channelFlow {
         val providers = enabledProviders()
-        if (providers.isEmpty()) return@channelFlow
+        var emitted = false
+        if (providers.isNotEmpty()) {
+            var best: LocationPayload? = null
+            val lock = Any()
 
-        var best: LocationPayload? = null
-        val lock = Any()
-
-        val jobs = providers.map { provider ->
-            launch {
-                val loc = requestOnce(provider, timeoutMs) ?: return@launch
-                val payload = LocationPayload(
-                    lat = loc.latitude,
-                    lng = loc.longitude,
-                    // 以收到本次定位的时刻为准，避免 mock/异常定位源的旧时间戳
-                    ts = System.currentTimeMillis(),
-                    accuracy = loc.accuracy ?: 0f
-                )
-                synchronized(lock) {
-                    val b = best
-                    if (b == null || payload.accuracy < b.accuracy) {
-                        best = payload
-                        trySend(payload)
+            val jobs = providers.map { provider ->
+                launch {
+                    val loc = requestOnce(provider, timeoutMs) ?: return@launch
+                    val payload = LocationPayload(
+                        lat = loc.latitude,
+                        lng = loc.longitude,
+                        // 以收到本次定位的时刻为准，避免 mock/异常定位源的旧时间戳
+                        ts = System.currentTimeMillis(),
+                        accuracy = accuracyOf(loc)
+                    )
+                    synchronized(lock) {
+                        val b = best
+                        if (b == null || payload.accuracy < b.accuracy) {
+                            best = payload
+                            emitted = true
+                            trySend(payload)
+                        }
                     }
                 }
             }
+            jobs.joinAll()
         }
-        jobs.joinAll()
+
+        // 兜底：所有 Provider 超时/无果时用最近已知位置收尾，保证流至少发射一次
+        if (!emitted) {
+            for (provider in enabledProviders()) {
+                val last = runCatching { lm.getLastKnownLocation(provider) }.getOrNull() ?: continue
+                trySend(
+                    LocationPayload(
+                        lat = last.latitude,
+                        lng = last.longitude,
+                        ts = System.currentTimeMillis(),
+                        accuracy = accuracyOf(last)
+                    )
+                )
+                break
+            }
+        }
     }
 
     /**
      * 取一次定位（并发流的第一个发射，快速响应；全失败回退 lastKnown）
      *
+     * 注意：只取首个（通常是 NETWORK 粗定位）。需要精化结果的调用方
+     * （如响应家人位置请求）应直接收集 [currentLocationFlow] 全部发射。
+     *
      * @param timeoutMs 等待上限
      * @return 位置载荷；失败/无权限返回 null
      */
     @SuppressLint("MissingPermission")
-    suspend fun getCurrentLocation(timeoutMs: Long = 6_000L): LocationPayload? {
+    suspend fun getCurrentLocation(timeoutMs: Long = 12_000L): LocationPayload? {
         val first = withTimeoutOrNull(timeoutMs) { currentLocationFlow(timeoutMs).first() }
         if (first != null) return first
 
@@ -89,7 +113,7 @@ class OnDemandLocationProvider(private val context: Context) {
                     lat = last.latitude,
                     lng = last.longitude,
                     ts = System.currentTimeMillis(),
-                    accuracy = last.accuracy ?: 0f
+                    accuracy = accuracyOf(last)
                 )
             }
         }
@@ -103,6 +127,13 @@ class OnDemandLocationProvider(private val context: Context) {
             LocationManager.NETWORK_PROVIDER,
             LocationManager.GPS_PROVIDER
         ).filter { runCatching { lm.isProviderEnabled(it) }.getOrDefault(false) }
+
+    /**
+     * 位置精度（米）：系统未报告精度时返回大值（视为未知，
+     * 不参与"更优精度"竞争，避免无精度定位永久占优）
+     */
+    private fun accuracyOf(loc: Location): Float =
+        if (loc.hasAccuracy()) loc.accuracy else 10_000f
 
     /** 单个 Provider 的一次性定位请求（可取消；超时由协程取消触发） */
     @SuppressLint("MissingPermission")
