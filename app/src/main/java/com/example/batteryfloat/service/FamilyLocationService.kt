@@ -98,6 +98,7 @@ class FamilyLocationService : Service() {
 
     override fun onDestroy() {
         Log.i(TAG, "onDestroy")
+        provider?.stopContinuous()
         signal?.disconnect()
         workScope.cancel()
         super.onDestroy()
@@ -146,13 +147,19 @@ class FamilyLocationService : Service() {
         }
         val s = FamilyStore.get(this)
         store = s
-        provider = OnDemandLocationProvider(this)
+        provider?.stopContinuous() // 重建通道前先摘除旧订阅，防监听器泄漏
+        val p = OnDemandLocationProvider(this)
+        provider = p
 
         val code = s.familyCode()
         if (code.isBlank()) {
             Log.i(TAG, "未加入家庭，仅驻留前台")
             return
         }
+
+        // 常驻定位缓存（GPS 60s + NETWORK 30s 周期刷新）：loc-req 到达时直接秒回
+        // 精确缓存，不再请求时冷启动定位（参照 Traccar/OwnTracks 常驻订阅模式）
+        p.startContinuous()
 
         // 重建通道（幂等：先清理旧连接）
         signal?.disconnect()
@@ -220,17 +227,28 @@ class FamilyLocationService : Service() {
                     Log.w(TAG, "provider missing, cannot answer " + from)
                     return
                 }
-                workScope.launch {
-                    // 先粗后精多次回传：NETWORK 粗定位先到先发（对方几秒内出图），
-                    // GPS 更优结果到达后再次回传自动覆盖（服务器中继与存储均幂等）
-                    var sent = 0
-                    withContext(Dispatchers.Default) {
-                        p.currentLocationFlow().collect { loc ->
-                            sent++
-                            signal?.sendLocRes(from, loc)
+                // 常驻缓存优先：GPS 级缓存秒回，不冷启动定位
+                val cached = p.freshCached()
+                if (cached != null) {
+                    signal?.sendLocRes(from, cached)
+                }
+                // 缓存缺失或精度差（>50m）才走并发定位流，且只补发比缓存更优的结果
+                if (cached == null || cached.accuracy > GOOD_ACCURACY_M) {
+                    workScope.launch {
+                        var sent = 0
+                        val threshold = cached?.accuracy
+                        withContext(Dispatchers.Default) {
+                            p.currentLocationFlow().collect { loc ->
+                                if (threshold == null || loc.accuracy < threshold) {
+                                    sent++
+                                    signal?.sendLocRes(from, loc)
+                                }
+                            }
+                        }
+                        if (sent == 0 && cached == null) {
+                            Log.w(TAG, "location unavailable, cannot answer " + from)
                         }
                     }
-                    if (sent == 0) Log.w(TAG, "location unavailable, cannot answer " + from)
                 }
             }
 
@@ -257,6 +275,9 @@ class FamilyLocationService : Service() {
 
     companion object {
         private const val TAG = "FamilyLocationService"
+
+        /** 缓存精度阈值：优于该值（米）直接秒回，不再启动并发定位流 */
+        private const val GOOD_ACCURACY_M = 50f
 
         const val ACTION_START = "com.yongge.batteryfloat.action.FAMILY_START"
         const val ACTION_STOP = "com.yongge.batteryfloat.action.FAMILY_STOP"

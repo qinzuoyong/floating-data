@@ -3,6 +3,7 @@ package com.example.batteryfloat.location
 import android.annotation.SuppressLint
 import android.content.Context
 import android.location.Location
+import android.location.LocationListener
 import android.location.LocationManager
 import android.os.CancellationSignal
 import android.util.Log
@@ -30,6 +31,75 @@ class OnDemandLocationProvider(private val context: Context) {
         context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
 
     private val executor = Executors.newSingleThreadExecutor()
+
+    // ===== 常驻定位缓存（参照 Traccar/OwnTracks 常驻订阅模式） =====
+    //
+    // 精确位置不靠"请求时冷启动"，而是前台服务运行期间持续订阅 GPS/NETWORK
+    // 周期更新维护出的缓存；loc-req 到达时直接秒回，不再临时定位。
+
+    private var cache: LocationPayload? = null
+    private val cacheLock = Any()
+    private var continuous = false
+
+    /** 常驻订阅回调：更优精度或缓存过期才覆盖，防止 NETWORK 粗定位劣化 GPS 级缓存 */
+    private val continuousListener = object : LocationListener {
+        override fun onLocationChanged(location: Location) {
+            synchronized(cacheLock) {
+                val c = cache
+                if (c == null || accuracyOf(location) <= c.accuracy ||
+                    System.currentTimeMillis() - c.ts > CACHE_STALE_MS
+                ) {
+                    cache = LocationPayload(
+                        lat = location.latitude,
+                        lng = location.longitude,
+                        ts = System.currentTimeMillis(),
+                        accuracy = accuracyOf(location)
+                    )
+                }
+            }
+        }
+    }
+
+    /**
+     * 开始常驻定位订阅（幂等；前台服务运行期间调用）
+     *
+     * @param gpsIntervalMs GPS 周期（默认 60s，现代 SoC 占空比调度下约 1~3%/小时）
+     * @param networkIntervalMs NETWORK 周期（默认 30s，桥接粗位置）
+     */
+    @SuppressLint("MissingPermission")
+    fun startContinuous(gpsIntervalMs: Long = 60_000L, networkIntervalMs: Long = 30_000L) {
+        if (continuous) return
+        continuous = true
+        val intervals = mapOf(
+            LocationManager.GPS_PROVIDER to gpsIntervalMs,
+            LocationManager.NETWORK_PROVIDER to networkIntervalMs
+        )
+        for ((provider, interval) in intervals) {
+            if (!runCatching { lm.isProviderEnabled(provider) }.getOrDefault(false)) continue
+            try {
+                lm.requestLocationUpdates(provider, interval, 0f, executor, continuousListener)
+            } catch (e: Exception) {
+                Log.w(TAG, "requestLocationUpdates($provider) failed", e)
+            }
+        }
+    }
+
+    /** 停止常驻订阅并清空缓存（服务销毁/重建前调用，防监听器泄漏） */
+    fun stopContinuous() {
+        if (!continuous) return
+        continuous = false
+        runCatching { lm.removeUpdates(continuousListener) }
+        synchronized(cacheLock) { cache = null }
+    }
+
+    /**
+     * 取新鲜缓存（默认 2 分钟内）——loc-req 即时应答用；
+     * null 或精度差时调用方回退到 [currentLocationFlow] 并发定位流
+     */
+    fun freshCached(maxAgeMs: Long = 120_000L): LocationPayload? =
+        synchronized(cacheLock) {
+            cache?.takeIf { System.currentTimeMillis() - it.ts <= maxAgeMs }
+        }
 
     /**
      * 并发定位流：NETWORK 与 GPS 同时请求，按 accuracy 由优到差发射更新。
@@ -155,5 +225,8 @@ class OnDemandLocationProvider(private val context: Context) {
 
     private companion object {
         const val TAG = "OnDemandLocation"
+
+        /** 缓存判过期阈值：超过此时长的缓存不再视为新鲜，请求时重新定位 */
+        const val CACHE_STALE_MS = 5 * 60_000L
     }
 }
