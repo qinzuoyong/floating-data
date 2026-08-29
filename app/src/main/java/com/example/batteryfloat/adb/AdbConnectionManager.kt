@@ -88,6 +88,11 @@ object AdbConnectionManager {
     var lastSuccessAt: Long = 0L
         private set
 
+    /** 最近一次连接失败的归类描述(发现超时/对端关闭/读超时/端口拒绝等),诊断与 UI 用 */
+    @Volatile
+    var lastFailure: String? = null
+        private set
+
     val isReady: Boolean get() = _state.value == AdbState.CONNECTED
 
     /** 最近成功距今的可读描述("刚刚"/"x 分钟前"/"x 小时前");从未成功返回 null */
@@ -229,47 +234,95 @@ object AdbConnectionManager {
             null
         }
         if (port == null || port <= 0) {
+            lastFailure = "NSD 未发现服务"
             _state.value = AdbState.DISCONNECTED
+            logDiag(ctx, "DISCOVER_FAIL 12s 窗口未发现服务")
             return null
         }
 
         _state.value = AdbState.CONNECTING
+        val attempt = try {
+            AdbClient("127.0.0.1", port, k)
+        } catch (e: Throwable) {
+            lastFailure = describeFailure(e)
+            logDiag(ctx, "CONNECT_FAIL $lastFailure (${e.javaClass.simpleName}: ${e.message})")
+            _state.value = AdbState.DISCONNECTED
+            return null
+        }
         return try {
-            val c = AdbClient("127.0.0.1", port, k)
-            c.connect()
+            attempt.connect()
             // 自检:必须是 shell(uid=2000)
             val id = StringBuilder()
-            c.shellCommand("id") { bytes -> id.append(String(bytes)) }
+            attempt.shellCommand("id") { bytes -> id.append(String(bytes)) }
             if (id.toString().contains("uid=2000")) {
                 closeClientQuietly()
-                client = c
+                client = attempt
                 lastSuccessAt = System.currentTimeMillis()
+                lastFailure = null
                 _state.value = AdbState.CONNECTED
                 Log.i(TAG, "特权通道已连接(端口 $port)")
+                logDiag(ctx, "CONNECTED port=$port")
                 // 幂等自动授权引导(独立协程:其内部 exec 会走 ensureConnected,
                 // 若在持锁协程内调用会重入 connectMutex 死锁)
                 AdbAutoGrant.onConnected(ctx)
                 // 借本通道拉起 Shizuku 常驻服务(无线调试关闭后特权能力的载体)
                 ShizukuChannel.onConnected(ctx)
-                c
+                attempt
             } else {
                 Log.w(TAG, "连接自检失败: $id")
-                c.close()
+                lastFailure = "自检失败(id 非 shell 域)"
+                attempt.close()
                 _state.value = AdbState.DISCONNECTED
+                logDiag(ctx, "SELF_CHECK_FAIL id=${id.take(60)}")
                 null
             }
         } catch (e: Throwable) {
+            lastFailure = describeFailure(e)
+            runCatching { attempt.close() } // 失败路径必须关 socket,否则泄漏且干扰诊断
             if (isTlsAuthFailure(e)) {
                 // 握手失败=设备不再信任本机公钥(如撤销授权/无线调试数据被重置)
                 Log.w(TAG, "TLS 握手失败——设备不信任本机密钥,需重新配对: ${e.message}")
                 setPaired(false)
                 _state.value = AdbState.AUTH_FAILED
+                logDiag(ctx, "AUTH_FAILED $lastFailure (${e.javaClass.simpleName})")
             } else {
                 Log.w(TAG, "连接失败: ${e.message}")
                 _state.value = AdbState.DISCONNECTED
+                logDiag(ctx, "CONNECT_FAIL $lastFailure (${e.javaClass.simpleName}: ${e.message})")
             }
             null
         }
+    }
+
+    /**
+     * 通道诊断日志:追加到应用外部 files 目录(vivo 屏蔽应用 logcat,
+     * 主机 adb 可直接读取该文件做无感诊断)
+     */
+    private fun logDiag(ctx: Context, line: String) {
+        try {
+            val dir = ctx.getExternalFilesDir(null) ?: return
+            val f = java.io.File(dir, "adb_diag.log")
+            if (f.length() > 64_000) f.writeText("")
+            val ts = java.text.SimpleDateFormat("MM-dd HH:mm:ss", java.util.Locale.US)
+                .format(java.util.Date())
+            f.appendText("$ts $line\n")
+        } catch (_: Throwable) {
+        }
+    }
+
+    /** 连接失败归类(上屏诊断用):区分对端关闭/读超时/端口拒绝/TLS 层失败 */
+    private fun describeFailure(e: Throwable): String {
+        var t: Throwable? = e
+        while (t != null) {
+            when (t) {
+                is java.io.EOFException -> return "对端关闭连接"
+                is java.net.SocketTimeoutException -> return "读超时"
+                is java.net.ConnectException -> return "端口拒绝连接"
+                is javax.net.ssl.SSLException -> return "TLS 握手失败"
+            }
+            t = t.cause
+        }
+        return e.javaClass.simpleName
     }
 
     /** 是否 TLS 认证层失败(区别于端口不可达:后者是 SocketException,继续退避重连即可) */

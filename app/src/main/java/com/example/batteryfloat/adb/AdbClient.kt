@@ -12,12 +12,17 @@ import android.util.Log
 import java.io.Closeable
 import java.io.DataInputStream
 import java.io.DataOutputStream
+import java.net.InetSocketAddress
 import java.net.Socket
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import javax.net.ssl.SSLSocket
 
 private const val TAG = "AdbClient"
+
+/** 连接与读超时:adbd 无响应/直接断流时快速失败,避免阻塞读永久挂起重连循环 */
+private const val CONNECT_TIMEOUT_MS = 3_000
+private const val SO_TIMEOUT_MS = 5_000
 
 class AdbClient(private val host: String, private val port: Int, private val key: AdbKey) : Closeable {
 
@@ -35,8 +40,10 @@ class AdbClient(private val host: String, private val port: Int, private val key
     private val outputStream get() = if (useTls) tlsOutputStream else plainOutputStream
 
     fun connect() {
-        socket = Socket(host, port)
+        socket = Socket()
         socket.tcpNoDelay = true
+        socket.connect(InetSocketAddress(host, port), CONNECT_TIMEOUT_MS)
+        socket.soTimeout = SO_TIMEOUT_MS
         plainInputStream = DataInputStream(socket.getInputStream())
         plainOutputStream = DataOutputStream(socket.getOutputStream())
 

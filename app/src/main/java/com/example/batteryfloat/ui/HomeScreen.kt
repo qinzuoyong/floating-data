@@ -265,9 +265,12 @@ fun HomeScreen(
                 adbState == AdbState.AUTH_FAILED -> "设备已撤销信任——请点击下方「重新配对」"
                 shizukuAlive -> "Shizuku 常驻通道生效 · 无线调试可关闭"
                 else -> {
+                    val fail = AdbConnectionManager.lastFailure
                     val ago = AdbConnectionManager.lastSuccessAgoText()
-                    if (ago != null) "重连中,暂用基础数据源(最近成功 $ago)"
-                    else "重连中,暂用基础数据源…"
+                    val detail = listOfNotNull(fail, ago?.let { "最近成功 $it" })
+                        .joinToString(" · ")
+                    if (detail.isEmpty()) "重连中,暂用基础数据源…"
+                    else "重连中,暂用基础数据源($detail)"
                 }
             },
             checked = adbEnabled,
