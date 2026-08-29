@@ -283,27 +283,28 @@ fun HomeScreen(
             }
         )
 
-        // 连通后自动授权(需通道开启;每步读回验证,静默失败会如实暴露在日志)
-        SettingSwitchCard(
-            icon = {
-                Icon(
-                    Icons.Filled.Shield,
-                    contentDescription = "自动授权",
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(24.dp)
-                )
-            },
-            iconBackgroundColor = MaterialTheme.colorScheme.primaryContainer,
-            title = "连接后自动开启所需权限",
-            subtitle = if (!adbEnabled) "需先开启高精度数据源 (ADB)"
-            else "无线调试连通后自动授予 WRITE_SECURE_SETTINGS、开启无障碍保活与悬浮窗权限",
-            checked = adbAutoGrant,
-            onCheckedChange = {
-                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                adbAutoGrant = it
-                prefs.edit().putBoolean(PrefsKeys.ADB_AUTO_GRANT, it).apply()
-            }
-        )
+        // 连通后自动授权:无线调试通道的配套能力,仅在 ADB 开关开启后显示
+        if (adbEnabled) {
+            SettingSwitchCard(
+                icon = {
+                    Icon(
+                        Icons.Filled.Shield,
+                        contentDescription = "自动授权",
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(24.dp)
+                    )
+                },
+                iconBackgroundColor = MaterialTheme.colorScheme.primaryContainer,
+                title = "连接后自动开启所需权限",
+                subtitle = "无线调试连通后自动开启:家人共享定位、无障碍保活、悬浮窗权限",
+                checked = adbAutoGrant,
+                onCheckedChange = {
+                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                    adbAutoGrant = it
+                    prefs.edit().putBoolean(PrefsKeys.ADB_AUTO_GRANT, it).apply()
+                }
+            )
+        }
 
         // 设备撤销信任后自动重连已暂停,提供手动重新配对入口
         if (adbState == AdbState.AUTH_FAILED) {
