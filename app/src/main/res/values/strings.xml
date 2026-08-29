@@ -59,4 +59,7 @@
     <string name="family_join_reject">拒绝</string>
     <string name="family_join_pending_hint">等待创建人审核，请稍候…</string>
     <string name="family_join_rejected_hint">加入申请被拒绝，请联系创建人</string>
+    <string name="family_error_offline">对方不在线，暂时无法获取位置</string>
+    <string name="family_error_not_connected">信令未连接，请稍后重试</string>
+    <string name="family_error_generic">操作失败：%1$s</string>
 </resources>

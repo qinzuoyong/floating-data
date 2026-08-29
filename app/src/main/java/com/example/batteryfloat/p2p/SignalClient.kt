@@ -11,6 +11,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import org.java_websocket.client.WebSocketClient
 import org.java_websocket.handshake.ServerHandshake
@@ -53,6 +54,7 @@ class SignalClient(
 
     private var client: WebSocketClient? = null
     private var reconnectJob: Job? = null
+    private var heartbeatJob: Job? = null
     private var backoffMs = 2_000L
     private var stopped = false
 
@@ -82,6 +84,8 @@ class SignalClient(
         stopped = true
         reconnectJob?.cancel()
         reconnectJob = null
+        heartbeatJob?.cancel()
+        heartbeatJob = null
         runCatching { client?.close() }
         client = null
         _state.value = State.Idle
@@ -89,18 +93,21 @@ class SignalClient(
 
     // ===== 发送 =====
 
-    /** 请求指定成员的位置 */
-    fun sendLocReq(to: String) {
+    /**
+     * 请求指定成员的位置
+     *
+     * @return 是否成功发出（false=未连接/发送失败，调用方可据此提示用户）
+     */
+    fun sendLocReq(to: String): Boolean =
         sendRaw(
             JsonObject().apply {
                 addProperty("type", SignalTypes.LOC_REQ)
                 addProperty("to", to)
             }
         )
-    }
 
-    /** 回复位置给请求方 */
-    fun sendLocRes(to: String, loc: LocationPayload) {
+    /** 回复位置给请求方（允许对同一请求多次发送：先粗后精） */
+    fun sendLocRes(to: String, loc: LocationPayload): Boolean =
         sendRaw(
             JsonObject().apply {
                 addProperty("type", SignalTypes.LOC_RES)
@@ -108,7 +115,6 @@ class SignalClient(
                 add("payload", gson.toJsonTree(loc))
             }
         )
-    }
 
     /** 创建人批准加入申请 */
     fun sendJoinApprove(targetUid: String) {
@@ -176,16 +182,18 @@ class SignalClient(
 
     // ===== 内部 =====
 
-    private fun sendRaw(obj: JsonObject) {
+    private fun sendRaw(obj: JsonObject): Boolean {
         val c = client
         if (c == null || c.readyState != org.java_websocket.enums.ReadyState.OPEN) {
             Log.w(TAG, "send skipped: not connected")
-            return
+            return false
         }
-        try {
+        return try {
             c.send(gson.toJson(obj))
+            true
         } catch (e: Exception) {
             Log.w(TAG, "send failed", e)
+            false
         }
     }
 
@@ -201,6 +209,7 @@ class SignalClient(
             override fun onOpen(handshakedata: ServerHandshake?) {
                 Log.i(TAG, "ws open, registering room=" + room + " uid=" + uid)
                 backoffMs = 2_000L
+                startHeartbeat()
                 val reg = JsonObject().apply {
                     addProperty("type", SignalTypes.REGISTER)
                     addProperty("room", room)
@@ -234,6 +243,8 @@ class SignalClient(
             override fun onClose(code: Int, reason: String?, remote: Boolean) {
                 val detail = "code=" + code + " reason=" + reason + " remote=" + remote
                 Log.i(TAG, "ws closed: " + detail)
+                heartbeatJob?.cancel()
+                heartbeatJob = null
                 client = null
                 if (_state.value is State.Connected) {
                     _state.value = State.Disconnected(detail)
@@ -259,6 +270,20 @@ class SignalClient(
             }
     }
 
+    /**
+     * 应用级心跳：每 25 秒发一次 ping（服务器回 pong，客户端忽略 pong 消息）。
+     * 补足协议层心跳：缩短半开连接感知时间，防止 doze/NAT 超时后请求黑洞。
+     */
+    private fun startHeartbeat() {
+        heartbeatJob?.cancel()
+        heartbeatJob = scope.launch {
+            while (isActive) {
+                delay(HEARTBEAT_INTERVAL_MS)
+                sendRaw(JsonObject().apply { addProperty("type", SignalTypes.PING) })
+            }
+        }
+    }
+
     private fun scheduleReconnect() {
         if (stopped) return
         reconnectJob?.cancel()
@@ -271,5 +296,8 @@ class SignalClient(
 
     private companion object {
         const val TAG = "SignalClient"
+
+        /** 应用级心跳间隔（服务器心跳 30s，客户端 25s 错开且小于常见 NAT 空闲超时） */
+        const val HEARTBEAT_INTERVAL_MS = 25_000L
     }
 }

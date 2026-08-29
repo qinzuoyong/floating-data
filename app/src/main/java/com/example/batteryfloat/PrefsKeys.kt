@@ -79,4 +79,6 @@ object PrefsKeys {
     const val FAMILY_ALLOW_LOC_REQ = "family_allow_loc_req"
     /** 成员列表 JSON（uid → 备注/上次位置/在线状态） */
     const val FAMILY_MEMBERS = "family_members"
+    /** 后台定位权限是否已请求过（引导一次，避免反复弹系统授权框） */
+    const val FAMILY_BG_LOC_ASKED = "family_bg_loc_asked"
 }

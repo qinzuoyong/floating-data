@@ -89,9 +89,40 @@ fun FamilyScreen(
     val store = remember { FamilyStore.get(context) }
     val members by store.members.collectAsState()
     val connection by FamilyLocationService.connection.collectAsState()
+    // 临时提示（对方不在线/信令未连接等），展示数秒后自动清除
+    val notice by FamilyLocationService.notice.collectAsState()
+
+    LaunchedEffect(notice) {
+        if (notice != null) {
+            kotlinx.coroutines.delay(4_000L)
+            FamilyLocationService.clearNotice()
+        }
+    }
 
     var route by remember { mutableStateOf<FamilyRoute>(FamilyRoute.List) }
     var serviceOn by remember { mutableStateOf(isServiceRunning(context)) }
+
+    // 后台定位权限（系统要求分段授权：前台定位授予后单独请求"始终允许"）。
+    // 前台服务被系统重启拉起（app 不在前台）时，无后台定位权限将无法定位应答。
+    val backgroundLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { _ ->
+        prefs.edit().putBoolean(PrefsKeys.FAMILY_BG_LOC_ASKED, true).apply()
+    }
+
+    fun maybeRequestBackground() {
+        val fineGranted = androidx.core.content.ContextCompat.checkSelfPermission(
+            context, Manifest.permission.ACCESS_FINE_LOCATION
+        ) == PackageManager.PERMISSION_GRANTED
+        val bgGranted = androidx.core.content.ContextCompat.checkSelfPermission(
+            context, Manifest.permission.ACCESS_BACKGROUND_LOCATION
+        ) == PackageManager.PERMISSION_GRANTED
+        val asked = prefs.getBoolean(PrefsKeys.FAMILY_BG_LOC_ASKED, false)
+        if (fineGranted && !bgGranted && !asked) {
+            onBeforeExternalIntent()
+            backgroundLauncher.launch(Manifest.permission.ACCESS_BACKGROUND_LOCATION)
+        }
+    }
 
     // 定位 + 通知权限（首次进入请求；后台定位用于常驻响应）
     // 权限弹窗是独立系统 Activity，会触发 MainActivity.onUserLeaveHint；
@@ -107,11 +138,12 @@ fun FamilyScreen(
             } else {
                 FamilyLocationService.start(context)
                 serviceOn = true
+                maybeRequestBackground()
             }
         }
     }
     LaunchedEffect(Unit) {
-        // 仅请求前台定位 + 通知权限（后台位置权限无需：前台服务响应定位用 while-in-use 即可）
+        // 前台定位 + 通知权限先行；后台定位在前台授权后单独分段引导（见 maybeRequestBackground）
         val missing = listOf(
             Manifest.permission.ACCESS_FINE_LOCATION,
             Manifest.permission.ACCESS_COARSE_LOCATION,
@@ -126,50 +158,74 @@ fun FamilyScreen(
             // 已授权且已加入家庭：自动开启位置共享服务，保证可被家人请求到位置
             FamilyLocationService.start(context)
             serviceOn = true
+            maybeRequestBackground()
         }
     }
 
-    when (val r = route) {
-        is FamilyRoute.Map -> FamilyMapScreen(
-            member = r.member,
-            onBack = { route = FamilyRoute.List },
-            onRefresh = { FamilyLocationService.requestLocation(context, r.member.uid) }
-        )
-        FamilyRoute.Add -> AddFamilyScreen(
-            onDone = {
-                route = FamilyRoute.List
-                // 加入家庭后自动开启位置共享服务
-                FamilyLocationService.start(context)
-                serviceOn = true
-            },
-            // 权限弹窗会触发 MainActivity.onUserLeaveHint，需标记外部跳转防 finish
-            onBeforeExternalIntent = onBeforeExternalIntent
-        )
-        FamilyRoute.List -> FamilyListContent(
-            context = context,
-            prefs = prefs,
-            store = store,
-            members = members,
-            connection = connection,
-            serviceOn = serviceOn,
-            onToggleService = { on ->
-                if (on) {
+    Box(modifier = Modifier.fillMaxSize()) {
+        when (val r = route) {
+            is FamilyRoute.Map -> FamilyMapScreen(
+                member = r.member,
+                onBack = { route = FamilyRoute.List },
+                onRefresh = { FamilyLocationService.requestLocation(context, r.member.uid) }
+            )
+            FamilyRoute.Add -> AddFamilyScreen(
+                onDone = {
+                    route = FamilyRoute.List
+                    // 加入家庭后自动开启位置共享服务
                     FamilyLocationService.start(context)
                     serviceOn = true
-                } else {
+                },
+                // 权限弹窗会触发 MainActivity.onUserLeaveHint，需标记外部跳转防 finish
+                onBeforeExternalIntent = onBeforeExternalIntent
+            )
+            FamilyRoute.List -> FamilyListContent(
+                context = context,
+                prefs = prefs,
+                store = store,
+                members = members,
+                connection = connection,
+                serviceOn = serviceOn,
+                onToggleService = { on ->
+                    if (on) {
+                        FamilyLocationService.start(context)
+                        serviceOn = true
+                    } else {
+                        FamilyLocationService.stop(context)
+                        serviceOn = false
+                    }
+                },
+                onAddFamily = { route = FamilyRoute.Add },
+                onOpenMap = { route = FamilyRoute.Map(it) },
+                onLeaveFamily = {
                     FamilyLocationService.stop(context)
+                    store.clearMembers()
+                    store.setFamilyCode("")
                     serviceOn = false
                 }
-            },
-            onAddFamily = { route = FamilyRoute.Add },
-            onOpenMap = { route = FamilyRoute.Map(it) },
-            onLeaveFamily = {
-                FamilyLocationService.stop(context)
-                store.clearMembers()
-                store.setFamilyCode("")
-                serviceOn = false
+            )
+        }
+
+        // 临时提示浮层（对方不在线/信令未连接等，数秒后自动消失）
+        notice?.let { text ->
+            Card(
+                shape = RoundedCornerShape(DesignSystem.CornerM),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(top = DesignSystem.SpacingL)
+            ) {
+                Text(
+                    text = text,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.padding(
+                        horizontal = DesignSystem.CardPadding,
+                        vertical = DesignSystem.SpacingS
+                    )
+                )
             }
-        )
+        }
     }
 }
 

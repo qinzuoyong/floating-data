@@ -12,6 +12,7 @@ import android.os.IBinder
 import android.util.Log
 import androidx.core.content.ContextCompat
 import com.example.batteryfloat.BuildConfig
+import com.example.batteryfloat.R
 import com.example.batteryfloat.family.FamilyStore
 import com.example.batteryfloat.location.OnDemandLocationProvider
 import com.example.batteryfloat.notif.Notifs
@@ -87,9 +88,10 @@ class FamilyLocationService : Service() {
         return START_STICKY
     }
 
-    /** 请求指定成员的位置（UI 调用入口） */
+    /** 请求指定成员的位置（UI 调用入口）；未连接时上屏提示，不再静默丢弃 */
     fun requestMemberLocation(uid: String) {
-        signal?.sendLocReq(uid)
+        val sent = signal?.sendLocReq(uid) == true
+        if (!sent) postNotice(getString(R.string.family_error_not_connected))
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -213,15 +215,22 @@ class FamilyLocationService : Service() {
                     Log.i(TAG, "ignore loc-req from " + from + " (privacy off)")
                     return
                 }
+                val p = provider
+                if (p == null) {
+                    Log.w(TAG, "provider missing, cannot answer " + from)
+                    return
+                }
                 workScope.launch {
-                    val loc = withContext(Dispatchers.Default) {
-                        provider?.getCurrentLocation()
+                    // 先粗后精多次回传：NETWORK 粗定位先到先发（对方几秒内出图），
+                    // GPS 更优结果到达后再次回传自动覆盖（服务器中继与存储均幂等）
+                    var sent = 0
+                    withContext(Dispatchers.Default) {
+                        p.currentLocationFlow().collect { loc ->
+                            sent++
+                            signal?.sendLocRes(from, loc)
+                        }
                     }
-                    if (loc != null) {
-                        signal?.sendLocRes(from, loc)
-                    } else {
-                        Log.w(TAG, "location unavailable, cannot answer " + from)
-                    }
+                    if (sent == 0) Log.w(TAG, "location unavailable, cannot answer " + from)
                 }
             }
 
@@ -235,6 +244,13 @@ class FamilyLocationService : Service() {
 
             SignalTypes.ERROR -> {
                 Log.w(TAG, "signal error: " + (msg.message ?: msg.code))
+                // 服务器回执上屏：目标离线等错误此前只打日志，按钮像"没反应"
+                postNotice(
+                    when (msg.code) {
+                        "offline" -> getString(R.string.family_error_offline)
+                        else -> getString(R.string.family_error_generic, msg.message ?: msg.code ?: "")
+                    }
+                )
             }
         }
     }
@@ -253,6 +269,20 @@ class FamilyLocationService : Service() {
         private val _connection = MutableStateFlow<SignalClient.State>(SignalClient.State.Idle)
         /** 信令连接状态（服务内收集，UI 观察） */
         val connection: StateFlow<SignalClient.State> = _connection.asStateFlow()
+
+        private val _notice = MutableStateFlow<String?>(null)
+        /** 临时提示（对方离线/未连接等，UI 上屏后自动清除） */
+        val notice: StateFlow<String?> = _notice.asStateFlow()
+
+        /** 清除当前提示（UI 展示数秒后调用） */
+        fun clearNotice() {
+            _notice.value = null
+        }
+
+        /** 上屏一条临时提示（重复发送以最新为准） */
+        private fun postNotice(text: String) {
+            _notice.value = text
+        }
 
         /**
          * 启动/重建家人共享前台服务
