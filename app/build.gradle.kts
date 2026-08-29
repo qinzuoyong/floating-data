@@ -158,4 +158,8 @@ dependencies {
     // 家人位置共享（纯信令中继 + WebView 地图，无 WebRTC/百度原生 SDK）
     implementation(libs.gson)                     // 信令/位置 JSON 编解码
     implementation(libs.java.websocket)           // WebSocket 信令客户端
+
+    // Shizuku 桥接:复用其常驻 server 进程,无线调试关闭后特权能力仍存活
+    implementation(libs.shizuku.api)
+    implementation(libs.shizuku.provider)
 }

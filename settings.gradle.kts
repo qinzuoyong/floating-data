@@ -18,6 +18,8 @@ dependencyResolutionManagement {
     repositoriesMode.set(RepositoriesMode.PREFER_PROJECT)
     repositories {
         google()
+        // 阿里云 central 镜像:本机 repo.maven.org DNS 不通,新增依赖经此拉取(2026-08-29 Shizuku API)
+        maven { url = uri("https://maven.aliyun.com/repository/central") }
         mavenCentral()
     }
 }

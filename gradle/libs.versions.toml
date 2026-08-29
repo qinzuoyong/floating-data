@@ -12,6 +12,7 @@ ndkBoringssl = "20250114"
 ndkLibcxx = "27.0.12077973"
 gson = "2.14.0"
 javaWebsocket = "1.6.0"
+shizuku = "13.1.5"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -27,6 +28,8 @@ ndk-boringssl = { group = "io.github.vvb2060.ndk", name = "boringssl", version.r
 ndk-libcxx = { group = "org.lsposed.libcxx", name = "libcxx", version.ref = "ndkLibcxx" }
 gson = { group = "com.google.code.gson", name = "gson", version.ref = "gson" }
 java-websocket = { group = "org.java-websocket", name = "Java-WebSocket", version.ref = "javaWebsocket" }
+shizuku-api = { group = "dev.rikka.shizuku", name = "api", version.ref = "shizuku" }
+shizuku-provider = { group = "dev.rikka.shizuku", name = "provider", version.ref = "shizuku" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

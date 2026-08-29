@@ -20,6 +20,8 @@
     <uses-permission
         android:name="android.permission.WRITE_SECURE_SETTINGS"
         tools:ignore="ProtectedPermissions" />
+    <!-- Shizuku 桥接:声明 API 权限并挂 provider 接收 server 的 binder(方案一) -->
+    <uses-permission android:name="moe.shizuku.manager.permission.API_V23" />
     <application
         android:name=".App"
         android:allowBackup="true"
@@ -117,6 +119,15 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/file_paths" />
         </provider>
+
+        <!-- Shizuku provider:server 借此向本进程投递 binder(官方要求的标准声明) -->
+        <provider
+            android:name="rikka.shizuku.ShizukuProvider"
+            android:authorities="${applicationId}.shizuku"
+            android:multiprocess="false"
+            android:enabled="true"
+            android:exported="true"
+            android:permission="android.permission.INTERACT_ACROSS_USERS_FULL" />
 
     </application>
 
