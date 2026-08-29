@@ -1,9 +1,13 @@
 package com.example.batteryfloat.adb
 
+import android.content.BroadcastReceiver
 import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.content.SharedPreferences
 import android.os.Build
 import android.util.Log
+import androidx.core.content.ContextCompat
 import com.example.batteryfloat.PrefsKeys
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -36,7 +40,8 @@ enum class AdbState {
  * - 持有 AdbKey(本机加密存储)与 AdbClient 常驻连接
  * - NSD 发现端口:开机/重启后端口漫游,免配对自动重连
  * - 对外提供 [exec]:特权 shell 命令,失败返回 null 由消费方降级(批次 3 接电池采样)
- * - 断线指数退避重连(3s 起,上限 15 分钟);[exec] 调用会立即触发一次连接尝试
+ * - 断线指数退避重连(3s 起,上限 60 秒);[exec] 调用会立即触发一次连接尝试;
+ *   亮屏/解锁事件也触发立即重连(拿起手机就能看到连回,事件驱动零轮询)
  */
 object AdbConnectionManager {
 
@@ -49,7 +54,8 @@ object AdbConnectionManager {
     private const val DISCOVER_TIMEOUT_MS = 12_000L
     private const val EXEC_TIMEOUT_MS = 4_000L
     private const val RECONNECT_MIN_MS = 3_000L
-    private const val RECONNECT_MAX_MS = 15 * 60_000L
+    /** 退避上限 60 秒:上限过高会让"重新打开无线调试后迟迟不重连"(15 分钟上线的实测教训) */
+    private const val RECONNECT_MAX_MS = 60_000L
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val connectMutex = Mutex()
@@ -67,6 +73,12 @@ object AdbConnectionManager {
     private var enabled = false
 
     private var reconnectJob: Job? = null
+
+    /** 当前重连退避间隔(重连循环与亮屏触发器共用,亮屏时重置) */
+    @Volatile
+    private var backoffMs = RECONNECT_MIN_MS
+
+    private var unlockReceiver: BroadcastReceiver? = null
 
     private val _state = MutableStateFlow(AdbState.NOT_PAIRED)
     val state: StateFlow<AdbState> = _state
@@ -107,6 +119,7 @@ object AdbConnectionManager {
                     null
                 }
                 _state.value = if (key != null) AdbState.DISCONNECTED else AdbState.NOT_PAIRED
+                registerUnlockTrigger(appContext!!)
                 if (enabled && key != null) startReconnectLoop()
             }
         }
@@ -287,7 +300,6 @@ object AdbConnectionManager {
     private fun startReconnectLoop() {
         if (reconnectJob?.isActive == true) return
         reconnectJob = scope.launch {
-            var backoff = RECONNECT_MIN_MS
             while (isActive && enabled) {
                 if (_state.value == AdbState.AUTH_FAILED) {
                     // 设备已不信任密钥,重连无意义且与厂商管控拉锯;暂停等待用户重新配对
@@ -298,11 +310,41 @@ object AdbConnectionManager {
                     val ok = connectMutex.withLock {
                         if (_state.value == AdbState.CONNECTED) true else connectOnceInternal() != null
                     }
-                    backoff = if (ok) RECONNECT_MIN_MS else (backoff * 2).coerceAtMost(RECONNECT_MAX_MS)
+                    backoffMs = if (ok) RECONNECT_MIN_MS else (backoffMs * 2).coerceAtMost(RECONNECT_MAX_MS)
                 }
-                delay(backoff)
+                delay(backoffMs)
             }
         }
+    }
+
+    /**
+     * 亮屏/解锁触发的即时重连:重置退避并立即尝试一轮连接。
+     * 只在断连且非 AUTH_FAILED 时动作;事件驱动,不引入任何轮询
+     */
+    private fun resetBackoffAndReconnect() {
+        if (!enabled || key == null) return
+        if (_state.value == AdbState.CONNECTED || _state.value == AdbState.AUTH_FAILED) return
+        backoffMs = RECONNECT_MIN_MS
+        scope.launch {
+            connectMutex.withLock {
+                if (_state.value != AdbState.CONNECTED) connectOnceInternal()
+            }
+        }
+    }
+
+    /** 注册亮屏解锁监听(仅一次;接收器自行判断开关与状态) */
+    private fun registerUnlockTrigger(context: Context) {
+        if (unlockReceiver != null) return
+        val receiver = object : BroadcastReceiver() {
+            override fun onReceive(context: Context?, intent: Intent?) {
+                resetBackoffAndReconnect()
+            }
+        }
+        unlockReceiver = receiver
+        ContextCompat.registerReceiver(
+            context, receiver, IntentFilter(Intent.ACTION_USER_PRESENT),
+            ContextCompat.RECEIVER_NOT_EXPORTED
+        )
     }
 
     private fun onDisconnected() {
