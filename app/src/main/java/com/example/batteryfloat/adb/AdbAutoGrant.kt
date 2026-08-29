@@ -20,6 +20,8 @@ import kotlinx.coroutines.launch
  * 2. 无障碍保活:复用 A11ySelfHealer 的主路径(持权直写)/辅路径(shell 写回);
  *    用户在应用内主动关闭过则跳过,尊重用户意图
  * 3. 悬浮窗权限:appops set 放行 SYSTEM_ALERT_WINDOW,免手动跳设置授权
+ * 4. 定位权限:ACCESS_FINE/COARSE/BACKGROUND_LOCATION + POST_NOTIFICATIONS
+ *    (家人位置共享的后台持续定位所需)
  *
  * 每步执行后读回验证,失败只记日志不改状态:雷电等 ROM 的 TLS 通道 shell 流
  * 对 pm grant/appops 会静默失败(假成功),读回验证可如实暴露
@@ -38,20 +40,21 @@ object AdbAutoGrant {
         scope.launch { runBootstrap(ctx) }
     }
 
-    /** 依次补齐三项权限;各项相互独立,单项失败不影响后续 */
+    /** 依次补齐各项权限;各项相互独立,单项失败不影响后续 */
     private suspend fun runBootstrap(ctx: Context) {
         grantSecureSettings(ctx)
         ensureAccessibility(ctx)
         grantOverlay(ctx)
+        grantLocation(ctx)
     }
 
     /** 步骤 1:WRITE_SECURE_SETTINGS 自授 */
     private suspend fun grantSecureSettings(ctx: Context) {
-        if (hasSecureWrite(ctx)) return
+        if (hasPermission(ctx, "android.permission.WRITE_SECURE_SETTINGS")) return
         val out = AdbConnectionManager.exec(
             "pm grant ${ctx.packageName} android.permission.WRITE_SECURE_SETTINGS"
         )
-        if (hasSecureWrite(ctx)) {
+        if (hasPermission(ctx, "android.permission.WRITE_SECURE_SETTINGS")) {
             Log.i(TAG, "已授予 WRITE_SECURE_SETTINGS")
         } else {
             Log.w(TAG, "pm grant 未生效(输出=${out?.take(80)})")
@@ -80,7 +83,27 @@ object AdbAutoGrant {
         }
     }
 
-    private fun hasSecureWrite(ctx: Context) = ContextCompat.checkSelfPermission(
-        ctx, "android.permission.WRITE_SECURE_SETTINGS"
+    /** 步骤 4:家人位置共享定位权限(含后台定位与 FGS 通知) */
+    private suspend fun grantLocation(ctx: Context) {
+        for (perm in LOCATION_PERMISSIONS) {
+            if (hasPermission(ctx, perm)) continue
+            val out = AdbConnectionManager.exec("pm grant ${ctx.packageName} $perm")
+            if (hasPermission(ctx, perm)) {
+                Log.i(TAG, "已授予 $perm")
+            } else {
+                Log.w(TAG, "pm grant $perm 未生效(输出=${out?.take(80)})")
+            }
+        }
+    }
+
+    private fun hasPermission(ctx: Context, perm: String) = ContextCompat.checkSelfPermission(
+        ctx, perm
     ) == PackageManager.PERMISSION_GRANTED
+
+    private val LOCATION_PERMISSIONS = arrayOf(
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_BACKGROUND_LOCATION",
+        "android.permission.POST_NOTIFICATIONS"
+    )
 }
