@@ -7,6 +7,7 @@ import android.widget.Toast
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -39,7 +40,9 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.example.batteryfloat.PrefsKeys
 import com.example.batteryfloat.adb.AdbConnectionManager
 import com.example.batteryfloat.adb.AdbState
+import com.example.batteryfloat.adb.BfdChannel
 import com.example.batteryfloat.adb.PrivShell
+import com.example.batteryfloat.adb.ShizukuChannel
 import com.example.batteryfloat.service.A11ySelfHealer
 import com.example.batteryfloat.service.FloatingWindowService
 import com.example.batteryfloat.service.KeepAliveAccessibilityService
@@ -79,6 +82,9 @@ fun HomeScreen(
     var adbAutoGrant by remember { mutableStateOf(prefs.getBoolean(PrefsKeys.ADB_AUTO_GRANT, false)) }
     // Shizuku 常驻服务可用性(页面恢复时刷新;生效时无线调试可关)
     var shizukuAlive by remember { mutableStateOf(PrivShell.shizukuReady()) }
+    // 内置常驻服务可用性 + 载体模式选择
+    var bfdAlive by remember { mutableStateOf(BfdChannel.alive()) }
+    var carrierMode by remember { mutableStateOf(PrivShell.carrierMode()) }
     var showAdbPairing by remember { mutableStateOf(false) }
     val adbState by AdbConnectionManager.state.collectAsState()
 
@@ -92,8 +98,12 @@ fun HomeScreen(
                 adbEnabled = prefs.getBoolean(PrefsKeys.ADB_PRIV_ENABLED, false)
                 adbAutoGrant = prefs.getBoolean(PrefsKeys.ADB_AUTO_GRANT, false)
                 shizukuAlive = PrivShell.shizukuReady()
-                // Shizuku 服务在跑但未授权时弹一次管理器授权对话框(永久授权)
-                PrivShell.requestPermissionIfNeeded(context)
+                bfdAlive = BfdChannel.alive()
+                carrierMode = PrivShell.carrierMode()
+                // Shizuku 载体下,服务在跑但未授权时弹一次管理器授权对话框(永久授权)
+                if (carrierMode == PrivShell.CarrierMode.SHIZUKU) {
+                    PrivShell.requestPermissionIfNeeded(context)
+                }
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -263,6 +273,7 @@ fun HomeScreen(
                 adbState == AdbState.CONNECTED -> "已连接 · 高精度数据生效(功率直读)"
                 adbState == AdbState.NOT_PAIRED -> "未配对——重新打开开关,按通知栏引导配对"
                 adbState == AdbState.AUTH_FAILED -> "设备已撤销信任——请点击下方「重新配对」"
+                bfdAlive -> "内置常驻服务生效 · 无线调试可关闭"
                 shizukuAlive -> "Shizuku 常驻通道生效 · 无线调试可关闭"
                 else -> {
                     val fail = AdbConnectionManager.lastFailure
@@ -314,6 +325,45 @@ fun HomeScreen(
                     prefs.edit().putBoolean(PrefsKeys.ADB_AUTO_GRANT, it).apply()
                 }
             )
+
+            // 特权通道载体选择:内置服务(零依赖,默认) / Shizuku(官方维护,需装其管理器)
+            Card(
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                ),
+                shape = RoundedCornerShape(DesignSystem.CornerL),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(Modifier.padding(DesignSystem.SpacingM)) {
+                    Text(
+                        "特权通道载体",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Medium
+                    )
+                    Spacer(Modifier.height(DesignSystem.SpacingS))
+                    CarrierOptionRow(
+                        title = "内置常驻服务（推荐）",
+                        subtitle = "零第三方依赖，重启后自动恢复",
+                        selected = carrierMode == PrivShell.CarrierMode.BUILTIN
+                    ) {
+                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        if (PrivShell.setCarrierMode(context, PrivShell.CarrierMode.BUILTIN)) {
+                            carrierMode = PrivShell.CarrierMode.BUILTIN
+                        }
+                    }
+                    CarrierOptionRow(
+                        title = "Shizuku 服务",
+                        subtitle = if (ShizukuChannel.isInstalled(context)) "由 Shizuku 官方维护，需保留其管理器"
+                        else "未安装 Shizuku 管理器，选择后不可用",
+                        selected = carrierMode == PrivShell.CarrierMode.SHIZUKU
+                    ) {
+                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        if (PrivShell.setCarrierMode(context, PrivShell.CarrierMode.SHIZUKU)) {
+                            carrierMode = PrivShell.CarrierMode.SHIZUKU
+                        }
+                    }
+                }
+            }
         }
 
         // 设备撤销信任后自动重连已暂停,提供手动重新配对入口
@@ -337,6 +387,40 @@ fun HomeScreen(
             onDismiss = { showAdbPairing = false },
             onOpenDevSettings = onOpenDevSettings
         )
+    }
+}
+
+/**
+ * 特权通道载体单选项行
+ */
+@Composable
+private fun CarrierOptionRow(
+    title: String,
+    subtitle: String,
+    selected: Boolean,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(DesignSystem.CornerM))
+            .background(
+                if (selected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+                else Color.Transparent
+            )
+            .clickable(onClick = onClick)
+            .padding(vertical = DesignSystem.SpacingS, horizontal = DesignSystem.SpacingS),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        RadioButton(selected = selected, onClick = onClick)
+        Column(Modifier.padding(start = DesignSystem.SpacingXs)) {
+            Text(title, style = MaterialTheme.typography.bodyMedium)
+            Text(
+                subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
     }
 }
 
