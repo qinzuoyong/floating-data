@@ -39,11 +39,18 @@ object BfdChannel {
     @Volatile
     private var aliveCache: Pair<Long, Boolean>? = null
 
-    /** daemon 是否存活(带 5s 缓存);ping 失败即视为死亡,下次重新探测 */
+    /**
+     * daemon 是否存活(带 5s 缓存);ping 失败即视为死亡,下次重新探测。
+     * 主线程(UI)只读缓存不做探测——探测是网络 IO,主线程会抛
+     * NetworkOnMainThreadException;缓存由后台调用(canExec/采样/拉起)填充
+     */
     fun alive(): Boolean {
         if (token == null) return false
         aliveCache?.let { (at, v) ->
             if (System.currentTimeMillis() - at < ALIVE_CACHE_MS) return v
+        }
+        if (android.os.Looper.myLooper() == android.os.Looper.getMainLooper()) {
+            return aliveCache?.second ?: false
         }
         var detail = ""
         val v = runCatching {
