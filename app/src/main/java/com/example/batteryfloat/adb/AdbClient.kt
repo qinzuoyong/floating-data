@@ -23,6 +23,8 @@ private const val TAG = "AdbClient"
 /** 连接与读超时:adbd 无响应/直接断流时快速失败,避免阻塞读永久挂起重连循环 */
 private const val CONNECT_TIMEOUT_MS = 3_000
 private const val SO_TIMEOUT_MS = 5_000
+/** 经典通道首次注册公钥时,等待用户在手机上点「一律允许」的时长(弹窗节奏不可控) */
+private const val DIALOG_TIMEOUT_MS = 60_000
 
 class AdbClient(private val host: String, private val port: Int, private val key: AdbKey) : Closeable {
 
@@ -39,7 +41,13 @@ class AdbClient(private val host: String, private val port: Int, private val key
     private val inputStream get() = if (useTls) tlsInputStream else plainInputStream
     private val outputStream get() = if (useTls) tlsOutputStream else plainOutputStream
 
-    fun connect() {
+    /**
+     * 建立连接
+     * @param allowUntrustedDialog 经典 A_AUTH 通道设备要求注册新公钥时,
+     * 是否触发系统「允许 USB 调试」弹窗(仅自愈基座验证时为 true;
+     * 常规重连为 false——未受信则快速失败转其他通道,避免反复打扰)
+     */
+    fun connect(allowUntrustedDialog: Boolean = false) {
         socket = Socket()
         socket.tcpNoDelay = true
         socket.connect(InetSocketAddress(host, port), CONNECT_TIMEOUT_MS)
@@ -67,13 +75,20 @@ class AdbClient(private val host: String, private val port: Int, private val key
 
             message = read()
         } else if (message.command == AdbProtocol.A_AUTH) {
-            if (message.command != AdbProtocol.A_AUTH && message.arg0 != AdbProtocol.ADB_AUTH_TOKEN) error("not A_AUTH ADB_AUTH_TOKEN")
+            if (message.arg0 != AdbProtocol.ADB_AUTH_TOKEN) error("not A_AUTH ADB_AUTH_TOKEN")
             write(AdbProtocol.A_AUTH, AdbProtocol.ADB_AUTH_SIGNATURE, 0, key.sign(message.data))
 
             message = read()
             if (message.command != AdbProtocol.A_CNXN) {
+                if (!allowUntrustedDialog) {
+                    // 设备尚未信任本机公钥;不触发授权弹窗,快速失败由上层转其他通道
+                    throw AdbException("device-not-trusted")
+                }
+                // 等用户在手机上点「一律允许」(此后密钥持久化到 adb_keys,永久受信)
+                socket.soTimeout = DIALOG_TIMEOUT_MS
                 write(AdbProtocol.A_AUTH, AdbProtocol.ADB_AUTH_RSAPUBLICKEY, 0, key.adbPublicKey)
                 message = read()
+                socket.soTimeout = SO_TIMEOUT_MS
             }
         }
 

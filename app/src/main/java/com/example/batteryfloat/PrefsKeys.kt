@@ -51,6 +51,14 @@ object PrefsKeys {
     const val ADB_AUTO_GRANT = "adb_auto_grant"
     /** Shizuku 授权请求已发起过(用户拒绝后不重复弹窗) */
     const val SHIZUKU_PERM_REQUESTED = "shizuku_perm_requested"
+    /** 特权通道载体:"builtin"=内置服务(默认) / "shizuku"=Shizuku 常驻服务 */
+    const val PRIV_CARRIER_MODE = "priv_carrier_mode"
+    /** 自愈基座进度:adbd TCP 端口固化 / 环回直连已受信 / 全部就绪 */
+    const val PRIV_BASELINE_TCP = "priv_baseline_tcp"
+    const val PRIV_BASELINE_TRUSTED = "priv_baseline_trusted"
+    const val PRIV_BASELINE_DONE = "priv_baseline_done"
+    /** TCP 固化尝试次数(vivo 拒绝该属性,2 次失败后放弃重试) */
+    const val PRIV_BASELINE_TCP_TRIES = "priv_baseline_tcp_tries"
     /** 用户在应用内主动关闭无障碍保活(此时系统侧被关视为用户意图,自愈不触发) */
     const val A11Y_USER_DISABLED = "a11y_user_disabled"
 

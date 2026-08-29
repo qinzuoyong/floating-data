@@ -12,25 +12,52 @@ import rikka.shizuku.ShizukuBinderWrapper
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
- * 特权 shell 统一入口:按可用性自动路由执行通道
+ * 特权 shell 统一入口:按载体模式与可用性自动路由执行通道
  *
- * 1. Shizuku 常驻服务(优先)——服务进程与 adbd 会话解耦,无线调试关闭后仍存活,
- *    是"一次连通后免无线调试"能力的实际承载者
- * 2. 内置 ADB 无线调试通道(AdbConnectionManager)——Shizuku 不在时的后备,
- *    需无线调试开启;也是拉起 Shizuku 服务的前置通道
+ * 载体模式([CarrierMode],用户可选):
+ * - BUILTIN(默认):内置 libbfd.so 守护进程 → 内置 ADB 通道 → null
+ * - SHIZUKU:Shizuku 常驻服务 → 内置 ADB 通道 → null
  *
- * 两者都不可用时返回 null,消费方(AdbAutoGrant/A11ySelfHealer/PrivBatteryProvider)
- * 按既有逻辑降级。路由选择只读不写状态,无锁
+ * 两条常驻载体与 adbd 会话解耦,无线调试关闭后仍存活;内置 ADB 通道负责
+ * 首次拉起与自愈重建,全部不可用时返回 null 由消费方降级
  */
 object PrivShell {
 
     private const val TAG = "PrivShell"
     private const val EXEC_TIMEOUT_MS = 10_000L
 
-    /** 最近一次成功执行所用的通道("shizuku"/"adb"/"none"),状态展示用 */
+    /** 特权通道载体 */
+    enum class CarrierMode { BUILTIN, SHIZUKU }
+
+    @Volatile
+    private var mode = CarrierMode.BUILTIN
+
+    /** 最近一次成功执行所用的通道("bfd"/"shizuku"/"adb"/"none"),状态展示用 */
     @Volatile
     var lastChannel: String = "none"
         private set
+
+    /** 进程内初始化(AdbConnectionManager.setup 调用):读取持久化载体模式 */
+    fun init(context: Context) {
+        val prefs = context.applicationContext
+            .getSharedPreferences(PrefsKeys.PREFS_NAME, Context.MODE_PRIVATE)
+        mode = if (prefs.getString(PrefsKeys.PRIV_CARRIER_MODE, "builtin") == "shizuku") {
+            CarrierMode.SHIZUKU
+        } else {
+            CarrierMode.BUILTIN
+        }
+    }
+
+    fun carrierMode(): CarrierMode = mode
+
+    /** 切换载体模式(落盘 + 更新缓存);返回是否成功持久化 */
+    fun setCarrierMode(context: Context, value: CarrierMode): Boolean {
+        val ok = context.applicationContext
+            .getSharedPreferences(PrefsKeys.PREFS_NAME, Context.MODE_PRIVATE)
+            .edit().putString(PrefsKeys.PRIV_CARRIER_MODE, value.name.lowercase()).commit()
+        if (ok) mode = value
+        return ok
+    }
 
     /** Shizuku 服务是否可用(binder 存活且本应用已获授权) */
     fun shizukuReady(): Boolean = try {
@@ -42,22 +69,34 @@ object PrivShell {
     }
 
     /** 是否存在任一可执行通道(供门控判断,不发命令) */
-    fun canExec(): Boolean = shizukuReady() || AdbConnectionManager.isReady
+    fun canExec(): Boolean = when (mode) {
+        CarrierMode.BUILTIN -> BfdChannel.alive() || AdbConnectionManager.isReady
+        CarrierMode.SHIZUKU -> shizukuReady() || AdbConnectionManager.isReady
+    }
 
     /**
      * 执行特权 shell 命令并收集 stdout
      * @return 输出文本;无可用通道或执行失败返回 null
      */
     suspend fun exec(command: String): String? {
-        // 1) Shizuku 常驻服务
-        if (shizukuReady()) {
-            try {
-                return runViaShizuku(command)
-            } catch (e: Throwable) {
-                Log.w(TAG, "Shizuku 执行失败,降级内置通道: ${e.message}")
+        // 1) 所选载体的常驻服务
+        when (mode) {
+            CarrierMode.BUILTIN -> if (BfdChannel.alive()) {
+                try {
+                    return BfdChannel.exec(command)?.also { lastChannel = "bfd" }
+                } catch (e: Throwable) {
+                    Log.w(TAG, "内置服务执行失败,降级内置通道: ${e.message}")
+                }
+            }
+            CarrierMode.SHIZUKU -> if (shizukuReady()) {
+                try {
+                    return runViaShizuku(command)
+                } catch (e: Throwable) {
+                    Log.w(TAG, "Shizuku 执行失败,降级内置通道: ${e.message}")
+                }
             }
         }
-        // 2) 内置 ADB 通道
+        // 2) 内置 ADB 通道(负责首次拉起与自愈重建)
         return AdbConnectionManager.exec(command)?.also { lastChannel = "adb" }
     }
 

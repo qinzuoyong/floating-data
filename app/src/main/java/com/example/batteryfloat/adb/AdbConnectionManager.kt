@@ -116,6 +116,7 @@ object AdbConnectionManager {
             keyStore = appContext!!.getSharedPreferences(ADB_PREFS_NAME, Context.MODE_PRIVATE)
             enabled = appContext!!.getSharedPreferences(PrefsKeys.PREFS_NAME, Context.MODE_PRIVATE)
                 .getBoolean(PrefsKeys.ADB_PRIV_ENABLED, false)
+            PrivShell.init(appContext!!)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                 key = try {
                     AdbKey(PreferenceAdbKeyStore(keyStore!!), KEY_NAME)
@@ -226,6 +227,10 @@ object AdbConnectionManager {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return null
         if (_state.value == AdbState.CONNECTED) return client
 
+        // ① 环回直连优先(免发现、重启后仍可用;未受信时快速失败转 NSD,不弹窗)
+        _state.value = AdbState.CONNECTING
+        tryLoopback(ctx, allowUntrustedDialog = false)?.let { return it }
+        // ② NSD 发现无线调试 TLS
         _state.value = AdbState.DISCOVERING
         val port = try {
             discoverPort(ctx, AdbMdns.TLS_CONNECT)
@@ -265,8 +270,8 @@ object AdbConnectionManager {
                 // 幂等自动授权引导(独立协程:其内部 exec 会走 ensureConnected,
                 // 若在持锁协程内调用会重入 connectMutex 死锁)
                 AdbAutoGrant.onConnected(ctx)
-                // 借本通道拉起 Shizuku 常驻服务(无线调试关闭后特权能力的载体)
-                ShizukuChannel.onConnected(ctx)
+                // 按载体模式拉起常驻服务(内置 libbfd / Shizuku),内置模式顺带推进自愈基座
+                launchCarrier(ctx)
                 attempt
             } else {
                 Log.w(TAG, "连接自检失败: $id")
@@ -298,7 +303,7 @@ object AdbConnectionManager {
      * 通道诊断日志:追加到应用外部 files 目录(vivo 屏蔽应用 logcat,
      * 主机 adb 可直接读取该文件做无感诊断)
      */
-    private fun logDiag(ctx: Context, line: String) {
+    internal fun logDiag(ctx: Context, line: String) {
         try {
             val dir = ctx.getExternalFilesDir(null) ?: return
             val f = java.io.File(dir, "adb_diag.log")
@@ -307,6 +312,86 @@ object AdbConnectionManager {
                 .format(java.util.Date())
             f.appendText("$ts $line\n")
         } catch (_: Throwable) {
+        }
+    }
+
+    /** 无上下文重载(adb 包内部诊断用) */
+    internal fun logDiag(line: String) {
+        appContext?.let { logDiag(it, line) }
+    }
+
+    private const val LOOPBACK_PORT = 5555
+
+    /**
+     * 按载体模式拉起常驻服务;内置模式顺带推进自愈基座(均幂等)。
+     * 内置 daemon 存活时绝不重复拉起——每次拉起都会换令牌+杀旧实例,
+     * 与在途请求竞态会造成 Connection reset
+     */
+    private fun launchCarrier(ctx: Context) {
+        when (PrivShell.carrierMode()) {
+            PrivShell.CarrierMode.SHIZUKU -> ShizukuChannel.onConnected(ctx)
+            PrivShell.CarrierMode.BUILTIN -> if (!BfdChannel.alive()) {
+                scope.launch {
+                    BfdChannel.startViaAdb(ctx)
+                    PrivBaseline.onConnected(ctx)
+                }
+            }
+        }
+    }
+
+    /**
+     * 环回直连本机 adbd(127.0.0.1:5555,经典 A_AUTH 通道):
+     * 免 NSD 发现、随 persist.adb.tcp.port 在重启后自动恢复,是自愈基座主路径。
+     * @param allowUntrustedDialog true 时设备未受信会触发系统授权弹窗(仅基座验证;
+     * 常规重连为 false——未受信快速失败转 NSD,避免反复打扰用户)
+     * @return 连接成功且自检通过的客户端;失败返回 null(静默转 NSD,不算整体失败)
+     */
+    private suspend fun tryLoopback(ctx: Context, allowUntrustedDialog: Boolean): AdbClient? {
+        val k = key ?: return null
+        val attempt = AdbClient("127.0.0.1", LOOPBACK_PORT, k)
+        return try {
+            attempt.connect(allowUntrustedDialog)
+            val id = StringBuilder()
+            attempt.shellCommand("id") { bytes -> id.append(String(bytes)) }
+            if (id.toString().contains("uid=2000")) {
+                closeClientQuietly()
+                client = attempt
+                lastSuccessAt = System.currentTimeMillis()
+                lastFailure = null
+                _state.value = AdbState.CONNECTED
+                Log.i(TAG, "特权通道已连接(环回 5555)")
+                logDiag(ctx, "CONNECTED loopback5555")
+                attempt
+            } else {
+                Log.w(TAG, "环回连接自检失败: $id")
+                attempt.close()
+                null
+            }
+        } catch (e: Throwable) {
+            lastFailure = describeFailure(e)
+            runCatching { attempt.close() }
+            // 经典通道失败不参与 TLS 配对体系(不置 AUTH_FAILED),静默转 NSD
+            Log.w(TAG, "环回连接失败: ${e.message}")
+            if (allowUntrustedDialog) logDiag(ctx, "LOOPBACK_FAIL ${describeFailure(e)}")
+            null
+        }
+    }
+
+    /** 自愈基座用:验证环回直连是否已受信(允许触发一次性授权弹窗);探测后立即关闭 */
+    suspend fun verifyLoopbackTrust(ctx: Context): Boolean {
+        val k = key ?: return false
+        val probe = AdbClient("127.0.0.1", LOOPBACK_PORT, k)
+        return try {
+            probe.connect(allowUntrustedDialog = true)
+            val id = StringBuilder()
+            probe.shellCommand("id") { bytes -> id.append(String(bytes)) }
+            val ok = id.toString().contains("uid=2000")
+            runCatching { probe.close() }
+            ok
+        } catch (e: Throwable) {
+            runCatching { probe.close() }
+            Log.w(TAG, "环回验证失败: ${e.message}")
+            false
         }
     }
 
