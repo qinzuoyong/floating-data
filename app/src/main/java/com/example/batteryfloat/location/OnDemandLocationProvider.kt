@@ -3,8 +3,9 @@ package com.example.batteryfloat.location
 import android.annotation.SuppressLint
 import android.content.Context
 import android.location.Location
+import android.location.LocationListener
 import android.location.LocationManager
-import android.os.CancellationSignal
+import android.os.SystemClock
 import android.util.Log
 import com.example.batteryfloat.p2p.LocationPayload
 import kotlinx.coroutines.flow.Flow
@@ -135,19 +136,36 @@ class OnDemandLocationProvider(private val context: Context) {
     private fun accuracyOf(loc: Location): Float =
         if (loc.hasAccuracy()) loc.accuracy else 10_000f
 
-    /** 单个 Provider 的一次性定位请求（可取消；超时由协程取消触发） */
+    /**
+     * 单个 Provider 的短窗口定位请求：只采纳新鲜定位（年龄≤[FRESH_MAX_AGE_MS]）。
+     *
+     * 实测 vivo 会把系统缓存的旧位置（分钟级、可能在数公里外）在 1~3ms 内回吐给
+     * getCurrentLocation——本方法改用 requestLocationUpdates 短窗口监听并逐条过滤：
+     * 陈旧缓存直接丢弃、继续等真实定位；超时仍无新鲜定位则返回 null
+     * （由调用方的 lastKnown 兜底，宁缺毋假）。
+     *
+     * @param provider 定位源（GPS_PROVIDER / NETWORK_PROVIDER）
+     * @param timeoutMs 等待上限，超时由协程取消触发
+     */
     @SuppressLint("MissingPermission")
     private suspend fun requestOnce(provider: String, timeoutMs: Long): Location? =
         withTimeoutOrNull(timeoutMs) {
             suspendCancellableCoroutine { cont ->
-                val cancellation = CancellationSignal()
-                cont.invokeOnCancellation { cancellation.cancel() }
-                try {
-                    lm.getCurrentLocation(provider, cancellation, executor) { loc: Location? ->
-                        if (cont.isActive) cont.resume(loc)
+                val listener = object : LocationListener {
+                    override fun onLocationChanged(location: Location) {
+                        val ageMs =
+                            (SystemClock.elapsedRealtimeNanos() - location.elapsedRealtimeNanos) / 1_000_000L
+                        if (ageMs > FRESH_MAX_AGE_MS) return
+                        // 新鲜定位：注销监听后返回（不再消耗该源）
+                        runCatching { lm.removeUpdates(this) }
+                        if (cont.isActive) cont.resume(location)
                     }
+                }
+                cont.invokeOnCancellation { runCatching { lm.removeUpdates(listener) } }
+                try {
+                    lm.requestLocationUpdates(provider, 0L, 0f, executor, listener)
                 } catch (e: Exception) {
-                    Log.w(TAG, "getCurrentLocation(" + provider + ") failed", e)
+                    Log.w(TAG, "requestOnce(" + provider + ") failed", e)
                     if (cont.isActive) cont.resume(null)
                 }
             }
@@ -155,5 +173,8 @@ class OnDemandLocationProvider(private val context: Context) {
 
     private companion object {
         const val TAG = "OnDemandLocation"
+
+        /** 新鲜度阈值：位置年龄超过该值视为系统缓存（实测量产 vivo 会回吐分钟级旧缓存） */
+        const val FRESH_MAX_AGE_MS = 30_000L
     }
 }
