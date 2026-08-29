@@ -122,6 +122,12 @@ android {
         prefab = true
     }
 
+    packaging {
+        // 内置特权服务(libbfd.so)需被真实解压到 nativeLibraryDir 且保持可执行位
+        // (经 shell 域拉起,Shizuku starter 同机制),必须关闭免解压打包
+        jniLibs.useLegacyPackaging = true
+    }
+
     externalNativeBuild {
         cmake {
             path = file("src/main/cpp/CMakeLists.txt")

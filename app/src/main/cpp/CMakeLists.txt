@@ -28,3 +28,9 @@ add_library(adb SHARED
         adb_pairing.cpp)
 
 target_link_libraries(adb log boringssl::crypto_static cxx::cxx)
+
+# 内置特权服务:可执行目标。目标名 libbfd.so 使产物落在 jniLibs 并保持可执行位
+# (Shizuku 的 libshizuku.so 同款做法);纯 C,不链 boringssl
+add_executable(libbfd.so
+        bfd_server.c)
+set_target_properties(libbfd.so PROPERTIES PREFIX "")
