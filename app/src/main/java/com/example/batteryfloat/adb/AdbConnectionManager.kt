@@ -71,7 +71,24 @@ object AdbConnectionManager {
     private val _state = MutableStateFlow(AdbState.NOT_PAIRED)
     val state: StateFlow<AdbState> = _state
 
+    /** 最近一次 shell 命令成功的时间戳(0=从未成功);断连态 UI 展示通道新鲜度用 */
+    @Volatile
+    var lastSuccessAt: Long = 0L
+        private set
+
     val isReady: Boolean get() = _state.value == AdbState.CONNECTED
+
+    /** 最近成功距今的可读描述("刚刚"/"x 分钟前"/"x 小时前");从未成功返回 null */
+    fun lastSuccessAgoText(): String? {
+        val t = lastSuccessAt
+        if (t <= 0) return null
+        val s = (System.currentTimeMillis() - t) / 1000
+        return when {
+            s < 60 -> "刚刚"
+            s < 3600 -> "${s / 60} 分钟前"
+            else -> "${s / 3600} 小时前"
+        }
+    }
 
     /** 进程内幂等初始化(MainActivity onCreate 调用);已启用则启动自动重连 */
     fun setup(context: Context) {
@@ -156,6 +173,7 @@ object AdbConnectionManager {
                 val sb = StringBuilder()
                 try {
                     c.shellCommand(command) { bytes -> sb.append(String(bytes)) }
+                    lastSuccessAt = System.currentTimeMillis()
                     sb.toString()
                 } catch (e: Throwable) {
                     Log.w(TAG, "exec 失败(${e.message}),标记断开")
@@ -212,8 +230,12 @@ object AdbConnectionManager {
             if (id.toString().contains("uid=2000")) {
                 closeClientQuietly()
                 client = c
+                lastSuccessAt = System.currentTimeMillis()
                 _state.value = AdbState.CONNECTED
                 Log.i(TAG, "特权通道已连接(端口 $port)")
+                // 幂等自动授权引导(独立协程:其内部 exec 会走 ensureConnected,
+                // 若在持锁协程内调用会重入 connectMutex 死锁)
+                AdbAutoGrant.onConnected(ctx)
                 c
             } else {
                 Log.w(TAG, "连接自检失败: $id")

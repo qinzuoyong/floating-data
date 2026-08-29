@@ -85,6 +85,19 @@ object A11ySelfHealer {
             .edit().putBoolean(PrefsKeys.A11Y_USER_DISABLED, value).apply()
     }
 
+    /**
+     * 供 ADB 连接成功自动授权引导(AdbAutoGrant)复用:确保无障碍保活处于启用状态(幂等)。
+     * 已启用直接返回 true;用户在应用内主动关闭过则尊重意图不动,返回 false;
+     * 否则走 writeBack 的主/辅路径写回,写后即查系统设置判定生效(防假成功)。
+     */
+    suspend fun ensureEnabled(context: Context): Boolean {
+        val ctx = context.applicationContext
+        if (KeepAliveAccessibilityService.isEnabledInSettings(ctx)) return true
+        if (isUserDisabled(ctx)) return false
+        if (!writeBack(ctx)) return false
+        return KeepAliveAccessibilityService.isEnabledInSettings(ctx)
+    }
+
     // ===== 写回实现 =====
 
     /** 写回本服务到启用列表;返回是否执行了写入(生效与否由复查判定) */

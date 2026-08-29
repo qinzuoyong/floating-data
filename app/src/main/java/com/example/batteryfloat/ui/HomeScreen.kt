@@ -74,6 +74,8 @@ fun HomeScreen(
     }
     // ADB 高精度数据源(批次 2:通道开关与状态;批次 3 接入数据)
     var adbEnabled by remember { mutableStateOf(prefs.getBoolean(PrefsKeys.ADB_PRIV_ENABLED, false)) }
+    // ADB 连通后自动开启所需权限(方案二,默认关)
+    var adbAutoGrant by remember { mutableStateOf(prefs.getBoolean(PrefsKeys.ADB_AUTO_GRANT, false)) }
     var showAdbPairing by remember { mutableStateOf(false) }
     val adbState by AdbConnectionManager.state.collectAsState()
 
@@ -85,6 +87,7 @@ fun HomeScreen(
                 isServiceRunning = FloatingWindowService.isRunning
                 a11yKeepAlive = KeepAliveAccessibilityService.isEnabledInSettings(context)
                 adbEnabled = prefs.getBoolean(PrefsKeys.ADB_PRIV_ENABLED, false)
+                adbAutoGrant = prefs.getBoolean(PrefsKeys.ADB_AUTO_GRANT, false)
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -254,7 +257,11 @@ fun HomeScreen(
                 adbState == AdbState.CONNECTED -> "已连接 · 高精度数据生效(功率直读)"
                 adbState == AdbState.NOT_PAIRED -> "未配对——重新打开开关,按通知栏引导配对"
                 adbState == AdbState.AUTH_FAILED -> "设备已撤销信任——请点击下方「重新配对」"
-                else -> "重连中,暂用基础数据源…"
+                else -> {
+                    val ago = AdbConnectionManager.lastSuccessAgoText()
+                    if (ago != null) "重连中,暂用基础数据源(最近成功 $ago)"
+                    else "重连中,暂用基础数据源…"
+                }
             },
             checked = adbEnabled,
             onCheckedChange = { enable ->
@@ -273,6 +280,28 @@ fun HomeScreen(
                     adbEnabled = false
                     AdbConnectionManager.setEnabled(context, false)
                 }
+            }
+        )
+
+        // 连通后自动授权(需通道开启;每步读回验证,静默失败会如实暴露在日志)
+        SettingSwitchCard(
+            icon = {
+                Icon(
+                    Icons.Filled.Shield,
+                    contentDescription = "自动授权",
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(24.dp)
+                )
+            },
+            iconBackgroundColor = MaterialTheme.colorScheme.primaryContainer,
+            title = "连接后自动开启所需权限",
+            subtitle = if (!adbEnabled) "需先开启高精度数据源 (ADB)"
+            else "无线调试连通后自动授予 WRITE_SECURE_SETTINGS、开启无障碍保活与悬浮窗权限",
+            checked = adbAutoGrant,
+            onCheckedChange = {
+                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                adbAutoGrant = it
+                prefs.edit().putBoolean(PrefsKeys.ADB_AUTO_GRANT, it).apply()
             }
         )
 
