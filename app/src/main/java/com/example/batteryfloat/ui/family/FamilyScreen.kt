@@ -27,7 +27,6 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Map
-import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.outlined.People
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
@@ -332,7 +331,6 @@ private fun FamilyListContent(
                 items(members.values.toList(), key = { it.uid }) { member ->
                     MemberCard(
                         member = member,
-                        onRequestLocation = { FamilyLocationService.requestLocation(context, member.uid) },
                         onOpenMap = { onOpenMap(member) },
                         onSetNote = { store.setMemberNote(member.uid, it) }
                     )
@@ -484,7 +482,6 @@ private fun FamilyListContent(
 @Composable
 private fun MemberCard(
     member: FamilyMember,
-    onRequestLocation: () -> Unit,
     onOpenMap: () -> Unit,
     onSetNote: (String) -> Unit
 ) {
@@ -528,24 +525,15 @@ private fun MemberCard(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             Spacer(Modifier.height(DesignSystem.SpacingM))
-            Row(horizontalArrangement = Arrangement.spacedBy(DesignSystem.SpacingS)) {
-                PrimaryActionButton(
-                    text = stringResource(R.string.family_get_location),
-                    onClick = onRequestLocation,
-                    modifier = Modifier.weight(1f),
-                    icon = {
-                        Icon(Icons.Filled.MyLocation, contentDescription = null, modifier = Modifier.size(16.dp))
-                    }
-                )
-                androidx.compose.material3.OutlinedButton(
-                    onClick = onOpenMap,
-                    shape = RoundedCornerShape(DesignSystem.CornerM),
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Icon(Icons.Filled.Map, contentDescription = null, modifier = Modifier.size(16.dp))
-                    Spacer(Modifier.width(DesignSystem.SpacingS))
-                    Text(stringResource(R.string.family_map))
-                }
+            // 「获取位置」按钮已移除：进入地图页即自动请求对方位置并定位自己
+            androidx.compose.material3.OutlinedButton(
+                onClick = onOpenMap,
+                shape = RoundedCornerShape(DesignSystem.CornerM),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Icon(Icons.Filled.Map, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(Modifier.width(DesignSystem.SpacingS))
+                Text(stringResource(R.string.family_map))
             }
         }
     }

@@ -9,6 +9,13 @@
   /* 地图容器：absolute 铺满视口（Android WebView 下 vh 单位可能失效，JS 侧还会显式设高度） */
   #map { position: absolute; top: 0; left: 0; right: 0; bottom: 0; }
   #error { display: none; position: absolute; top: 42%; width: 100%; text-align: center; color: #666; font-size: 14px; }
+  /* 全景视角操作提示：进入地图显示数秒，告知可点击标记放大 */
+  #hint {
+    display: none; position: absolute; top: 12px; left: 50%; transform: translateX(-50%);
+    z-index: 8; padding: 6px 14px; font-size: 12px; color: #fff;
+    background: rgba(30,136,229,0.88); border-radius: 14px; white-space: nowrap;
+    transition: opacity 0.6s; opacity: 1;
+  }
   /* 全景视角按钮：放大单个点后一键恢复两点完整视野 */
   #resetBtn {
     display: none; position: absolute; right: 12px; top: 12px; z-index: 9;
@@ -20,6 +27,7 @@
 <body>
 <div id="map"></div>
 <div id="error">地图加载失败：请检查网络与 AK 配置</div>
+<div id="hint">点击蓝点 / 红点可放大查看详细位置</div>
 <button id="resetBtn">全景视角</button>
 <script>
   var map = null;
@@ -47,6 +55,23 @@
   var addrCache = {};
   // 当前全景视角的点集([{point,title,label}])：点击标记放大后由"全景视角"按钮恢复
   var viewPoints = [];
+  // 操作提示定时器：全景视野显示 5 秒后自动淡出
+  var hintTimer = null;
+
+  function hideHint() {
+    var el = document.getElementById("hint");
+    el.style.opacity = "0";
+    setTimeout(function () { el.style.display = "none"; }, 600);
+  }
+
+  function showHint() {
+    if (viewPoints.length === 0) return;
+    var el = document.getElementById("hint");
+    el.style.display = "block";
+    el.style.opacity = "1";
+    if (hintTimer) clearTimeout(hintTimer);
+    hintTimer = setTimeout(hideHint, 5000);
+  }
 
   /**
    * 视野适配：两点(或单点)完整落入可视区且不被底部信息卡遮挡。
@@ -83,6 +108,7 @@
       var win = new BMap.InfoWindow(html, { width: 240, enableMessage: false });
       marker.openInfoWindow(win, meta.point);
       document.getElementById("resetBtn").style.display = "block";
+      hideHint();
     });
     map.addOverlay(marker);
   }
@@ -154,6 +180,7 @@
       }));
     }
     fitAll();
+    showHint();
   }
 
   // 单点逆地理编码：BMap.Geocoder 将坐标转为地址，经 AndroidBridge 回传原生并缓存
@@ -179,6 +206,7 @@
   // 全景视角按钮：恢复两点完整视野（避开浮层的留白与打开时一致）
   document.getElementById("resetBtn").addEventListener("click", function () {
     fitAll();
+    hideHint();
     this.style.display = "none";
   });
   // getscript 直接静态引入（绕过 api?v=3.0 的 document.write 引导层，避免 WebView 时序问题）。
