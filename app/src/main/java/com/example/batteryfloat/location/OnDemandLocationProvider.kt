@@ -7,6 +7,9 @@ import android.location.LocationListener
 import android.location.LocationManager
 import android.os.SystemClock
 import android.util.Log
+import com.amap.api.location.AMapLocationClient
+import com.amap.api.location.AMapLocationClientOption
+import com.example.batteryfloat.BuildConfig
 import com.example.batteryfloat.p2p.LocationPayload
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.channelFlow
@@ -23,6 +26,8 @@ import kotlin.coroutines.resume
  *
  * 策略：NETWORK_PROVIDER 与 GPS_PROVIDER(含北斗/GNSS) 并发请求；
  * NETWORK 通常先返回（快、误差大）先出位置，GPS 后返回（精确）若 accuracy 更优则更新。
+ * 配置了 AMAP_KEY 时，高德定位源（室内 WiFi 指纹 10~30m，室外融合 GNSS）并行加入
+ * 同一套 accuracy 竞争；Key 缺失/异常/配额耗尽时静默跳过，退回纯系统定位。
  * 调用方需已持有定位权限（FINE 或 COARSE）。
  */
 class OnDemandLocationProvider(private val context: Context) {
@@ -33,11 +38,28 @@ class OnDemandLocationProvider(private val context: Context) {
     private val executor = Executors.newSingleThreadExecutor()
 
     /**
+     * 高德定位源是否可用：密钥已配置且隐私合规双接口已调用（进程内只判一次）。
+     * 不可用时调用方直接不发起高德请求，行为与未接入前一致；
+     * 密钥无效/配额异常由后续定位回调的 errorCode 兜底（按无结果静默跳过）。
+     */
+    private val amapUsable: Boolean by lazy {
+        if (BuildConfig.AMAP_KEY.isBlank()) return@lazy false
+        runCatching {
+            val appContext = context.applicationContext
+            AMapLocationClient.updatePrivacyShow(appContext, true, true)
+            AMapLocationClient.updatePrivacyAgree(appContext, true)
+            AMapLocationClient.setApiKey(BuildConfig.AMAP_KEY)
+            true
+        }.onFailure { Log.w(TAG, "amap init failed", it) }.getOrDefault(false)
+    }
+
+    /**
      * 并发定位流：NETWORK 与 GPS 同时请求，按 accuracy 由优到差发射更新。
      *
      * - NETWORK 先回（快、误差大）→ 先发射粗位置，蓝点快速出现
      * - GPS 后回（精确）→ 若 accuracy 更小则发射，蓝点更新到精确位置
      * - GPS 先回（室外）→ 直接精确，后到的 NETWORK 粗位置因 accuracy 更大被丢弃
+     * - 高德源（配置 AMAP_KEY 时）→ 室内 WiFi 指纹 10~30m 通常胜出，室外与 GPS 择优
      * - 全部 Provider 超时无果 → 兜底发射 lastKnown（有总比没有好）
      *
      * 调用方应收集整条流：每个发射都比上一个更精确（先粗后精多次回传依赖此语义）。
@@ -47,28 +69,40 @@ class OnDemandLocationProvider(private val context: Context) {
     fun currentLocationFlow(timeoutMs: Long = 12_000L): Flow<LocationPayload> = channelFlow {
         val providers = enabledProviders()
         var emitted = false
-        if (providers.isNotEmpty()) {
+        if (providers.isNotEmpty() || amapUsable) {
             var best: LocationPayload? = null
             val lock = Any()
 
+            // 多源结果统一入口：更优精度才发射（先粗后精语义）
+            fun submit(loc: Location?) {
+                if (loc == null) return
+                val payload = LocationPayload(
+                    lat = loc.latitude,
+                    lng = loc.longitude,
+                    // 以收到本次定位的时刻为准，避免 mock/异常定位源的旧时间戳
+                    ts = System.currentTimeMillis(),
+                    accuracy = accuracyOf(loc)
+                )
+                synchronized(lock) {
+                    val b = best
+                    if (b == null || payload.accuracy < b.accuracy) {
+                        best = payload
+                        emitted = true
+                        trySend(payload)
+                    }
+                }
+            }
+
             val jobs = providers.map { provider ->
                 launch {
-                    val loc = requestOnce(provider, timeoutMs) ?: return@launch
-                    val payload = LocationPayload(
-                        lat = loc.latitude,
-                        lng = loc.longitude,
-                        // 以收到本次定位的时刻为准，避免 mock/异常定位源的旧时间戳
-                        ts = System.currentTimeMillis(),
-                        accuracy = accuracyOf(loc)
-                    )
-                    synchronized(lock) {
-                        val b = best
-                        if (b == null || payload.accuracy < b.accuracy) {
-                            best = payload
-                            emitted = true
-                            trySend(payload)
-                        }
-                    }
+                    submit(requestOnce(provider, timeoutMs))
+                }
+            }.toMutableList()
+
+            // 高德第三源：室内 WiFi 指纹 10~30m，室外融合 GNSS，与系统源同台竞争
+            if (amapUsable) {
+                jobs += launch {
+                    submit(requestOnceAmap(timeoutMs))
                 }
             }
             jobs.joinAll()
@@ -168,6 +202,46 @@ class OnDemandLocationProvider(private val context: Context) {
                     Log.w(TAG, "requestOnce(" + provider + ") failed", e)
                     if (cont.isActive) cont.resume(null)
                 }
+            }
+        }
+
+    /**
+     * 高德单次高精度定位：室内走 WiFi 指纹（10~30m），室外自动融合 GNSS。
+     * AMapLocation 继承自 Location，与系统源共用 accuracy 竞争和新鲜度过滤；
+     * errorCode!=0（密钥/配额/服务异常）按无结果处理，静默退回系统源。
+     */
+    @SuppressLint("MissingPermission")
+    private suspend fun requestOnceAmap(timeoutMs: Long): Location? =
+        withTimeoutOrNull(timeoutMs) {
+            suspendCancellableCoroutine { cont ->
+                val client = AMapLocationClient(context.applicationContext)
+                val opt = AMapLocationClientOption().apply {
+                    locationMode = AMapLocationClientOption.AMapLocationMode.Hight_Accuracy
+                    isOnceLocation = true
+                    isOnceLocationLatest = true
+                    isSensorEnable = false
+                    isNeedAddress = false
+                    httpTimeOut = timeoutMs
+                }
+                client.setLocationOption(opt)
+                client.setLocationListener { loc ->
+                    runCatching { client.stopLocation(); client.onDestroy() }
+                    if (!cont.isActive) return@setLocationListener
+                    if (loc == null || loc.errorCode != 0) {
+                        Log.w(TAG, "amap locate failed code=" + (loc?.errorCode ?: -1) + " " + (loc?.errorInfo ?: ""))
+                        cont.resume(null)
+                        return@setLocationListener
+                    }
+                    val ageMs =
+                        (SystemClock.elapsedRealtimeNanos() - loc.elapsedRealtimeNanos) / 1_000_000L
+                    if (ageMs > FRESH_MAX_AGE_MS) {
+                        cont.resume(null) // 高德源同样不采纳陈旧缓存
+                        return@setLocationListener
+                    }
+                    cont.resume(loc)
+                }
+                cont.invokeOnCancellation { runCatching { client.stopLocation(); client.onDestroy() } }
+                client.startLocation()
             }
         }
 

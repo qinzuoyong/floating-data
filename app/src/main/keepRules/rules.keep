@@ -25,3 +25,7 @@
 # 百度地图 SDK
 -keep class com.baidu.** { *; }
 -dontwarn com.baidu.**
+# 高德定位SDK(室内WiFi指纹定位源,见 OnDemandLocationProvider)
+-keep class com.amap.api.** { *; }
+-dontwarn com.amap.ams.gnss.**
+-dontwarn net.jafama.**

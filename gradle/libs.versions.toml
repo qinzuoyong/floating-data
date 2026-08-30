@@ -13,6 +13,7 @@ ndkLibcxx = "27.0.12077973"
 gson = "2.14.0"
 javaWebsocket = "1.6.0"
 shizuku = "13.1.5"
+amapLocation = "11.2.100"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -30,6 +31,7 @@ gson = { group = "com.google.code.gson", name = "gson", version.ref = "gson" }
 java-websocket = { group = "org.java-websocket", name = "Java-WebSocket", version.ref = "javaWebsocket" }
 shizuku-api = { group = "dev.rikka.shizuku", name = "api", version.ref = "shizuku" }
 shizuku-provider = { group = "dev.rikka.shizuku", name = "provider", version.ref = "shizuku" }
+amap-location = { group = "com.amap.api", name = "location", version.ref = "amapLocation" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

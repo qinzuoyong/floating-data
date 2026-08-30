@@ -69,9 +69,11 @@ android {
             if (lpFile.exists()) lpFile.inputStream().use { load(it) }
         }
         val baiduAk = lp.getProperty("BAIDU_MAP_AK", "")
+        val amapKey = lp.getProperty("AMAP_KEY", "")
         val signalUrl = lp.getProperty("SIGNAL_URL", "ws://47.94.212.176/family-signal")
 
         buildConfigField("String", "BAIDU_MAP_AK", "\"${baiduAk}\"")
+        buildConfigField("String", "AMAP_KEY", "\"${amapKey}\"")
         buildConfigField("String", "SIGNAL_URL", "\"${signalUrl}\"")
 
         // 只保留中文资源，剪掉多语言（AGP 9.x 移除 resConfigs，改用 androidResources.localeFilters 但需 initscript）
@@ -143,6 +145,7 @@ afterEvaluate {
 }
 
 dependencies {
+    implementation(libs.amap.location)
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.compose.material3)
