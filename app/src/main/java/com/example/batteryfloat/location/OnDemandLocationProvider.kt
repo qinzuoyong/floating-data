@@ -213,6 +213,7 @@ class OnDemandLocationProvider(private val context: Context) {
     @SuppressLint("MissingPermission")
     private suspend fun requestOnceAmap(timeoutMs: Long): Location? =
         withTimeoutOrNull(timeoutMs) {
+            Log.i(TAG, "amap request start")
             suspendCancellableCoroutine { cont ->
                 val client = AMapLocationClient(context.applicationContext)
                 val opt = AMapLocationClientOption().apply {
@@ -232,12 +233,18 @@ class OnDemandLocationProvider(private val context: Context) {
                         cont.resume(null)
                         return@setLocationListener
                     }
-                    val ageMs =
+                    // 高德SDK不设置 elapsedRealtimeNanos(默认0=开机时刻),须用 epoch 时间差判龄
+                    val ageMs = if (loc.elapsedRealtimeNanos > 0L) {
                         (SystemClock.elapsedRealtimeNanos() - loc.elapsedRealtimeNanos) / 1_000_000L
+                    } else {
+                        System.currentTimeMillis() - loc.time
+                    }
                     if (ageMs > FRESH_MAX_AGE_MS) {
+                        Log.w(TAG, "amap result stale filtered age=${ageMs}ms")
                         cont.resume(null) // 高德源同样不采纳陈旧缓存
                         return@setLocationListener
                     }
+                    Log.i(TAG, "amap result ok acc=" + accuracyOf(loc) + "m")
                     cont.resume(loc)
                 }
                 cont.invokeOnCancellation { runCatching { client.stopLocation(); client.onDestroy() } }

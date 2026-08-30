@@ -34,6 +34,10 @@
         android:theme="@style/Theme.BatteryFloating"
         android:appCategory="productivity"
         android:networkSecurityConfig="@xml/network_security_config">
+        <!-- 高德定位SDK必需的后台定位服务(官方文档要求手动声明,AAR 不自动合并) -->
+        <service android:name="com.amap.api.location.APSService" />
+        <!-- 高德定位SDK密钥(11.x 只从 meta-data 读取,setApiKey 无效);值经 manifestPlaceholders 注入 -->
+        <meta-data android:name="com.amap.api.v2.apikey" android:value="${amapKey}" />
 
         <activity
             android:name=".MainActivity"

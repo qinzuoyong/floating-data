@@ -74,6 +74,7 @@ android {
 
         buildConfigField("String", "BAIDU_MAP_AK", "\"${baiduAk}\"")
         buildConfigField("String", "AMAP_KEY", "\"${amapKey}\"")
+        manifestPlaceholders["amapKey"] = amapKey
         buildConfigField("String", "SIGNAL_URL", "\"${signalUrl}\"")
 
         // 只保留中文资源，剪掉多语言（AGP 9.x 移除 resConfigs，改用 androidResources.localeFilters 但需 initscript）
