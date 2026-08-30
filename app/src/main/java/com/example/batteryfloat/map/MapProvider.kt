@@ -7,7 +7,9 @@ import androidx.compose.ui.Modifier
 data class MapPoint(
     val lat: Double,
     val lng: Double,
-    val title: String = ""
+    val title: String = "",
+    /** 展示名（信息窗口用）：蓝点=我的位置，红点=家人显示名；空串时 JS 侧回退 title */
+    val label: String = ""
 )
 
 /**

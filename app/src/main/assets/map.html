@@ -9,11 +9,18 @@
   /* 地图容器：absolute 铺满视口（Android WebView 下 vh 单位可能失效，JS 侧还会显式设高度） */
   #map { position: absolute; top: 0; left: 0; right: 0; bottom: 0; }
   #error { display: none; position: absolute; top: 42%; width: 100%; text-align: center; color: #666; font-size: 14px; }
+  /* 全景视角按钮：放大单个点后一键恢复两点完整视野 */
+  #resetBtn {
+    display: none; position: absolute; right: 12px; top: 12px; z-index: 9;
+    padding: 6px 12px; font-size: 12px; color: #1E88E5;
+    background: rgba(255,255,255,0.95); border: 1px solid #1E88E5; border-radius: 6px;
+  }
 </style>
 </head>
 <body>
 <div id="map"></div>
 <div id="error">地图加载失败：请检查网络与 AK 配置</div>
+<button id="resetBtn">全景视角</button>
 <script>
   var map = null;
 
@@ -36,6 +43,49 @@
   }
 
   var geocoder = null;
+  // 逆地理编码结果缓存(uid→详细地址)：信息窗口直接展示
+  var addrCache = {};
+  // 当前全景视角的点集([{point,title,label}])：点击标记放大后由"全景视角"按钮恢复
+  var viewPoints = [];
+
+  /**
+   * 视野适配：两点(或单点)完整落入可视区且不被底部信息卡遮挡。
+   * 不用 setViewport 的 margins 参数(实测该版本传数组参数会内部异常且无效果)，
+   * 改为手动扩包围盒：南边界多扩 40% span(信息卡约占屏高 35%)，东西北各扩 8~10%。
+   */
+  function fitAll() {
+    if (viewPoints.length === 0) return;
+    var minLat = 90, maxLat = -90, minLng = 180, maxLng = -180;
+    for (var i = 0; i < viewPoints.length; i++) {
+      var p = viewPoints[i].point;
+      if (p.lat < minLat) minLat = p.lat;
+      if (p.lat > maxLat) maxLat = p.lat;
+      if (p.lng < minLng) minLng = p.lng;
+      if (p.lng > maxLng) maxLng = p.lng;
+    }
+    var latSpan = Math.max(maxLat - minLat, 0.01);
+    var lngSpan = Math.max(maxLng - minLng, 0.01);
+    // 实测底部信息卡占地图区高度约 56%(自下而上)，南边界外扩 2.8×span 才能把
+    // 最低点抬到卡片上沿之上(约 61%)，北边界留 0.35 避让返回按钮区
+    var sw = new BMap.Point(minLng - lngSpan * 0.15, minLat - latSpan * 2.80);
+    var ne = new BMap.Point(maxLng + lngSpan * 0.15, maxLat + latSpan * 0.35);
+    map.setViewport([sw, ne]);
+  }
+
+  /** 创建标记并绑定点击：放大到街道级 + 信息窗口(名称+详细地址) */
+  function addMarker(meta, icon) {
+    var marker = new BMap.Marker(meta.point, { icon: icon });
+    marker.addEventListener("click", function () {
+      map.centerAndZoom(meta.point, 17);
+      var addr = addrCache[meta.title];
+      var html = "<div style=\"font-size:13px;line-height:1.6;max-width:220px\"><b>" +
+          meta.label + "</b>" + (addr ? "<br/>" + addr : "") + "</div>";
+      var win = new BMap.InfoWindow(html, { width: 240, enableMessage: false });
+      marker.openInfoWindow(win, meta.point);
+      document.getElementById("resetBtn").style.display = "block";
+    });
+    map.addOverlay(marker);
+  }
 
   function initMap() {
     var el = document.getElementById("map");
@@ -53,55 +103,66 @@
     try {
       var raw = AndroidBridge.getData();
       if (raw) applyData(JSON.parse(raw));
-    } catch (e) { /* 原生桥未就绪时等待 applyData 推送 */ }
+    } catch (e) {
+      // 桥未就绪时等待推送；其余异常必须留痕(此前 fitAll 异常被吞导致视野不生效难排查)
+      console.log('applyData pull err: ' + e);
+    }
   }
 
-  // 原生侧数据更新入口：data = { my: {lat,lng}|null, targets: [{lat,lng,title}] }
+  // 原生侧数据更新入口：data = { my: {lat,lng,title,label}|null, targets: [{lat,lng,title,label}] }
   function applyData(data) {
     if (!map) return;
     console.log('applyData: my=' + (data && data.my ? 1 : 0) + ' targets=' + (data && data.targets ? data.targets.length : 0));
     map.clearOverlays();
-    var points = [];
+    viewPoints = [];
+    document.getElementById("resetBtn").style.display = "none";
     if (data && data.my) {
-      var p = new BMap.Point(data.my.lng, data.my.lat);
-      map.addOverlay(new BMap.Marker(p, { icon: myIcon() }));
-      points.push(p);
+      var me = {
+        point: new BMap.Point(data.my.lng, data.my.lat),
+        title: data.my.title || "me",
+        label: data.my.label || "我的位置"
+      };
+      viewPoints.push(me);
+      addMarker(me, myIcon());
     }
     if (data && data.targets) {
       for (var i = 0; i < data.targets.length; i++) {
         var t = data.targets[i];
-        var p2 = new BMap.Point(t.lng, t.lat);
-        map.addOverlay(new BMap.Marker(p2, { icon: familyIcon() }));
-        points.push(p2);
+        var meta = {
+          point: new BMap.Point(t.lng, t.lat),
+          title: t.title || ("target-" + i),
+          label: t.label || t.title || ("家人-" + i)
+        };
+        viewPoints.push(meta);
+        addMarker(meta, familyIcon());
       }
     }
-    // 逆地理编码：坐标 → 详细地址（如 上海市浦东新区XX路XX号），回传原生显示
+    // 逆地理编码：坐标 → 详细地址（如 上海市浦东新区XX路XX号），回传原生显示并缓存
     if (data && data.my) {
-      addressOf(new BMap.Point(data.my.lng, data.my.lat), "me");
+      addressOf(new BMap.Point(data.my.lng, data.my.lat), data.my.title || "me");
     }
     if (data && data.targets) {
-      for (var i = 0; i < data.targets.length; i++) {
-        var t = data.targets[i];
-        addressOf(new BMap.Point(t.lng, t.lat), t.title || ("target-" + i));
+      for (var j = 0; j < data.targets.length; j++) {
+        var t2 = data.targets[j];
+        addressOf(new BMap.Point(t2.lng, t2.lat), t2.title || ("target-" + j));
       }
     }
 
-    if (points.length >= 2) {
-      map.addOverlay(new BMap.Polyline(points, {
+    if (viewPoints.length >= 2) {
+      map.addOverlay(new BMap.Polyline(viewPoints.map(function (m) { return m.point; }), {
         strokeColor: "#1E88E5", strokeWeight: 4, strokeOpacity: 0.8
       }));
-      map.setViewport(points);
-    } else if (points.length === 1) {
-      map.centerAndZoom(points[0], 15);
     }
+    fitAll();
   }
 
-  // 单点逆地理编码：BMap.Geocoder 将坐标转为地址，经 AndroidBridge 回传原生
+  // 单点逆地理编码：BMap.Geocoder 将坐标转为地址，经 AndroidBridge 回传原生并缓存
   function addressOf(point, uid) {
     if (!geocoder) return;
     geocoder.getLocation(point, function (result) {
       console.log('addr: uid=' + uid + ' result=' + (result ? (result.address ? 'HAS_ADDRESS' : 'NO_ADDRESS') : 'NULL'));
       if (result && result.address) {
+        addrCache[uid] = result.address;
         try {
           AndroidBridge.onAddress(uid, result.address);
         } catch (e) { /* 原生桥未就绪时忽略 */ }
@@ -115,6 +176,11 @@
 </script>
 <script type="text/javascript" src="https://api.map.baidu.com/getscript?v=3.0&ak=__AK__&services=&t=20260814111607"></script>
 <script>
+  // 全景视角按钮：恢复两点完整视野（避开浮层的留白与打开时一致）
+  document.getElementById("resetBtn").addEventListener("click", function () {
+    fitAll();
+    this.style.display = "none";
+  });
   // getscript 直接静态引入（绕过 api?v=3.0 的 document.write 引导层，避免 WebView 时序问题）。
   // 脚本加载执行后 BMap 即全局可用：轮询等待就绪后调用 initMap，超时显示错误提示。
   (function () {

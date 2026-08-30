@@ -44,6 +44,7 @@
     <string name="family_back">返回</string>
     <string name="family_map_no_location">暂无位置，点击下方「重新获取」</string>
     <string name="family_map_refresh">重新获取位置</string>
+    <string name="family_map_me_label">我的位置</string>
     <string name="family_distance_prefix">距离：%1$s</string>
     <string name="family_edit_note_desc">修改备注</string>
     <string name="family_edit_note_title">修改备注</string>

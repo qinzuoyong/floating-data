@@ -141,11 +141,11 @@ class WebMapProvider : MapProvider {
         // （latestJson 供 JS 主动拉取，故转换在缓存写入前完成，两条数据路径同源）
         val myBd = myLocation?.let { p ->
             val c = CoordTransform.gcj02ToBd09(p.lat, p.lng)
-            MapPoint(c.first, c.second, p.title)
+            MapPoint(c.first, c.second, p.title, p.label)
         }
         val targetsBd = targets.map { t ->
             val c = CoordTransform.gcj02ToBd09(t.lat, t.lng)
-            MapPoint(c.first, c.second, t.title)
+            MapPoint(c.first, c.second, t.title, t.label)
         }
         val data = MapData(myBd, targetsBd)
         holder.latestJson = gson.toJson(data)

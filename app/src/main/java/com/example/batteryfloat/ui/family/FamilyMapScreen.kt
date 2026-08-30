@@ -107,7 +107,7 @@ fun FamilyMapScreen(
             mapProvider.FamilyMap(
                 myLocation = myLoc,
                 targets = listOf(
-                    MapPoint(live.lastLat!!, live.lastLng!!, title = live.uid)
+                    MapPoint(live.lastLat!!, live.lastLng!!, title = live.uid, label = live.displayName)
                 ),
                 modifier = Modifier.fillMaxSize(),
                 onAddress = { uid, addr ->
@@ -236,7 +236,7 @@ private fun refreshMyLocation(
     scope.launch {
         withContext(Dispatchers.Default) {
             OnDemandLocationProvider(context).currentLocationFlow().collect { loc ->
-                setMyLoc(MapPoint(loc.lat, loc.lng, title = "me"))
+                setMyLoc(MapPoint(loc.lat, loc.lng, title = "me", label = context.getString(R.string.family_map_me_label)))
             }
         }
         setLocating(false)
