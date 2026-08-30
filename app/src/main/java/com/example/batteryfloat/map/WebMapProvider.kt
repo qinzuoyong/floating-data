@@ -15,6 +15,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.viewinterop.AndroidView
 import com.example.batteryfloat.BuildConfig
+import com.example.batteryfloat.location.CoordTransform
 import com.google.gson.Gson
 
 /**
@@ -136,7 +137,17 @@ class WebMapProvider : MapProvider {
         myLocation: MapPoint?,
         targets: List<MapPoint>
     ) {
-        val data = MapData(myLocation, targets)
+        // 定位层产出 GCJ-02；百度 JS API 需要 BD-09，渲染入口统一转换
+        // （latestJson 供 JS 主动拉取，故转换在缓存写入前完成，两条数据路径同源）
+        val myBd = myLocation?.let { p ->
+            val c = CoordTransform.gcj02ToBd09(p.lat, p.lng)
+            MapPoint(c.first, c.second, p.title)
+        }
+        val targetsBd = targets.map { t ->
+            val c = CoordTransform.gcj02ToBd09(t.lat, t.lng)
+            MapPoint(c.first, c.second, t.title)
+        }
+        val data = MapData(myBd, targetsBd)
         holder.latestJson = gson.toJson(data)
         runCatching {
             view.evaluateJavascript("window.applyData(" + holder.latestJson + ")", null)

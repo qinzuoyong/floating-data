@@ -74,11 +74,17 @@ class OnDemandLocationProvider(private val context: Context) {
             val lock = Any()
 
             // 多源结果统一入口：更优精度才发射（先粗后精语义）
-            fun submit(loc: Location?) {
+            // GPS 源是 WGS-84，其余源(NLP/高德)是 GCJ-02，统一转成 GCJ-02 后再竞争
+            fun submit(loc: Location?, fromGps: Boolean) {
                 if (loc == null) return
+                val gcj = if (fromGps) {
+                    CoordTransform.wgs84ToGcj02(loc.latitude, loc.longitude)
+                } else {
+                    loc.latitude to loc.longitude
+                }
                 val payload = LocationPayload(
-                    lat = loc.latitude,
-                    lng = loc.longitude,
+                    lat = gcj.first,
+                    lng = gcj.second,
                     // 以收到本次定位的时刻为准，避免 mock/异常定位源的旧时间戳
                     ts = System.currentTimeMillis(),
                     accuracy = accuracyOf(loc)
@@ -95,14 +101,14 @@ class OnDemandLocationProvider(private val context: Context) {
 
             val jobs = providers.map { provider ->
                 launch {
-                    submit(requestOnce(provider, timeoutMs))
+                    submit(requestOnce(provider, timeoutMs), provider == LocationManager.GPS_PROVIDER)
                 }
             }.toMutableList()
 
             // 高德第三源：室内 WiFi 指纹 10~30m，室外融合 GNSS，与系统源同台竞争
             if (amapUsable) {
                 jobs += launch {
-                    submit(requestOnceAmap(timeoutMs))
+                    submit(requestOnceAmap(timeoutMs), false)
                 }
             }
             jobs.joinAll()
@@ -112,10 +118,15 @@ class OnDemandLocationProvider(private val context: Context) {
         if (!emitted) {
             for (provider in enabledProviders()) {
                 val last = runCatching { lm.getLastKnownLocation(provider) }.getOrNull() ?: continue
+                val gcj = if (provider == LocationManager.GPS_PROVIDER) {
+                    CoordTransform.wgs84ToGcj02(last.latitude, last.longitude)
+                } else {
+                    last.latitude to last.longitude
+                }
                 trySend(
                     LocationPayload(
-                        lat = last.latitude,
-                        lng = last.longitude,
+                        lat = gcj.first,
+                        lng = gcj.second,
                         ts = System.currentTimeMillis(),
                         accuracy = accuracyOf(last)
                     )
@@ -144,9 +155,14 @@ class OnDemandLocationProvider(private val context: Context) {
             val last = runCatching { lm.getLastKnownLocation(provider) }.getOrNull()
             if (last != null) {
                 Log.i(TAG, "location fallback lastKnown provider=" + provider)
+                val gcj = if (provider == LocationManager.GPS_PROVIDER) {
+                    CoordTransform.wgs84ToGcj02(last.latitude, last.longitude)
+                } else {
+                    last.latitude to last.longitude
+                }
                 return LocationPayload(
-                    lat = last.latitude,
-                    lng = last.longitude,
+                    lat = gcj.first,
+                    lng = gcj.second,
                     ts = System.currentTimeMillis(),
                     accuracy = accuracyOf(last)
                 )
