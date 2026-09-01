@@ -54,6 +54,9 @@ class FloatingWindowService : Service() {
     /** 保活用 1x1 不可见覆盖层 (TYPE_APPLICATION_OVERLAY) */
     private var aliveView: View? = null
 
+    /** 保活覆盖层 3s 延迟重试任务(onDestroy 取消,防销毁后仍尝试加 overlay) */
+    private var aliveRetryRunnable: Runnable? = null
+
     /** 跟踪上次屏幕方向，用于 onConfigurationChanged 时判断旧方向 */
     private var lastOrientation = Configuration.ORIENTATION_UNDEFINED
 
@@ -204,6 +207,8 @@ class FloatingWindowService : Service() {
         removeFloatingWindow()
         removeAliveOverlay()
         mainHandler.removeCallbacks(a11yPatrolRunnable)
+        aliveRetryRunnable?.let { mainHandler.removeCallbacks(it) }
+        aliveRetryRunnable = null
         // 取消注册 SharedPreferences 监听器，防止内存泄漏
         prefsListener?.let { prefs.unregisterOnSharedPreferenceChangeListener(it) }
         prefsListener = null
@@ -412,8 +417,10 @@ class FloatingWindowService : Service() {
         } catch (e: Exception) {
             Log.w(TAG, "添加保活覆盖层失败: ${e.message}")
             aliveView = null  // 确保状态一致
-            // 延迟 3 秒后重试一次（确保窗口服务就绪）
-            mainHandler?.postDelayed({ tryAddAliveOverlayRetry() }, 3000)
+            // 延迟 3 秒后重试一次（确保窗口服务就绪）；Runnable 存字段供 onDestroy 取消
+            val retry = Runnable { tryAddAliveOverlayRetry() }
+            aliveRetryRunnable = retry
+            mainHandler.postDelayed(retry, 3000)
         }
     }
 

@@ -27,6 +27,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -79,11 +80,16 @@ fun FamilyMapScreen(
     // JS 逆地理编码结果：uid → 详细地址（如 上海市浦东新区XX路XX号）
     var address by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
+    // 页面级单例定位器（refreshMyLocation 多入口复用，onDispose 释放线程池）
+    val locationProvider = remember { OnDemandLocationProvider(context) }
+    DisposableEffect(Unit) {
+        onDispose { locationProvider.close() }
+    }
 
     // 打开地图页时自动请求家人位置 + 取我的位置（先粗后精）
     LaunchedEffect(Unit) {
         onRefresh()
-        refreshMyLocation(context, scope, locating, { locating = it }, { myLoc = it })
+        refreshMyLocation(locationProvider, context, scope, locating, { locating = it }, { myLoc = it })
     }
 
     // 系统返回键与左上角返回箭头一致：回列表页（不退出应用）
@@ -195,7 +201,7 @@ fun FamilyMapScreen(
                     text = stringResource(R.string.family_map_refresh),
                     onClick = {
                         onRefresh()
-                        refreshMyLocation(context, scope, locating, { locating = it }, { myLoc = it })
+                        refreshMyLocation(locationProvider, context, scope, locating, { locating = it }, { myLoc = it })
                     },
                     modifier = Modifier.fillMaxWidth(),
                     icon = {
@@ -210,6 +216,7 @@ fun FamilyMapScreen(
 /**
  * 取一次我的位置（需定位权限；失败时置 null，不影响家人位置显示）
  *
+ * @param provider 页面级定位器（复用线程池，由调用方负责 close）
  * @param context 上下文
  * @param scope 协程作用域
  * @param locating 是否正在定位（防重入）
@@ -217,6 +224,7 @@ fun FamilyMapScreen(
  * @param setMyLoc 更新我的位置
  */
 private fun refreshMyLocation(
+    provider: OnDemandLocationProvider,
     context: Context,
     scope: kotlinx.coroutines.CoroutineScope,
     locating: Boolean,
@@ -235,7 +243,7 @@ private fun refreshMyLocation(
     setLocating(true)
     scope.launch {
         withContext(Dispatchers.Default) {
-            OnDemandLocationProvider(context).currentLocationFlow().collect { loc ->
+            provider.currentLocationFlow().collect { loc ->
                 setMyLoc(MapPoint(loc.lat, loc.lng, title = "me", label = context.getString(R.string.family_map_me_label)))
             }
         }

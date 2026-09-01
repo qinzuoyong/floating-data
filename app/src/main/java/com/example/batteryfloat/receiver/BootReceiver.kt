@@ -86,7 +86,7 @@ class BootReceiver : BroadcastReceiver() {
 
         // 4. 启动悬浮窗服务
         Log.i(TAG, "检测到上次悬浮窗运行中 → 开机自动启动")
-        acquireBootWakeLock(context)
+        val wakeLock = acquireBootWakeLock(context)
         try {
             FloatingWindowService.start(context)
             Log.i(TAG, "开机启动悬浮窗服务成功")
@@ -96,25 +96,31 @@ class BootReceiver : BroadcastReceiver() {
         } catch (e: Exception) {
             Log.e(TAG, "开机启动服务失败", e)
             scheduleDelayedCheck(context)
+        } finally {
+            // 主动释放,不依赖 10s 超时兜底
+            runCatching { wakeLock?.release() }
         }
     }
 
     /**
-     * 获取短暂 WakeLock（10 秒超时），确保开机到服务拉起期间设备不休眠
+     * 获取短暂 WakeLock（10 秒超时兜底），确保开机到服务拉起期间设备不休眠
      * 使用 PARTIAL_WAKE_LOCK 只保持 CPU 不休眠，不点亮屏幕，功耗极低
+     * @return WakeLock;获取失败返回 null(调用方 finally 中判空释放)
      */
-    private fun acquireBootWakeLock(context: Context) {
-        try {
+    private fun acquireBootWakeLock(context: Context): PowerManager.WakeLock? {
+        return try {
             val pm = context.getSystemService(Context.POWER_SERVICE) as PowerManager
             val wakeLock = pm.newWakeLock(
                 PowerManager.PARTIAL_WAKE_LOCK,
                 "BatteryFloating:BootReceiver"
             )
             wakeLock.setReferenceCounted(false)
-            wakeLock.acquire(10_000L) // 10 秒超时，确保服务拉起后自动释放
+            wakeLock.acquire(10_000L) // 10 秒超时兜底;正常路径由调用方 finally 主动释放
             Log.d(TAG, "已获取开机 WakeLock")
+            wakeLock
         } catch (e: Exception) {
             Log.w(TAG, "获取 WakeLock 失败: ${e.message}")
+            null
         }
     }
 

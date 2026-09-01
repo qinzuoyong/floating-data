@@ -99,6 +99,7 @@ class FamilyLocationService : Service() {
     override fun onDestroy() {
         Log.i(TAG, "onDestroy")
         signal?.disconnect()
+        provider?.close()
         workScope.cancel()
         super.onDestroy()
     }
@@ -146,6 +147,7 @@ class FamilyLocationService : Service() {
         }
         val s = FamilyStore.get(this)
         store = s
+        provider?.close() // 服务重复 start 重建通道前,先释放旧实例的定位线程池
         provider = OnDemandLocationProvider(this)
 
         val code = s.familyCode()

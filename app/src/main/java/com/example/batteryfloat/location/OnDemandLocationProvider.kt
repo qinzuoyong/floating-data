@@ -38,6 +38,15 @@ class OnDemandLocationProvider(private val context: Context) {
     private val executor = Executors.newSingleThreadExecutor()
 
     /**
+     * 释放内部定位线程池。
+     * 使用方生命周期结束时必须调用（页面 onDispose / 服务 onDestroy），
+     * 否则每次创建实例都会泄漏一个线程；调用后本实例不可再发起定位。
+     */
+    fun close() {
+        executor.shutdown()
+    }
+
+    /**
      * 高德定位源是否可用：密钥已配置且隐私合规双接口已调用（进程内只判一次）。
      * 不可用时调用方直接不发起高德请求，行为与未接入前一致；
      * 密钥无效/配额异常由后续定位回调的 errorCode 兜底（按无结果静默跳过）。
