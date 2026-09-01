@@ -20,6 +20,7 @@
     <string name="family_my_name_label">我的备注名：%1$s</string>
     <string name="family_unset">未设置</string>
     <string name="family_allow_loc_req">允许家人请求我的位置</string>
+    <string name="family_bg_loc_denied_hint">未授予「始终允许」定位，应用在后台时可能无法应答家人的位置请求</string>
     <string name="family_change_hint">更换家庭：点击下方「加入新家庭」重新输入家庭码</string>
     <string name="family_join_new">加入新家庭</string>
     <string name="family_members_title">家人列表</string>

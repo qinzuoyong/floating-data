@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.Context
 import android.content.SharedPreferences
 import android.content.pm.PackageManager
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -105,8 +106,16 @@ fun FamilyScreen(
     // 前台服务被系统重启拉起（app 不在前台）时，无后台定位权限将无法定位应答。
     val backgroundLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
-    ) { _ ->
+    ) { granted ->
         prefs.edit().putBoolean(PrefsKeys.FAMILY_BG_LOC_ASKED, true).apply()
+        // 拒绝时明确提示后果，避免用户以为已授权（后台无法应答家人位置请求）
+        if (!granted) {
+            Toast.makeText(
+                context,
+                context.getString(R.string.family_bg_loc_denied_hint),
+                Toast.LENGTH_LONG
+            ).show()
+        }
     }
 
     fun maybeRequestBackground() {
