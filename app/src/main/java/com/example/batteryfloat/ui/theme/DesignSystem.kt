@@ -1,4 +1,4 @@
-﻿package com.example.batteryfloat.ui.theme
+package com.example.batteryfloat.ui.theme
 
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp

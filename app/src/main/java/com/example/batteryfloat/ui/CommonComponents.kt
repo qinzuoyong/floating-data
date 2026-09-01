@@ -1,4 +1,4 @@
-﻿package com.example.batteryfloat.ui
+package com.example.batteryfloat.ui
 
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
