@@ -130,8 +130,10 @@ class WebViewActivity : ComponentActivity() {
                 view: WebView?,
                 request: WebResourceRequest?
             ): Boolean {
-                val targetUrl = request?.url?.toString() ?: return false
-                view?.loadUrl(targetUrl)
+                val uri = request?.url ?: return false
+                // 仅放行 https：拦截 file://、intent://、javascript: 等危险 scheme 与明文跳转
+                if (!uri.scheme.equals("https", true)) return true
+                view?.loadUrl(uri.toString())
                 return true
             }
         }

@@ -40,6 +40,13 @@ object ApkDownloader {
     private const val TAG = "ApkDownloader"
     private const val FILE_NAME = "yongge_update.apk"
 
+    /** 允许的 APK 下载域（自家发布渠道；跟随 302 到 CDN 子域属正常） */
+    private val ALLOWED_DOWNLOAD_HOSTS = setOf(
+        "gitee.com",
+        "github.com",
+        "objects.githubusercontent.com"
+    )
+
     private val _downloadState = MutableStateFlow<DownloadState>(DownloadState.Idle)
 
     /** 下载状态流，供观察者（Composable）订阅 */
@@ -48,6 +55,15 @@ object ApkDownloader {
     /** 当前是否正在下载 */
     val isDownloading: Boolean
         get() = _downloadState.value is DownloadState.Downloading
+
+    /** 校验下载来源：仅允许自家发布域 + https，防异常更新源注入任意 URL */
+    private fun isAllowedDownloadUrl(apkUrl: String): Boolean = try {
+        val u = URL(apkUrl)
+        u.protocol.equals("https", true) &&
+            ALLOWED_DOWNLOAD_HOSTS.any { u.host == it || u.host.endsWith(".$it") }
+    } catch (e: Exception) {
+        false
+    }
 
     /**
      * 开始下载 APK
@@ -58,6 +74,12 @@ object ApkDownloader {
         // 如果已经在下载中，忽略重复请求
         if (_downloadState.value is DownloadState.Downloading) {
             Log.w(TAG, "下载已在进行中，忽略重复请求")
+            return
+        }
+
+        if (!isAllowedDownloadUrl(apkUrl)) {
+            Log.e(TAG, "下载地址不在允许的发布域内，拒绝下载")
+            _downloadState.value = DownloadState.Error("下载地址不受信任")
             return
         }
 
@@ -147,7 +169,7 @@ object ApkDownloader {
                     return@withContext
                 }
 
-                Log.i(TAG, "下载完成: ${targetFile.absolutePath} (${totalBytesRead} bytes)")
+                Log.i(TAG, "下载完成: ${totalBytesRead} bytes")
                 _downloadState.value = DownloadState.Completed(targetFile)
             } catch (e: Exception) {
                 Log.e(TAG, "下载失败: ${e.message}", e)

@@ -149,7 +149,7 @@ object UpdateChecker {
             }
 
             val hasUpdate = compareVersions(latestTag, currentVersion) > 0
-            Log.i(TAG, "源: ${if (isGitee) "Gitee" else "GitHub"}, 当前: $currentVersion, 最新: $latestTag, 有更新: $hasUpdate, APK: $apkUrl")
+            Log.i(TAG, "源: ${if (isGitee) "Gitee" else "GitHub"}, 当前: $currentVersion, 最新: $latestTag, 有更新: $hasUpdate")
             UpdateInfo(hasUpdate, latestTag, downloadUrl, apkUrl)
         } catch (e: Exception) {
             Log.w(TAG, "从 ${apiUrl} 获取更新信息失败: ${e.message}")
