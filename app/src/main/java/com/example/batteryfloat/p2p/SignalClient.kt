@@ -139,10 +139,14 @@ class SignalClient(
     /**
      * 查询家庭码是否被占用（独立临时连接，不注册；用于创建/加入家庭前提示）
      *
+     * 带 15s 超时兜底：服务器无响应时关闭临时连接并按"已占用"回调，
+     * 避免线程与 socket 悬置、调用方永久无结果。
+     *
      * @param room 6 位家庭码
      * @param onResult 结果回调（Main 线程）：exists=是否已有家庭，ownerName=创建人备注名
      */
     fun checkRoom(room: String, onResult: (exists: Boolean, ownerName: String?) -> Unit) {
+        val answered = java.util.concurrent.atomic.AtomicBoolean(false)
         val checker = object : WebSocketClient(URI.create(url)) {
             override fun onOpen(handshakedata: ServerHandshake?) {
                 send(
@@ -163,6 +167,7 @@ class SignalClient(
                     return
                 }
                 if (msg.type == SignalTypes.ROOM_CHECK_RES) {
+                    if (!answered.compareAndSet(false, true)) return
                     val exists = msg.exists == true
                     scope.launch {
                         onResult(exists, msg.ownerName)
@@ -171,12 +176,28 @@ class SignalClient(
                 }
             }
 
-            override fun onClose(code: Int, reason: String?, remote: Boolean) {}
+            override fun onClose(code: Int, reason: String?, remote: Boolean) {
+                // 未等到 room-check-res 即被关闭(服务器拒绝/网络断)：按已占用兜底回调
+                if (answered.compareAndSet(false, true)) {
+                    scope.launch { onResult(true, null) }
+                }
+            }
+
             override fun onError(ex: Exception?) {}
+        }
+        // 超时兜底：到期仍未有结果则关连接并回调，防临时连接悬置
+        scope.launch {
+            delay(ROOM_CHECK_TIMEOUT_MS)
+            if (answered.compareAndSet(false, true)) {
+                runCatching { checker.close() }
+                onResult(true, null)
+            }
         }
         runCatching { checker.connect() }
             .onFailure {
-                scope.launch { onResult(true, null) } // 查询失败按"已占用"处理（走加入流程兜底）
+                if (answered.compareAndSet(false, true)) {
+                    scope.launch { onResult(true, null) } // 查询失败按"已占用"处理（走加入流程兜底）
+                }
             }
     }
 
@@ -245,7 +266,8 @@ class SignalClient(
                 Log.i(TAG, "ws closed: " + detail)
                 heartbeatJob?.cancel()
                 heartbeatJob = null
-                client = null
+                // 仅当当前引用仍是本连接时才清空,防旧连接迟到的 onClose 误清新连接
+                if (client === this) client = null
                 if (_state.value is State.Connected) {
                     _state.value = State.Disconnected(detail)
                 } else if (_state.value is State.Connecting) {
@@ -299,5 +321,8 @@ class SignalClient(
 
         /** 应用级心跳间隔（服务器心跳 30s，客户端 25s 错开且小于常见 NAT 空闲超时） */
         const val HEARTBEAT_INTERVAL_MS = 25_000L
+
+        /** 家庭码占用查询超时：到期无响应按"已占用"兜底回调并关闭临时连接 */
+        const val ROOM_CHECK_TIMEOUT_MS = 15_000L
     }
 }

@@ -27,6 +27,8 @@ object BfdChannel {
 
     private const val TAG = "BfdChannel"
     private const val BASE_PORT = 41900
+    /** daemon 端口顺延范围(与 bfd_server.c 的 bind 重试次数一致) */
+    private const val PORT_SPAN = 10
     private const val EXEC_TIMEOUT_MS = 15_000L
     private const val PING_TIMEOUT_MS = 2_000L
     private const val ALIVE_CACHE_MS = 5_000L
@@ -81,12 +83,11 @@ object BfdChannel {
                 .getOrNull()
         }
 
-    /** 阻塞实现;超时由调用方协程限制(daemon 侧另有 15s 命令超时兜底) */
+    /** 阻塞实现；超时由调用方协程限制(daemon 侧另有 15s 命令超时兜底) */
     private fun execOnce(command: String): String {
         val t = token ?: error("daemon 未拉起")
-        val sock = Socket()
+        val sock = connectDaemon()
         try {
-            sock.connect(InetSocketAddress("127.0.0.1", BASE_PORT), 2_000)
             val out = DataOutputStream(sock.outputStream)
             val input = DataInputStream(sock.inputStream)
             // 帧长为小端(与 daemon 的原生 uint 一致;DataOutputStream.writeInt 是大端,勿用)
@@ -116,6 +117,25 @@ object BfdChannel {
         write(v ushr 8)
         write(v ushr 16)
         write(v ushr 24)
+    }
+
+    /**
+     * 连接 daemon：daemon 启动时若默认端口被占用会向上顺延监听
+     * (bfd_server.c 内 BASE_PORT..BASE_PORT+PORT_SPAN-1)，客户端同范围逐个尝试。
+     */
+    private fun connectDaemon(): Socket {
+        var last: Exception? = null
+        for (p in BASE_PORT until BASE_PORT + PORT_SPAN) {
+            val s = Socket()
+            try {
+                s.connect(InetSocketAddress("127.0.0.1", p), 2_000)
+                return s
+            } catch (e: Exception) {
+                last = e
+                runCatching { s.close() }
+            }
+        }
+        throw last ?: java.net.ConnectException("daemon 端口 ${BASE_PORT}-${BASE_PORT + PORT_SPAN - 1} 无监听")
     }
 
     private fun DataInputStream.readLeInt(): Int {
