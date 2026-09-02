@@ -19,6 +19,8 @@ object CoordTransform {
     private const val RAD = PI / 180.0
     private const val A = 6378245.0                   // 克拉索夫斯基椭球长半轴
     private const val EE = 0.00669342162296594323     // 椭球偏心率平方
+    /** GCJ→BD 扰动角单位（国测局标准算法定义） */
+    private const val X_PI = PI * 3000.0 / 180.0
 
     /** 是否在中国境外（境外无 GCJ 偏移，原样返回） */
     private fun outOfChina(lat: Double, lng: Double): Boolean =
@@ -33,21 +35,28 @@ object CoordTransform {
             (lng in 113.52..113.63 && lat in 22.10..22.24) ||   // 澳门
             (lng in 119.90..122.01 && lat in 21.87..25.35)      // 台湾（含近岛）
 
+    /**
+     * 国测局偏移的纬度变换项。
+     * 注意：三角项入参是"度数值直接乘 PI"（国测局混淆算法的原始定义，
+     * 全球所有标准实现如此），不是把度转成弧度——勿"修正"为 RAD，
+     * 否则偏移量算错数百米（GPS 源在百度地图上整体偏移）。
+     */
     private fun transformLat(x: Double, y: Double): Double {
         var ret = -100.0 + 2.0 * x + 3.0 * y + 0.2 * y * y +
             0.1 * x * y + 0.2 * sqrt(abs(x))
-        ret += (20.0 * sin(6.0 * x * RAD) + 20.0 * sin(2.0 * x * RAD)) * 2.0 / 3.0
-        ret += (20.0 * sin(y * RAD) + 40.0 * sin(y / 3.0 * RAD)) * 2.0 / 3.0
-        ret += (160.0 * sin(y / 12.0 * RAD) + 320.0 * sin(y * RAD / 30.0)) * 2.0 / 3.0
+        ret += (20.0 * sin(6.0 * x * PI) + 20.0 * sin(2.0 * x * PI)) * 2.0 / 3.0
+        ret += (20.0 * sin(y * PI) + 40.0 * sin(y / 3.0 * PI)) * 2.0 / 3.0
+        ret += (160.0 * sin(y / 12.0 * PI) + 320.0 * sin(y * PI / 30.0)) * 2.0 / 3.0
         return ret
     }
 
+    /** 经度变换项（单位约定同 [transformLat]，勿改回 RAD） */
     private fun transformLng(x: Double, y: Double): Double {
         var ret = 300.0 + x + 2.0 * y + 0.1 * x * x +
             0.1 * x * y + 0.1 * sqrt(abs(x))
-        ret += (20.0 * sin(6.0 * x * RAD) + 20.0 * sin(2.0 * x * RAD)) * 2.0 / 3.0
-        ret += (20.0 * sin(x * RAD) + 40.0 * sin(x / 3.0 * RAD)) * 2.0 / 3.0
-        ret += (150.0 * sin(x / 12.0 * RAD) + 300.0 * sin(x / 30.0 * RAD)) * 2.0 / 3.0
+        ret += (20.0 * sin(6.0 * x * PI) + 20.0 * sin(2.0 * x * PI)) * 2.0 / 3.0
+        ret += (20.0 * sin(x * PI) + 40.0 * sin(x / 3.0 * PI)) * 2.0 / 3.0
+        ret += (150.0 * sin(x / 12.0 * PI) + 300.0 * sin(x / 30.0 * PI)) * 2.0 / 3.0
         return ret
     }
 
@@ -75,8 +84,8 @@ object CoordTransform {
      * @return Pair(lat, lng)
      */
     fun gcj02ToBd09(lat: Double, lng: Double): Pair<Double, Double> {
-        val z = sqrt(lng * lng + lat * lat) + 0.00002 * sin(lat * RAD * 3000.0 / 180.0)
-        val theta = atan2(lat, lng) + 0.000003 * cos(lng * RAD * 3000.0 / 180.0)
+        val z = sqrt(lng * lng + lat * lat) + 0.00002 * sin(lat * X_PI)
+        val theta = atan2(lat, lng) + 0.000003 * cos(lng * X_PI)
         val bdLat = z * sin(theta) + 0.006
         val bdLng = z * cos(theta) + 0.0065
         return bdLat to bdLng
