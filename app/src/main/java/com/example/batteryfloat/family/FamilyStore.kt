@@ -115,8 +115,10 @@ class FamilyStore private constructor(context: Context) {
     }
 
     // ===== 成员管理 =====
+    // 写方法均 @Synchronized:信令回调线程与 UI 线程并发读改写 _members/_pendingJoins,防更新丢失
 
     /** 记录/更新一个成员（注册回执或 presence 时调用，不动位置字段） */
+    @Synchronized
     fun upsertMember(uid: String, name: String, online: Boolean) {
         val current = _members.value[uid]
         val member = (current ?: FamilyMember(uid = uid)).copy(
@@ -128,6 +130,7 @@ class FamilyStore private constructor(context: Context) {
     }
 
     /** presence 下线 */
+    @Synchronized
     fun markOffline(uid: String) {
         val current = _members.value[uid] ?: return
         _members.value = _members.value + (uid to current.copy(online = false))
@@ -135,6 +138,7 @@ class FamilyStore private constructor(context: Context) {
     }
 
     /** 收到位置应答：更新上次位置与时间戳 */
+    @Synchronized
     fun updateLocation(uid: String, loc: LocationPayload) {
         val current = _members.value[uid] ?: FamilyMember(uid = uid)
         val member = current.copy(
@@ -148,18 +152,21 @@ class FamilyStore private constructor(context: Context) {
     }
 
     /** 移除成员（家人列表删除） */
+    @Synchronized
     fun removeMember(uid: String) {
         _members.value = _members.value - uid
         persistMembers()
     }
 
     /** 清空全部成员（退出家庭） */
+    @Synchronized
     fun clearMembers() {
         _members.value = emptyMap()
         persistMembers()
     }
 
     /** 本地备注名 */
+    @Synchronized
     fun setMemberNote(uid: String, note: String) {
         val current = _members.value[uid] ?: FamilyMember(uid = uid)
         _members.value = _members.value + (uid to current.copy(note = note.trim()))
@@ -169,6 +176,7 @@ class FamilyStore private constructor(context: Context) {
     // ===== 加入审核 =====
 
     /** 记录一条加入申请（创建人视角，信令 join-request 到达时调用） */
+    @Synchronized
     fun addPendingJoin(uid: String, name: String) {
         // 服务器要求审核说明本地残留的旧成员记录已过期：先移除，避免列表 key 冲突
         if (_members.value.containsKey(uid)) {
@@ -179,6 +187,7 @@ class FamilyStore private constructor(context: Context) {
     }
 
     /** 移除加入申请（创建人批准/拒绝后调用） */
+    @Synchronized
     fun removePendingJoin(uid: String) {
         _pendingJoins.value = _pendingJoins.value - uid
     }
