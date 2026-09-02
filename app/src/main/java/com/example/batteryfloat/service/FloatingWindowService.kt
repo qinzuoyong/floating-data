@@ -180,8 +180,9 @@ class FloatingWindowService : Service() {
         }
 
         floatingView?.let { view ->
-            // 保存当前位置到旧方向对应的 key（非首次切换时）
-            if (oldIsLandscape != null) {
+            // 仅当离开的方向已有用户确认记录时才保存更新（无记录说明 params 是
+            // 另一方向遗留坐标，写入会污染本方向记录，导致横/竖屏位置互相错乱）
+            if (oldIsLandscape != null && view.hasSavedPosition(oldIsLandscape)) {
                 view.saveCurrentPosition(oldIsLandscape)
             }
             // 从新方向对应的 key 恢复位置（clampToScreenBounds 内部用 currentWindowMetrics 判断新方向）

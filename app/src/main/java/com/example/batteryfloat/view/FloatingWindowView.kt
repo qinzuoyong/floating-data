@@ -53,6 +53,14 @@ class FloatingWindowView(context: Context) : LinearLayout(context) {
         private const val PREF_POS_PORT_X = PrefsKeys.POS_PORT_X
         /** SharedPreferences key - 竖屏 Y */
         private const val PREF_POS_PORT_Y = PrefsKeys.POS_PORT_Y
+        /** SharedPreferences key - 横屏保存时屏幕宽 */
+        private const val PREF_POS_LAND_W = PrefsKeys.POS_LAND_W
+        /** SharedPreferences key - 横屏保存时屏幕高 */
+        private const val PREF_POS_LAND_H = PrefsKeys.POS_LAND_H
+        /** SharedPreferences key - 竖屏保存时屏幕宽 */
+        private const val PREF_POS_PORT_W = PrefsKeys.POS_PORT_W
+        /** SharedPreferences key - 竖屏保存时屏幕高 */
+        private const val PREF_POS_PORT_H = PrefsKeys.POS_PORT_H
     }
 
     // 拖拽相关
@@ -196,6 +204,21 @@ class FloatingWindowView(context: Context) : LinearLayout(context) {
             if (savedPos.first != Int.MIN_VALUE && savedPos.second != Int.MIN_VALUE) {
                 params.x = savedPos.first
                 params.y = savedPos.second
+            } else {
+                // 当前方向无记录：回退加载另一方向记录（等比映射到当前屏幕），
+                // 尺寸记录无效（老版本数据）时退化为直接用原坐标；越界由下方钳位兜底
+                val other = getSavedPosition(!isLandscape)
+                if (other.first != Int.MIN_VALUE && other.second != Int.MIN_VALUE) {
+                    val otherW = prefs.getInt(if (isLandscape) PREF_POS_PORT_W else PREF_POS_LAND_W, 0)
+                    val otherH = prefs.getInt(if (isLandscape) PREF_POS_PORT_H else PREF_POS_LAND_H, 0)
+                    if (otherW > 0 && otherH > 0) {
+                        params.x = (other.first.toLong() * screenW / otherW).toInt()
+                        params.y = (other.second.toLong() * screenH / otherH).toInt()
+                    } else {
+                        params.x = other.first
+                        params.y = other.second
+                    }
+                }
             }
         }
         val displayCutout = windowMetrics.windowInsets.displayCutout
@@ -304,16 +327,34 @@ class FloatingWindowView(context: Context) : LinearLayout(context) {
      */
     fun saveCurrentPosition(isLandscape: Boolean? = null) {
         val params = windowParams ?: return
-        val landscape = isLandscape ?: run {
-            val wm = context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
-            val bounds = wm.currentWindowMetrics.bounds
-            bounds.width() > bounds.height()
-        }
+        val wm = context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
+        val bounds = wm.currentWindowMetrics.bounds
+        val curLandscape = bounds.width() > bounds.height()
+        val landscape = isLandscape ?: curLandscape
+        // 旋转场景（传入的旧方向与当前方向不一致）时 currentWindowMetrics 已切为新方向，
+        // 旧方向尺寸 = 当前尺寸宽高互换，保证坐标与尺寸同方向
+        val screenW = if (landscape == curLandscape) bounds.width() else bounds.height()
+        val screenH = if (landscape == curLandscape) bounds.height() else bounds.width()
         if (landscape) {
-            prefs.edit().putInt(PREF_POS_LAND_X, params.x).putInt(PREF_POS_LAND_Y, params.y).apply()
+            prefs.edit()
+                .putInt(PREF_POS_LAND_X, params.x).putInt(PREF_POS_LAND_Y, params.y)
+                .putInt(PREF_POS_LAND_W, screenW).putInt(PREF_POS_LAND_H, screenH)
+                .apply()
         } else {
-            prefs.edit().putInt(PREF_POS_PORT_X, params.x).putInt(PREF_POS_PORT_Y, params.y).apply()
+            prefs.edit()
+                .putInt(PREF_POS_PORT_X, params.x).putInt(PREF_POS_PORT_Y, params.y)
+                .putInt(PREF_POS_PORT_W, screenW).putInt(PREF_POS_PORT_H, screenH)
+                .apply()
         }
+    }
+
+    /**
+     * 指定方向是否已有用户确认的位置记录（供 Service 判断旋转时是否保存，
+     * 防止另一方向遗留坐标污染本方向记录）
+     */
+    fun hasSavedPosition(isLandscape: Boolean): Boolean {
+        val pos = getSavedPosition(isLandscape)
+        return pos.first != Int.MIN_VALUE && pos.second != Int.MIN_VALUE
     }
 
     /**

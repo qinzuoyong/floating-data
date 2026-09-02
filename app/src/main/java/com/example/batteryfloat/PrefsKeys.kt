@@ -31,6 +31,14 @@ object PrefsKeys {
     const val POS_PORT_X = "pos_port_x"
     /** 竖屏 Y 坐标 */
     const val POS_PORT_Y = "pos_port_y"
+    /** 保存横屏位置时的屏幕宽（供另一方向回退加载时等比映射） */
+    const val POS_LAND_W = "pos_land_w"
+    /** 保存横屏位置时的屏幕高 */
+    const val POS_LAND_H = "pos_land_h"
+    /** 保存竖屏位置时的屏幕宽 */
+    const val POS_PORT_W = "pos_port_w"
+    /** 保存竖屏位置时的屏幕高 */
+    const val POS_PORT_H = "pos_port_h"
 
     // ===== 锁定功能 =====
     /** 拖拽锁定功能开关 */
