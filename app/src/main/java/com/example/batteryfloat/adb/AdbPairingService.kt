@@ -139,14 +139,17 @@ class AdbPairingService : Service() {
         }
         Log.i(TAG, "开始配对(端口 $port)")
         scope.launch {
-            AdbPairingClient("127.0.0.1", port, code, key).runCatching {
-                start()
-            }.onFailure {
-                Log.w(TAG, "配对失败", it)
-                handleResult(false, it)
-            }.onSuccess {
-                Log.i(TAG, "配对协议完成: $it")
-                handleResult(it, null)
+            // use 确保成功/失败/中途异常路径都释放 socket/流与 native PairingContext
+            AdbPairingClient("127.0.0.1", port, code, key).use { pairing ->
+                pairing.runCatching {
+                    start()
+                }.onFailure {
+                    Log.w(TAG, "配对失败", it)
+                    handleResult(false, it)
+                }.onSuccess {
+                    Log.i(TAG, "配对协议完成: $it")
+                    handleResult(it, null)
+                }
             }
         }
         return workingNotification

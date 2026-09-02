@@ -164,11 +164,14 @@ class BootReceiver : BroadcastReceiver() {
                 return
             }
             Log.i(TAG, "延迟检查：服务未运行，自动重试启动")
-            acquireBootWakeLock(context)
+            val wakeLock = acquireBootWakeLock(context)
             try {
                 FloatingWindowService.start(context)
             } catch (e: Exception) {
                 Log.e(TAG, "延迟检查：启动失败", e)
+            } finally {
+                // 主动释放,不依赖 10s 超时兜底(与主路径一致)
+                runCatching { wakeLock?.release() }
             }
         } else {
             Log.d(TAG, "延迟检查：服务状态正常或不需要启动")
