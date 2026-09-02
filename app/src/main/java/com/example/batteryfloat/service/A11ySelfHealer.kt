@@ -150,7 +150,7 @@ object A11ySelfHealer {
         val cn = ComponentName(ctx, KeepAliveAccessibilityService::class.java).flattenToString()
         return "v=\$(settings get secure enabled_accessibility_services); " +
                 "case \"\$v\" in null|NULL|'') v='';; esac; " +
-                "case \":\$v:\" in *:\$cn:*) ;; *) " +
+                "case \":\$v:\" in *:\"$cn\":*) ;; *) " +
                 "settings put secure enabled_accessibility_services \"\${v:+\$v:}$cn\";; esac; " +
                 "settings put secure accessibility_enabled 1"
     }

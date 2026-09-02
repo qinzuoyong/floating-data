@@ -447,10 +447,11 @@ object AdbConnectionManager {
                     break
                 }
                 if (_state.value != AdbState.CONNECTED) {
-                    val ok = connectMutex.withLock {
-                        if (_state.value == AdbState.CONNECTED) true else connectOnceInternal() != null
+                    connectMutex.withLock {
+                        // 退避读改写入锁,与亮屏重置(resetBackoffAndReconnect)互斥防交错
+                        val ok = _state.value == AdbState.CONNECTED || connectOnceInternal() != null
+                        backoffMs = if (ok) RECONNECT_MIN_MS else (backoffMs * 2).coerceAtMost(RECONNECT_MAX_MS)
                     }
-                    backoffMs = if (ok) RECONNECT_MIN_MS else (backoffMs * 2).coerceAtMost(RECONNECT_MAX_MS)
                 }
                 delay(backoffMs)
             }
@@ -464,10 +465,12 @@ object AdbConnectionManager {
     private fun resetBackoffAndReconnect() {
         if (!enabled || key == null) return
         if (_state.value == AdbState.CONNECTED || _state.value == AdbState.AUTH_FAILED) return
-        backoffMs = RECONNECT_MIN_MS
         scope.launch {
             connectMutex.withLock {
-                if (_state.value != AdbState.CONNECTED) connectOnceInternal()
+                if (_state.value != AdbState.CONNECTED) {
+                    backoffMs = RECONNECT_MIN_MS
+                    connectOnceInternal()
+                }
             }
         }
     }
