@@ -73,8 +73,10 @@ object CoordTransform {
         var magic = sin(radLat)
         magic = 1 - EE * magic * magic
         val sqrtMagic = sqrt(magic)
-        dLat = (dLat * 180.0) / ((A * (1 - EE)) * sqrtMagic)
-        dLng = (dLng * 180.0) / (A * sqrtMagic * cos(radLat))
+        // 分母是国测局标准闭式：magic 在分母、含 π 因子。
+        // 缺 π 会使偏移量放大 3.14 倍（北京应偏 ~530m 实算 ~1.7km），勿"简化"
+        dLat = (dLat * 180.0) / ((A * (1 - EE)) / (magic * sqrtMagic) * PI)
+        dLng = (dLng * 180.0) / (A / sqrtMagic * cos(radLat) * PI)
         return (lat + dLat) to (lng + dLng)
     }
 
