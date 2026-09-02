@@ -166,7 +166,7 @@ fun FamilyMapScreen(
                             fontWeight = FontWeight.SemiBold
                         )
                         Spacer(Modifier.height(DesignSystem.SpacingXs))
-                        // 详细地址优先（JS 逆地理编码），未就绪时回退坐标
+                        // 详细地址优先（JS 逆地理编码），未就绪时回退时间+精度
                         Text(
                             text = address ?: locationDetail(live),
                             style = MaterialTheme.typography.bodyMedium,
@@ -251,11 +251,9 @@ private fun refreshMyLocation(
     }
 }
 
-/** 位置详情：经纬度 + 相对时间 + 精度（字符串资源拼接） */
+/** 位置详情：相对时间 + 精度（字符串资源拼接） */
 private fun locationDetail(member: FamilyMember): String {
-    val lat = member.lastLat ?: return ""
-    val lng = member.lastLng ?: return ""
-    val time = member.lastTs?.let { formatRelativeTime(it) } ?: ""
+    val time = member.lastTs?.let { formatRelativeTime(it) } ?: return ""
     val acc = member.lastAccuracy?.let { "（精度 ±" + it.toInt() + "m）" } ?: ""
-    return String.format("%.5f, %.5f  ·  %s%s", lat, lng, time, acc)
+    return String.format("%s%s", time, acc)
 }

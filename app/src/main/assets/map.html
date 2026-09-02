@@ -183,15 +183,27 @@
     showHint();
   }
 
-  // 单点逆地理编码：BMap.Geocoder 将坐标转为地址，经 AndroidBridge 回传原生并缓存
+  // 单点逆地理编码：BMap.Geocoder 将坐标转为地址（附最近周边 POI），经 AndroidBridge 回传原生并缓存
   function addressOf(point, uid) {
     if (!geocoder) return;
     geocoder.getLocation(point, function (result) {
       console.log('addr: uid=' + uid + ' result=' + (result ? (result.address ? 'HAS_ADDRESS' : 'NO_ADDRESS') : 'NULL'));
       if (result && result.address) {
-        addrCache[uid] = result.address;
+        // 距离最近的周边 POI（地标比街道门牌更贴近用户感知的真实位置；返回顺序不保证按距离排，需自行比较）
+        var pois = result.surroundingPois || [];
+        var nearest = null, best = Infinity;
+        var cosLat = Math.cos(point.lat * Math.PI / 180);
+        for (var k = 0; k < pois.length; k++) {
+          var pp = pois[k].point;
+          if (!pp || !pois[k].title) continue;
+          var dx = (pp.lng - point.lng) * cosLat, dy = pp.lat - point.lat;
+          var d = dx * dx + dy * dy;
+          if (d < best) { best = d; nearest = pois[k]; }
+        }
+        var addr = nearest ? result.address + "（近" + nearest.title + "）" : result.address;
+        addrCache[uid] = addr;
         try {
-          AndroidBridge.onAddress(uid, result.address);
+          AndroidBridge.onAddress(uid, addr);
         } catch (e) { /* 原生桥未就绪时忽略 */ }
       }
     });
