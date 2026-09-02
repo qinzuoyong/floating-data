@@ -53,6 +53,8 @@
   var geocoder = null;
   // 逆地理编码结果缓存(uid→详细地址)：信息窗口直接展示
   var addrCache = {};
+  // 逆地理编码请求坐标缓存(uid→BMap.Point)：供 50m 位移判断复用，避免小收敛重发请求
+  var addrPoints = {};
   // 当前全景视角的点集([{point,title,label}])：点击标记放大后由"全景视角"按钮恢复
   var viewPoints = [];
   // 操作提示定时器：全景视野显示 5 秒后自动淡出
@@ -183,9 +185,40 @@
     showHint();
   }
 
-  // 单点逆地理编码：BMap.Geocoder 将坐标转为地址（附最近周边 POI），经 AndroidBridge 回传原生并缓存
+  // 单点逆地理编码（带双重限流：距离 + 冷却）：
+  // ① 同 uid 坐标位移 < 50m 直接复用缓存（定位先粗后精的微小收敛不重发请求）
+  // ② 距上次请求 < 10s 记 pending，冷却结束且坐标有显著位移时补发一次
+  // 否则原生重组会反复推送 applyData，瞬间打爆百度个人版并发配额(3)
+  var addrPending = {};   // uid → 待补发的 {point, timer}
+  var addrLastReq = {};  // uid → 上次请求时间戳(ms)
+  var COOLDOWN_MS = 10000;
+  var MIN_SHIFT_M = 50;
+
   function addressOf(point, uid) {
     if (!geocoder) return;
+    var last = addrPoints[uid];
+    if (last) {
+      var dx = (point.lng - last.lng) * Math.cos(point.lat * Math.PI / 180);
+      var dy = point.lat - last.lat;
+      // 经纬度换算米（1°≈111km，dx 已按纬度缩放）
+      if (Math.hypot(dx, dy) * 111000 < MIN_SHIFT_M) return;
+    }
+    var now = Date.now();
+    if (now - (addrLastReq[uid] || 0) < COOLDOWN_MS) {
+      // 冷却期内：记 pending（覆盖旧 timer），冷却结束若仍是有效坐标则补发
+      if (addrPending[uid] && addrPending[uid].timer) clearTimeout(addrPending[uid].timer);
+      var wait = COOLDOWN_MS - (now - (addrLastReq[uid] || 0));
+      addrPending[uid] = {
+        point: point,
+        timer: setTimeout(function () {
+          var p = addrPending[uid] && addrPending[uid].point;
+          addrPending[uid] = null;
+          if (p) addressOf(p, uid);
+        }, wait)
+      };
+      return;
+    }
+    addrLastReq[uid] = now;
     geocoder.getLocation(point, function (result) {
       console.log('addr: uid=' + uid + ' result=' + (result ? (result.address ? 'HAS_ADDRESS' : 'NO_ADDRESS') : 'NULL'));
       if (result && result.address) {
@@ -196,12 +229,14 @@
         for (var k = 0; k < pois.length; k++) {
           var pp = pois[k].point;
           if (!pp || !pois[k].title) continue;
-          var dx = (pp.lng - point.lng) * cosLat, dy = pp.lat - point.lat;
-          var d = dx * dx + dy * dy;
+          var pdx = (pp.lng - point.lng) * cosLat, pdy = pp.lat - point.lat;
+          var d = pdx * pdx + pdy * pdy;
           if (d < best) { best = d; nearest = pois[k]; }
         }
         var addr = nearest ? result.address + "（近" + nearest.title + "）" : result.address;
+        // 缓存带坐标，供位移判断复用
         addrCache[uid] = addr;
+        addrPoints[uid] = point;
         try {
           AndroidBridge.onAddress(uid, addr);
         } catch (e) { /* 原生桥未就绪时忽略 */ }

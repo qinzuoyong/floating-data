@@ -148,9 +148,14 @@ class WebMapProvider : MapProvider {
             MapPoint(c.first, c.second, t.title, t.label)
         }
         val data = MapData(myBd, targetsBd)
-        holder.latestJson = gson.toJson(data)
+        val json = gson.toJson(data)
+        // 数据未变化时跳过推送：地址回调触发重组 → update 再次 pushData 会形成
+        // "推送→逆地理编码→回调→重组→推送" 的无限循环，瞬间打爆百度并发配额
+        if (json == holder.lastPushedJson) return
+        holder.lastPushedJson = json
+        holder.latestJson = json
         runCatching {
-            view.evaluateJavascript("window.applyData(" + holder.latestJson + ")", null)
+            view.evaluateJavascript("window.applyData(" + json + ")", null)
         }.onFailure { e ->
             Log.w(TAG, "pushData failed", e)
         }
@@ -166,6 +171,8 @@ class WebMapProvider : MapProvider {
     private class WebMapHolder {
         var webView: WebView? = null
         var latestJson: String? = null
+        /** 上次已推送给 JS 的 json（防重复推送） */
+        var lastPushedJson: String? = null
         /** JS 逆地理编码结果回调（uid → 详细地址） */
         var onAddress: ((String, String) -> Unit)? = null
     }
