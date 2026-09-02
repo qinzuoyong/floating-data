@@ -47,7 +47,6 @@ import com.example.batteryfloat.R
 import com.example.batteryfloat.PrefsKeys
 import com.example.batteryfloat.family.FamilyStore
 import com.example.batteryfloat.p2p.SignalClient
-import com.example.batteryfloat.service.FamilyLocationService
 import com.example.batteryfloat.ui.PrimaryActionButton
 import com.example.batteryfloat.ui.SectionTitle
 import com.example.batteryfloat.ui.theme.DesignSystem
@@ -84,8 +83,8 @@ fun AddFamilyScreen(
         store.setAllowLocReq(allowLoc)
         // 加入/更换家庭：清空旧家庭成员，避免残留旧房间成员
         store.clearMembers()
-        // 单一 start：服务 setup() 幂等重建连接（家庭码变化自动生效）
-        FamilyLocationService.start(context)
+        // 服务由调用方 onDone 统一 start：此处再 start 会双次 setup()，
+        // 产生两条 WebSocket（首条握手期间无法中止，完成后变僵尸连接）
         onDone()
     }
 

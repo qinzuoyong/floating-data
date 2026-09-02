@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import org.java_websocket.client.WebSocketClient
+import org.java_websocket.framing.CloseFrame
 import org.java_websocket.handshake.ServerHandshake
 import java.net.URI
 
@@ -86,7 +87,8 @@ class SignalClient(
         reconnectJob = null
         heartbeatJob?.cancel()
         heartbeatJob = null
-        runCatching { client?.close() }
+        // close() 对握手中的连接无效（握手照常完成后变僵尸），统一强断
+        runCatching { client?.closeConnection(CloseFrame.ABNORMAL_CLOSE, "disconnected") }
         client = null
         _state.value = State.Idle
     }
@@ -228,6 +230,14 @@ class SignalClient(
         val ws = object : WebSocketClient(URI.create(url)) {
 
             override fun onOpen(handshakedata: ServerHandshake?) {
+                // 僵尸连接防护：disconnect()/openSocket() 已替换 client 后，
+                // 旧连接迟到的握手完成（握手中的 close() 无法中止）立即自断，
+                // 防服务器侧同 uid 挂双连接 + 僵尸心跳
+                if (stopped || client !== this) {
+                    Log.i(TAG, "ws open after stopped/replaced, aborting")
+                    runCatching { closeConnection(CloseFrame.ABNORMAL_CLOSE, "replaced") }
+                    return
+                }
                 Log.i(TAG, "ws open, registering room=" + room + " uid=" + uid)
                 backoffMs = 2_000L
                 startHeartbeat()
@@ -264,10 +274,12 @@ class SignalClient(
             override fun onClose(code: Int, reason: String?, remote: Boolean) {
                 val detail = "code=" + code + " reason=" + reason + " remote=" + remote
                 Log.i(TAG, "ws closed: " + detail)
+                // 迟到的旧连接回调：不是当前 client 时不清理、不改状态、
+                // 不触发重连（防误伤新连接的状态与心跳、防多余 openSocket）
+                if (client !== this) return
+                client = null
                 heartbeatJob?.cancel()
                 heartbeatJob = null
-                // 仅当当前引用仍是本连接时才清空,防旧连接迟到的 onClose 误清新连接
-                if (client === this) client = null
                 if (_state.value is State.Connected) {
                     _state.value = State.Disconnected(detail)
                 } else if (_state.value is State.Connecting) {
