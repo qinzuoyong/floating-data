@@ -1,7 +1,10 @@
 package com.example.batteryfloat.ui
 
 import android.content.SharedPreferences
+import android.database.ContentObserver
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.provider.Settings
 import android.widget.Toast
 import androidx.compose.animation.animateColorAsState
@@ -106,6 +109,23 @@ fun HomeScreen(
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
+    // 响应式监听无障碍设置变化:自动授权/用户手动开关后,开关即时同步正确状态(无需退出重进)
+    DisposableEffect(context) {
+        val resolver = context.contentResolver
+        val observer = object : ContentObserver(Handler(Looper.getMainLooper())) {
+            override fun onChange(selfChange: Boolean) {
+                a11yKeepAlive = KeepAliveAccessibilityService.isEnabledInSettings(context)
+            }
+        }
+        // 注册前同步读一次,避免错过注册前后可能发生的变更
+        a11yKeepAlive = KeepAliveAccessibilityService.isEnabledInSettings(context)
+        resolver.registerContentObserver(
+            Settings.Secure.getUriFor(Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES),
+            false, observer
+        )
+        onDispose { resolver.unregisterContentObserver(observer) }
     }
 
     val scrollState = rememberScrollState()
