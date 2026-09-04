@@ -17,6 +17,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.PowerOff
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.automirrored.filled.ShowChart
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.filled.Shield
@@ -191,6 +192,31 @@ fun HomeScreen(
                 if (!it) {
                     prefs.edit().putBoolean(PrefsKeys.LOCK_DRAG_ENGAGED, false).apply()
                 }
+            }
+        )
+
+        // 重置悬浮窗位置
+        SettingActionCard(
+            icon = {
+                Icon(
+                    Icons.Filled.Refresh,
+                    contentDescription = "重置位置",
+                    tint = MaterialTheme.colorScheme.secondary,
+                    modifier = Modifier.size(24.dp)
+                )
+            },
+            iconBackgroundColor = MaterialTheme.colorScheme.secondaryContainer,
+            title = "重置位置",
+            subtitle = "恢复默认位置：左上角（距顶部 20%）",
+            onClick = {
+                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                FloatingWindowService.resetFloatingPosition(context)
+                Toast.makeText(
+                    context,
+                    if (FloatingWindowService.isRunning) "悬浮窗位置已重置"
+                    else "位置已重置，悬浮窗启动后生效",
+                    Toast.LENGTH_SHORT
+                ).show()
             }
         )
 
@@ -493,6 +519,64 @@ private fun FloatingWindowCard(isServiceRunning: Boolean, onToggle: () -> Unit) 
             
             // 动画切换按钮
             AnimatedToggleButton(isRunning = isServiceRunning, onClick = onToggle)
+        }
+    }
+}
+
+/**
+ * 通用动作设置卡片（点击触发动作，无开关状态）
+ * 视觉与 SettingSwitchCard 保持一致
+ *
+ * @param icon Material Icon 组件
+ * @param iconBackgroundColor 图标圆形背景色
+ * @param title 设置项标题
+ * @param subtitle 设置项副标题说明
+ * @param onClick 点击回调
+ */
+@Composable
+private fun SettingActionCard(
+    icon: @Composable () -> Unit,
+    iconBackgroundColor: Color,
+    title: String,
+    subtitle: String,
+    onClick: () -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(DesignSystem.CornerL),
+        elevation = CardDefaults.cardElevation(defaultElevation = DesignSystem.ElevationNone),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+        )
+    ) {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onClick)
+                .padding(DesignSystem.CardPadding),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(DesignSystem.SpacingXl + DesignSystem.SpacingXs)
+                    .background(iconBackgroundColor, CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                icon()
+            }
+            Spacer(Modifier.width(DesignSystem.SpacingS))
+            Column {
+                Text(
+                    title,
+                    fontWeight = FontWeight.SemiBold,
+                    style = MaterialTheme.typography.titleMedium
+                )
+                Text(
+                    subtitle,
+                    fontSize = DesignSystem.FontSizeCaption,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
         }
     }
 }

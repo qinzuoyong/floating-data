@@ -64,6 +64,9 @@ class FloatingWindowService : Service() {
         /** 服务是否正在运行（供外部查询） */
         @Volatile
         var isRunning = false
+        /** 当前运行中的服务实例（供静态重置位置入口使用） */
+        @Volatile
+        private var activeService: FloatingWindowService? = null
         private const val TAG = "FloatingWindowService"
         /** 通知渠道/ID 集中管理,见 Notifs(此处保留别名供既有引用使用) */
         const val CHANNEL_ID = Notifs.CHANNEL_BATTERY
@@ -97,6 +100,23 @@ class FloatingWindowService : Service() {
         fun stop(context: Context) {
             val intent = Intent(context, FloatingWindowService::class.java)
             context.stopService(intent)
+        }
+
+        /**
+         * 重置悬浮窗位置到默认位置（紧贴左上角，距屏幕顶部 20%）
+         * 清除横竖屏全部位置记录；服务运行中时立即移动悬浮窗，未运行时下次启动生效
+         * @param context 任意上下文（用于清除位置记录）
+         */
+        fun resetFloatingPosition(context: Context) {
+            context.getSharedPreferences(PrefsKeys.PREFS_NAME, Context.MODE_PRIVATE).edit()
+                .remove(PrefsKeys.POS_LAND_X).remove(PrefsKeys.POS_LAND_Y)
+                .remove(PrefsKeys.POS_LAND_W).remove(PrefsKeys.POS_LAND_H)
+                .remove(PrefsKeys.POS_PORT_X).remove(PrefsKeys.POS_PORT_Y)
+                .remove(PrefsKeys.POS_PORT_W).remove(PrefsKeys.POS_PORT_H)
+                .apply()
+            activeService?.let { service ->
+                service.mainHandler.post { service.floatingView?.moveToDefaultPosition() }
+            }
         }
 
         /** 心跳 PendingIntent(requestCode 1；schedule/cancel/upgradeKeepAlive 共用同一构造) */
@@ -138,6 +158,7 @@ class FloatingWindowService : Service() {
     override fun onCreate() {
         super.onCreate()
         isRunning = true
+        activeService = this
         // 记录悬浮窗运行状态（供开机自启判断）
         prefs.edit().putBoolean(PREF_FLOATING_RUNNING, true).apply()
         Notifs.ensureChannels(this)
@@ -199,6 +220,7 @@ class FloatingWindowService : Service() {
 
     override fun onDestroy() {
         isRunning = false
+        if (activeService === this) activeService = null
         // 注意：不在这里设置 FLOATING_WAS_RUNNING = false
         // 因为系统杀进程也会触发 onDestroy，但开机自启时需要恢复
         // 只在 HomeScreen 中用户手动关闭时才设置 false
@@ -328,7 +350,9 @@ class FloatingWindowService : Service() {
                 format = PixelFormat.TRANSLUCENT
                 flags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
                         WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
-                        WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
+                        WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS or
+                        // 布局到整个物理屏幕（含状态栏区域）：横屏可贴最左侧状态栏、竖屏可贴顶部状态栏
+                        WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
                 gravity = Gravity.TOP or Gravity.START
                 width = WindowManager.LayoutParams.WRAP_CONTENT
                 height = WindowManager.LayoutParams.WRAP_CONTENT

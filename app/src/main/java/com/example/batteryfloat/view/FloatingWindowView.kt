@@ -11,7 +11,6 @@ import android.graphics.drawable.GradientDrawable
 import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
-import android.view.WindowInsets
 import android.view.WindowManager
 import android.widget.LinearLayout
 import android.widget.TextView
@@ -46,6 +45,8 @@ class FloatingWindowView(context: Context) : LinearLayout(context) {
         private const val PREF_LOCK_ENGAGED = PrefsKeys.LOCK_DRAG_ENGAGED
         /** 拖拽触发阈值（像素），超过此值视为拖拽 */
         private const val DRAG_THRESHOLD = 10
+        /** 默认位置：紧贴屏幕左上角（x=0），距屏幕顶部 20% */
+        private const val DEFAULT_POSITION_TOP_RATIO = 0.2f
         /** SharedPreferences key - 横屏 X */
         private const val PREF_POS_LAND_X = PrefsKeys.POS_LAND_X
         /** SharedPreferences key - 横屏 Y */
@@ -219,26 +220,19 @@ class FloatingWindowView(context: Context) : LinearLayout(context) {
                         params.x = other.first
                         params.y = other.second
                     }
+                } else {
+                    // 两个方向均无保存记录（首次使用或重置位置后）：应用默认位置
+                    applyDefaultPosition(params)
                 }
             }
         }
-        // 坐标系（2026-09 横屏贴合修复）：gravity=TOP|START 下 params.x/y 是相对
-        // parent frame（系统按默认 fitInsetsTypes=systemBars 让出状态栏/导航栏后的
-        // 区域）左上角的偏移，并非屏幕绝对坐标——params=(0,0) 恰好贴合安全区左上角
-        // （横屏即左侧状态栏右缘），因此钳位下限取 0 即可贴合屏幕。
-        // 安全区取 systemBars 与挖孔各方向较大值：statusBars() 稳定是主来源，
-        // displayCutout 在旋转过渡期不稳定，仅作兜底
-        val insets = windowMetrics.windowInsets
-        val cutout = insets.displayCutout
-        val bars = insets.getInsets(WindowInsets.Type.systemBars())
-        val safeLeft = maxOf(bars.left, cutout?.safeInsetLeft ?: 0)
-        val safeRight = maxOf(bars.right, cutout?.safeInsetRight ?: 0)
-        val safeTop = maxOf(bars.top, cutout?.safeInsetTop ?: 0)
-        val safeBottom = maxOf(bars.bottom, cutout?.safeInsetBottom ?: 0)
-        // params 空间钳位：[0, 安全区宽-viewW] × [0, 安全区高-viewH]；
-        // 极端小屏（view 超过安全区）退化为 (0,0) 左上角
-        val maxX = maxOf(0, screenW - viewW - safeLeft - safeRight)
-        val maxY = maxOf(0, screenH - viewH - safeTop - safeBottom)
+        // 坐标系（2026-09 全屏可达修复）：窗口已加 FLAG_LAYOUT_IN_SCREEN，
+        // parent frame 覆盖整个物理屏幕（含状态栏区域），params.x/y 即屏幕绝对坐标。
+        // 钳位边界 = 物理屏幕：悬浮窗可到达一切能显示的区域，
+        // 包括竖屏顶部状态栏与横屏最左侧（状态栏/挖孔位置）。
+        // 极端小屏（view 超过屏幕）退化为 (0,0) 左上角
+        val maxX = maxOf(0, screenW - viewW)
+        val maxY = maxOf(0, screenH - viewH)
         params.x = params.x.coerceIn(0, maxX)
         params.y = params.y.coerceIn(0, maxY)
         try {
@@ -380,5 +374,25 @@ class FloatingWindowView(context: Context) : LinearLayout(context) {
             val y = prefs.getInt(PREF_POS_PORT_Y, Int.MIN_VALUE)
             return Pair(x, y)
         }
+    }
+
+    /**
+     * 应用默认位置：紧贴屏幕左上角（x=0），距屏幕顶部 20%
+     * 首次使用无记录、重置位置时使用
+     */
+    private fun applyDefaultPosition(params: WindowManager.LayoutParams) {
+        val wm = context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
+        val bounds = wm.currentWindowMetrics.bounds
+        params.x = 0
+        params.y = (bounds.height() * DEFAULT_POSITION_TOP_RATIO).toInt()
+    }
+
+    /**
+     * 立即移动悬浮窗到默认位置（重置位置入口调用；位置记录由调用方清除）
+     */
+    fun moveToDefaultPosition() {
+        val params = windowParams ?: return
+        applyDefaultPosition(params)
+        clampToScreenBounds()
     }
 }
