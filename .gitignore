@@ -13,6 +13,7 @@ gradle-daemon-jvm.properties
 # 本地工具产物
 .dsh-vision-router/
 .zcode/
+.trae/
 
 # 测试临时产物
 screen.png
