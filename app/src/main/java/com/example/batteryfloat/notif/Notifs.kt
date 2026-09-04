@@ -87,33 +87,14 @@ object Notifs {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
         return NotificationCompat.Builder(context, CHANNEL_BATTERY)
-            .setContentTitle(context.getString(R.string.notification_foreground_title))
+            // 初始无采样数据时用占位,与运行后合并标题样式一致(温度+功耗同标题行)
+            .setContentTitle(context.getString(R.string.notification_title, "--", "--W"))
             .setContentText(context.getString(R.string.notification_foreground_text))
             .setSmallIcon(R.drawable.ic_launcher_foreground)
             .setOngoing(true)
             .setPriority(NotificationCompat.PRIORITY_MIN) // 最低优先级
             .setSilent(true) // 静默通知
             .setVisibility(NotificationCompat.VISIBILITY_SECRET) // 锁屏隐藏
-            .setContentIntent(pendingIntent)
-            .build()
-    }
-
-    /** 家人位置共享前台常驻通知(FamilyLocationService) */
-    fun familyForeground(context: Context): Notification {
-        val pendingIntent = PendingIntent.getActivity(
-            context,
-            0,
-            Intent(context, MainActivity::class.java),
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-        return NotificationCompat.Builder(context, CHANNEL_FAMILY)
-            .setContentTitle(context.getString(R.string.notification_family_title))
-            .setContentText(context.getString(R.string.notification_family_text))
-            .setSmallIcon(R.drawable.ic_launcher_foreground)
-            .setOngoing(true)
-            .setPriority(NotificationCompat.PRIORITY_MIN)
-            .setSilent(true)
-            .setVisibility(NotificationCompat.VISIBILITY_SECRET)
             .setContentIntent(pendingIntent)
             .build()
     }

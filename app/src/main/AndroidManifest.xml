@@ -67,11 +67,11 @@
                 android:value="floating_window_battery_monitor" />
         </service>
 
-        <!-- 家人位置共享前台服务：保持信令连接 + 按需响应定位请求 -->
+        <!-- 家人位置共享服务(普通后台服务,非前台)：保持信令连接 + 按需响应定位请求;
+             后台常驻由同进程悬浮窗前台服务保活,故不再声明 foregroundServiceType -->
         <service
             android:name=".service.FamilyLocationService"
             android:exported="false"
-            android:foregroundServiceType="location"
             android:stopWithTask="false" />
 
         <service

@@ -94,13 +94,17 @@ class BatteryMonitor(
 
     private fun updateNotification(celsius: Float, watts: Float) {
         try {
-            // 符号格式与悬浮窗一致(%+.1fW):正=充电,负=放电
+            // 符号格式与悬浮窗一致(%+.1fW):正=充电,负=放电;温度与功耗合并到同一标题行(同字号)
             val powerStr = if (watts.isFinite()) String.format(Locale.US, "%+.1fW", watts) else "--W"
-            // 与服务初始前台通知一致,保留点击回到应用的跳转
+            // 正文为静态说明,点击回到应用的跳转保留
             val notification = Notifs.floatingUpdate(
                 context,
-                context.getString(R.string.notification_title, String.format(Locale.US, "%.1f", celsius)),
-                context.getString(R.string.notification_power_text, powerStr)
+                context.getString(
+                    R.string.notification_title,
+                    String.format(Locale.US, "%.1f", celsius),
+                    powerStr
+                ),
+                context.getString(R.string.notification_foreground_text)
             )
             val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             nm.notify(FloatingWindowService.NOTIFICATION_ID, notification)

@@ -2,8 +2,7 @@
 <resources>
     <string name="app_name">神奇悬浮窗</string>
     <string name="notification_channel_name">电池温度监控</string>
-    <string name="notification_title">电池温度: %s°C</string>
-    <string name="notification_power_text">功耗: %s</string>
+    <string name="notification_title">电池温度 %1$s°C · 功耗 %2$s</string>
     <string name="notification_foreground_title">电池温度监控</string>
     <string name="notification_foreground_text">悬浮窗运行中</string>
     <string name="temperature_loading">--°C</string>
