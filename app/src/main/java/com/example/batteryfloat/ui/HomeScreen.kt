@@ -79,8 +79,6 @@ fun HomeScreen(
     }
     // ADB 高精度数据源(批次 2:通道开关与状态;批次 3 接入数据)
     var adbEnabled by remember { mutableStateOf(prefs.getBoolean(PrefsKeys.ADB_PRIV_ENABLED, false)) }
-    // ADB 连通后自动开启所需权限(方案二,默认关)
-    var adbAutoGrant by remember { mutableStateOf(prefs.getBoolean(PrefsKeys.ADB_AUTO_GRANT, false)) }
     // Shizuku 常驻服务可用性(页面恢复时刷新;生效时无线调试可关)
     var shizukuAlive by remember { mutableStateOf(PrivShell.shizukuReady()) }
     // 内置常驻服务可用性 + 载体模式选择
@@ -97,7 +95,6 @@ fun HomeScreen(
                 isServiceRunning = FloatingWindowService.isRunning
                 a11yKeepAlive = KeepAliveAccessibilityService.isEnabledInSettings(context)
                 adbEnabled = prefs.getBoolean(PrefsKeys.ADB_PRIV_ENABLED, false)
-                adbAutoGrant = prefs.getBoolean(PrefsKeys.ADB_AUTO_GRANT, false)
                 shizukuAlive = PrivShell.shizukuReady()
                 bfdAlive = BfdChannel.alive()
                 carrierMode = PrivShell.carrierMode()
@@ -330,28 +327,8 @@ fun HomeScreen(
             }
         )
 
-        // 连通后自动授权:无线调试通道的配套能力,仅在 ADB 开关开启后显示
+        // 连通后自动授权(2026-09 起常开,无开关):特权通道连通即自动开启所需权限
         if (adbEnabled) {
-            SettingSwitchCard(
-                icon = {
-                    Icon(
-                        Icons.Filled.Shield,
-                        contentDescription = "自动授权",
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(24.dp)
-                    )
-                },
-                iconBackgroundColor = MaterialTheme.colorScheme.primaryContainer,
-                title = "连接后自动开启所需权限",
-                subtitle = "无线调试连通后自动开启:家人共享定位、无障碍保活、悬浮窗权限",
-                checked = adbAutoGrant,
-                onCheckedChange = {
-                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                    adbAutoGrant = it
-                    prefs.edit().putBoolean(PrefsKeys.ADB_AUTO_GRANT, it).apply()
-                }
-            )
-
             // 特权通道载体选择:内置服务(零依赖,默认) / Shizuku(官方维护,需装其管理器)
             Card(
                 colors = CardDefaults.cardColors(

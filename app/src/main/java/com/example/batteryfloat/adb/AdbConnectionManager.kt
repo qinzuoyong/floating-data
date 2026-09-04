@@ -361,6 +361,9 @@ object AdbConnectionManager {
                 _state.value = AdbState.CONNECTED
                 Log.i(TAG, "特权通道已连接(环回 5555)")
                 logDiag(ctx, "CONNECTED loopback5555")
+                // 幂等自动授权引导(与 TLS 通道路径一致;独立协程:其内部 exec 会走
+                // ensureConnected,若在持锁协程内调用会重入 connectMutex 死锁)
+                AdbAutoGrant.onConnected(ctx)
                 attempt
             } else {
                 Log.w(TAG, "环回连接自检失败: $id")

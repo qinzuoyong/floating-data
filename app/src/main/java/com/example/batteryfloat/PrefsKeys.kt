@@ -55,8 +55,6 @@ object PrefsKeys {
     const val HIDE_RECENTS = "hide_recents"
     /** ADB 无线调试高精度数据源开关(默认关,密钥另存 adb_prefs) */
     const val ADB_PRIV_ENABLED = "adb_priv_enabled"
-    /** ADB 通道连通后自动开启所需权限(WRITE_SECURE_SETTINGS/无障碍/悬浮窗,默认关) */
-    const val ADB_AUTO_GRANT = "adb_auto_grant"
     /** Shizuku 授权请求已发起过(用户拒绝后不重复弹窗) */
     const val SHIZUKU_PERM_REQUESTED = "shizuku_perm_requested"
     /** 特权通道载体:"builtin"=内置服务(默认) / "shizuku"=Shizuku 常驻服务 */
