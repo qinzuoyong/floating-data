@@ -71,6 +71,8 @@ class FloatingWindowService : Service() {
         private const val HEARTBEAT_INTERVAL_MS = 15 * 60 * 1000L  // 15分钟心跳
         /** 无障碍自愈巡检间隔(兜底触发;即时场景由无障碍 onDestroy 钩子负责) */
         private const val A11Y_PATROL_INTERVAL_MS = 5 * 60 * 1000L
+        /** 旋转后二次钳位延迟：等旋转动画结束、insets 稳定后再钳位一次 */
+        private const val ROTATION_SETTLE_DELAY_MS = 300L
         const val PREF_FLOATING_RUNNING = PrefsKeys.FLOATING_WAS_RUNNING
 
         /** 外观/功能相关 key 集合，这些 key 变化时刷新悬浮窗外观和缓存 */
@@ -188,6 +190,8 @@ class FloatingWindowService : Service() {
             // 从新方向对应的 key 恢复位置（clampToScreenBounds 内部用 currentWindowMetrics 判断新方向）
             view.clampToScreenBounds(restorePosition = true)
         }
+        // 旋转过渡期 insets 可能滞后，动画结束后用稳定值再钳位一次（view 已移除时空操作）
+        mainHandler.postDelayed({ floatingView?.clampToScreenBounds() }, ROTATION_SETTLE_DELAY_MS)
 
         // 更新 lastOrientation 为新方向
         lastOrientation = newConfig.orientation

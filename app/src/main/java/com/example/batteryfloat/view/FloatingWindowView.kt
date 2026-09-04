@@ -11,6 +11,7 @@ import android.graphics.drawable.GradientDrawable
 import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
+import android.view.WindowInsets
 import android.view.WindowManager
 import android.widget.LinearLayout
 import android.widget.TextView
@@ -221,17 +222,21 @@ class FloatingWindowView(context: Context) : LinearLayout(context) {
                 }
             }
         }
-        val displayCutout = windowMetrics.windowInsets.displayCutout
-        val topInset = displayCutout?.safeInsetTop ?: 0
-        var minX = 0
-        if (isLandscape) {
-            val leftInset = displayCutout?.safeInsetLeft ?: 0
-            minX = -leftInset.coerceAtLeast(1)
-        }
-        val maxX = maxOf(minX, screenW - viewW)
-        val maxY = maxOf(-topInset, screenH - viewH)
+        // 状态栏与挖孔取各方向较大值：横屏时系统状态栏为挖孔一侧的竖条，
+        // 仅靠 displayCutout 在旋转过渡期不稳定，statusBars() 是主来源、cutout 兜底
+        val insets = windowMetrics.windowInsets
+        val cutout = insets.displayCutout
+        val statusBar = insets.getInsets(WindowInsets.Type.statusBars())
+        val leftInset = maxOf(statusBar.left, cutout?.safeInsetLeft ?: 0)
+        val rightInset = maxOf(statusBar.right, cutout?.safeInsetRight ?: 0)
+        val topInset = maxOf(statusBar.top, cutout?.safeInsetTop ?: 0)
+        val bottomInset = maxOf(statusBar.bottom, cutout?.safeInsetBottom ?: 0)
+        val minX = leftInset
+        val maxX = maxOf(minX, screenW - viewW - rightInset)
+        val minY = topInset
+        val maxY = maxOf(minY, screenH - viewH - bottomInset)
         params.x = params.x.coerceIn(minX, maxX)
-        params.y = params.y.coerceIn(-topInset, maxY)
+        params.y = params.y.coerceIn(minY, maxY)
         try {
             wm.updateViewLayout(this, params)
         } catch (e: Exception) {
