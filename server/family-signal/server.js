@@ -162,8 +162,11 @@ wss.on('connection', (ws) => {
         }
         const old = rs.members.get(uid);
         if (old && old.ws !== ws) { old.ws.terminate(); }
-        // 创建人、当前在线成员、或已被批准过的成员（断线重连免审核）直接进房
-        if (rs.owner === uid || rs.members.has(uid) || rs.approved.has(uid)) {
+        // 加入审核停用（2026-09）：新成员直接进房，无需创建人批准；
+        // 客户端审核 UI 仅在收到 join-pending/join-request 时显示，服务器不再下发即自动隐藏。
+        // 恢复审核：删除下面条件中的 APPROVAL_DISABLED || 并取消 else 分支注释
+        const APPROVAL_DISABLED = true;
+        if (APPROVAL_DISABLED || rs.owner === uid || rs.members.has(uid) || rs.approved.has(uid)) {
           // 创建人或已批准成员：进房；名字刷新进名册（创建人也入名册）
           ws.room = room;
           ws.uid = uid;
@@ -174,6 +177,7 @@ wss.on('connection', (ws) => {
           send(ws, { type: 'registered', uid, room, peers: memberPeers(rs, uid), roster: rosterOf(rs, uid) });
           broadcast(room, { type: 'presence', uid, name, online: true }, uid);
         } else {
+          /* [加入审核已停用 2026-09]
           // 新成员：进 pending，等待创建人审核
           ws.room = room;
           ws.uid = uid;
@@ -182,6 +186,7 @@ wss.on('connection', (ws) => {
           send(ws, { type: 'join-pending', room });
           const ownerEntry = rs.members.get(rs.owner);
           if (ownerEntry) send(ownerEntry.ws, { type: 'join-request', uid, name });
+          */
         }
         break;
       }
