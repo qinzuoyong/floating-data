@@ -222,21 +222,25 @@ class FloatingWindowView(context: Context) : LinearLayout(context) {
                 }
             }
         }
-        // 状态栏与挖孔取各方向较大值：横屏时系统状态栏为挖孔一侧的竖条，
-        // 仅靠 displayCutout 在旋转过渡期不稳定，statusBars() 是主来源、cutout 兜底
+        // 坐标系（2026-09 横屏贴合修复）：gravity=TOP|START 下 params.x/y 是相对
+        // parent frame（系统按默认 fitInsetsTypes=systemBars 让出状态栏/导航栏后的
+        // 区域）左上角的偏移，并非屏幕绝对坐标——params=(0,0) 恰好贴合安全区左上角
+        // （横屏即左侧状态栏右缘），因此钳位下限取 0 即可贴合屏幕。
+        // 安全区取 systemBars 与挖孔各方向较大值：statusBars() 稳定是主来源，
+        // displayCutout 在旋转过渡期不稳定，仅作兜底
         val insets = windowMetrics.windowInsets
         val cutout = insets.displayCutout
-        val statusBar = insets.getInsets(WindowInsets.Type.statusBars())
-        val leftInset = maxOf(statusBar.left, cutout?.safeInsetLeft ?: 0)
-        val rightInset = maxOf(statusBar.right, cutout?.safeInsetRight ?: 0)
-        val topInset = maxOf(statusBar.top, cutout?.safeInsetTop ?: 0)
-        val bottomInset = maxOf(statusBar.bottom, cutout?.safeInsetBottom ?: 0)
-        val minX = leftInset
-        val maxX = maxOf(minX, screenW - viewW - rightInset)
-        val minY = topInset
-        val maxY = maxOf(minY, screenH - viewH - bottomInset)
-        params.x = params.x.coerceIn(minX, maxX)
-        params.y = params.y.coerceIn(minY, maxY)
+        val bars = insets.getInsets(WindowInsets.Type.systemBars())
+        val safeLeft = maxOf(bars.left, cutout?.safeInsetLeft ?: 0)
+        val safeRight = maxOf(bars.right, cutout?.safeInsetRight ?: 0)
+        val safeTop = maxOf(bars.top, cutout?.safeInsetTop ?: 0)
+        val safeBottom = maxOf(bars.bottom, cutout?.safeInsetBottom ?: 0)
+        // params 空间钳位：[0, 安全区宽-viewW] × [0, 安全区高-viewH]；
+        // 极端小屏（view 超过安全区）退化为 (0,0) 左上角
+        val maxX = maxOf(0, screenW - viewW - safeLeft - safeRight)
+        val maxY = maxOf(0, screenH - viewH - safeTop - safeBottom)
+        params.x = params.x.coerceIn(0, maxX)
+        params.y = params.y.coerceIn(0, maxY)
         try {
             wm.updateViewLayout(this, params)
         } catch (e: Exception) {
