@@ -11,7 +11,7 @@ import com.google.gson.JsonObject
 object SignalTypes {
     /** 客户端 → 服务器：注册/上线 */
     const val REGISTER = "register"
-    /** 服务器 → 客户端：注册回执（携带同房在线成员；创建人直接收到，加入者批准后收到） */
+    /** 服务器 → 客户端：注册回执（携带在线成员 peers 与全量名册 roster；创建人直接收到，加入者批准后收到） */
     const val REGISTERED = "registered"
     /** 服务器 → 客户端：成员上下线广播（全房间） */
     const val PRESENCE = "presence"
@@ -53,6 +53,8 @@ data class SignalMessage(
     val uid: String? = null,
     val online: Boolean? = null,
     val peers: List<PeerInfo>? = null,
+    /** registered：全量成员名册（服务器 approved，含离线成员），用于客户端重建家人列表 */
+    val roster: List<PeerInfo>? = null,
     val payload: JsonObject? = null,
     val code: String? = null,
     val message: String? = null,

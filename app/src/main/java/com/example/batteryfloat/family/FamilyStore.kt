@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.SharedPreferences
 import com.example.batteryfloat.PrefsKeys
 import com.example.batteryfloat.p2p.LocationPayload
+import com.example.batteryfloat.p2p.PeerInfo
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -126,6 +127,27 @@ class FamilyStore private constructor(context: Context) {
             online = online
         )
         _members.value = _members.value + (uid to member)
+        persistMembers()
+    }
+
+    /**
+     * 按服务器名册全量重建成员列表（家庭实际成员，含离线成员）
+     *
+     * 保留名册内成员的本地备注与上次位置；名册外成员（服务器已清除的测试残留）移除。
+     *
+     * @param roster registered 回执携带的全量名册
+     */
+    @Synchronized
+    fun syncRoster(roster: List<PeerInfo>) {
+        val newMap = LinkedHashMap<String, FamilyMember>()
+        for (entry in roster) {
+            val old = _members.value[entry.uid]
+            newMap[entry.uid] = (old ?: FamilyMember(uid = entry.uid)).copy(
+                name = entry.name,
+                online = entry.online
+            )
+        }
+        _members.value = newMap
         persistMembers()
     }
 

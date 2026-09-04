@@ -176,12 +176,20 @@ class FamilyLocationService : Service() {
         val s = store ?: return
         when (msg.type) {
             SignalTypes.REGISTERED -> {
-                val peers = msg.peers ?: emptyList()
-                Log.i(TAG, "registered, peers=" + peers.size)
                 // 注册成功（创建人或被批准）：清除等待审核状态
                 s.setJoinState(FamilyStore.JoinState.NONE)
-                for (peer in peers) {
-                    s.upsertMember(peer.uid, peer.name, peer.online)
+                val roster = msg.roster
+                if (roster != null) {
+                    // 新协议：以服务器名册全量重建本地成员列表（家庭实际成员，含离线）
+                    Log.i(TAG, "registered, roster=" + roster.size)
+                    s.syncRoster(roster)
+                } else {
+                    // 兼容旧服务器：仅在线成员逐个 upsert
+                    val peers = msg.peers ?: emptyList()
+                    Log.i(TAG, "registered, peers=" + peers.size)
+                    for (peer in peers) {
+                        s.upsertMember(peer.uid, peer.name, peer.online)
+                    }
                 }
             }
 
