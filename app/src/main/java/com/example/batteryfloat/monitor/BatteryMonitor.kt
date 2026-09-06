@@ -2,6 +2,7 @@ package com.example.batteryfloat.monitor
 
 import android.app.NotificationManager
 import android.content.Context
+import android.os.SystemClock
 import android.util.Log
 import com.example.batteryfloat.R
 import com.example.batteryfloat.data.BatteryProvider
@@ -34,6 +35,8 @@ class BatteryMonitor(
     // 导致功耗从"不可用"转为有效时通知不更新。-Infinity 与有限值比较为 true，能正确首帧触发。
     private var lastNotifiedTemp = -100f
     private var lastNotifiedPower = Float.NEGATIVE_INFINITY
+    /** 上次通知刷新的时间戳(elapsedRealtime 基准,通知节流用) */
+    private var lastNotifyAt = 0L
 
     companion object {
         private const val POLL_INTERVAL_MS = 2000L
@@ -41,6 +44,8 @@ class BatteryMonitor(
         private const val TEMP_THRESHOLD = 0.5f
         /** 功耗变化超过此阈值才更新通知 */
         private const val POWER_THRESHOLD = 0.5f
+        /** 通知刷新最小间隔：功耗波动远超阈值时防止高频刷新(SystemUI 重复重绘) */
+        private const val MIN_NOTIFY_INTERVAL_MS = 60_000L
     }
 
     fun start() {
@@ -52,6 +57,8 @@ class BatteryMonitor(
             while (isActive && isRunning.get()) {
                 try {
                     fetchBatteryData()
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    throw e // 灭屏暂停等主动取消,非错误,静默退出
                 } catch (e: Exception) {
                     Log.e(TAG, "电池数据获取异常", e)
                 }
@@ -85,7 +92,12 @@ class BatteryMonitor(
         val tempChanged = kotlin.math.abs(celsius - lastNotifiedTemp) >= TEMP_THRESHOLD
         val powerChanged = watts.isFinite() &&
                 kotlin.math.abs(watts - lastNotifiedPower) >= POWER_THRESHOLD
-        if (tempChanged || powerChanged) {
+        // 节流:距上次刷新不足 60 秒不发通知;阈值已过但被节流的采样不回写缓存,
+        // 节流窗口过后若仍越过阈值会立即补刷一次,保证恢复采样后数据新鲜
+        if ((tempChanged || powerChanged) &&
+            SystemClock.elapsedRealtime() - lastNotifyAt >= MIN_NOTIFY_INTERVAL_MS
+        ) {
+            lastNotifyAt = SystemClock.elapsedRealtime()
             lastNotifiedTemp = celsius
             if (watts.isFinite()) lastNotifiedPower = watts
             updateNotification(celsius, watts)

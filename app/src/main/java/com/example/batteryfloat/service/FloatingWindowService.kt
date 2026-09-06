@@ -4,8 +4,10 @@ import android.app.AlarmManager
 import android.app.Notification
 import android.app.PendingIntent
 import android.app.Service
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.SharedPreferences
 import android.content.res.Configuration
 import android.graphics.PixelFormat
@@ -155,6 +157,26 @@ class FloatingWindowService : Service() {
         }
     }
 
+    /**
+     * 灭屏/亮屏广播接收器：灭屏时悬浮窗与通知均不可见,暂停 2 秒采样轮询省电
+     * (含特权通道 shell 读取,一天可省数万次采样);亮屏立即恢复,2 秒内刷新数据。
+     * 复用 BatteryMonitor 的 stop/start 作为暂停/恢复(重建协程作用域,重启即首采)。
+     */
+    private val screenReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            when (intent?.action) {
+                Intent.ACTION_SCREEN_OFF -> {
+                    batteryMonitor?.stop()
+                    Log.d(TAG, "灭屏,暂停电池采样")
+                }
+                Intent.ACTION_SCREEN_ON -> {
+                    batteryMonitor?.start()
+                    Log.d(TAG, "亮屏,恢复电池采样")
+                }
+            }
+        }
+    }
+
     override fun onCreate() {
         super.onCreate()
         isRunning = true
@@ -163,6 +185,7 @@ class FloatingWindowService : Service() {
         prefs.edit().putBoolean(PREF_FLOATING_RUNNING, true).apply()
         Notifs.ensureChannels(this)
         windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
+        registerScreenReceiver()
         scheduleHeartbeat()
         KeepAliveJobService.schedule(this)
         mainHandler.postDelayed(a11yPatrolRunnable, A11Y_PATROL_INTERVAL_MS)
@@ -233,6 +256,7 @@ class FloatingWindowService : Service() {
         stopMonitoring()
         removeFloatingWindow()
         removeAliveOverlay()
+        unregisterScreenReceiver()
         mainHandler.removeCallbacks(a11yPatrolRunnable)
         aliveRetryRunnable?.let { mainHandler.removeCallbacks(it) }
         aliveRetryRunnable = null
@@ -288,6 +312,30 @@ class FloatingWindowService : Service() {
             Log.w(TAG, "onTaskRemoved 重启调度失败: ${e.message}", e)
         }
         super.onTaskRemoved(rootIntent)
+    }
+
+    // ===== 屏幕状态感知（灭屏省电） =====
+
+    /** 注册灭屏/亮屏广播（onCreate 调用） */
+    private fun registerScreenReceiver() {
+        try {
+            val filter = IntentFilter().apply {
+                addAction(Intent.ACTION_SCREEN_OFF)
+                addAction(Intent.ACTION_SCREEN_ON)
+            }
+            registerReceiver(screenReceiver, filter)
+        } catch (e: Exception) {
+            Log.w(TAG, "注册屏幕广播失败: ${e.message}")
+        }
+    }
+
+    /** 注销灭屏/亮屏广播（onDestroy 调用） */
+    private fun unregisterScreenReceiver() {
+        try {
+            unregisterReceiver(screenReceiver)
+        } catch (e: Exception) {
+            Log.w(TAG, "注销屏幕广播失败: ${e.message}")
+        }
     }
 
     // ===== 心跳保活 =====

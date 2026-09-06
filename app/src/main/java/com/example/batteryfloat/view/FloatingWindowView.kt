@@ -36,6 +36,11 @@ class FloatingWindowView(context: Context) : LinearLayout(context) {
     /** 功耗文本 */
     val powerText: TextView = TextView(context)
 
+    /** 上次温度显示文本(去重用,数值未变时跳过 setText 避免无效重排重绘) */
+    private var lastTempText: String? = null
+    /** 上次功耗显示文本(去重用) */
+    private var lastPowerText: String? = null
+
     companion object {
         private const val TAG = "FloatingWindowView"
         private const val DOUBLE_TAP_MS = 400L
@@ -156,7 +161,10 @@ class FloatingWindowView(context: Context) : LinearLayout(context) {
 
     fun updateTemperature(celsius: Float) {
         // 锁定状态通过边框指示，温度文本保持不变，与功耗文本对齐
-        tempText.text = String.format(Locale.US, "%.1f\u00b0C", celsius)
+        val text = String.format(Locale.US, "%.1f\u00b0C", celsius)
+        if (text == lastTempText) return
+        lastTempText = text
+        tempText.text = text
     }
 
     /**
@@ -164,12 +172,11 @@ class FloatingWindowView(context: Context) : LinearLayout(context) {
      * @param watts 功耗值（瓦），正值=充电，负值=放电，NaN=不可用
      */
     fun updatePower(watts: Float) {
-        if (!watts.isFinite()) {
-            powerText.text = "--W"
-            return
-        }
-        // 格式化为带符号的功耗值（颜色由 applyAppearance() 统一管理，与温度一致）
-        powerText.text = String.format(Locale.US, "%+.1fW", watts)
+        val text = if (!watts.isFinite()) "--W"
+        else String.format(Locale.US, "%+.1fW", watts) // 带符号，颜色由 applyAppearance() 统一管理
+        if (text == lastPowerText) return
+        lastPowerText = text
+        powerText.text = text
     }
 
     /**
