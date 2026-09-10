@@ -178,8 +178,8 @@ class AdbMdns(
                     false
                 }
                 if (!isLocal || !running) return@execute
-                val portFree = isPortAvailable(resolvedService.port)
-                if (portFree && running) {
+                val portReady = isPortInUseByPeer(resolvedService.port)
+                if (portReady && running) {
                     mainHandler.post {
                         if (running && !serviceFound) {
                             serviceFound = true
@@ -195,7 +195,14 @@ class AdbMdns(
         }
     }
 
-    private fun isPortAvailable(port: Int) = try {
+    /**
+     * 该端口是否确实有对端在监听。
+     *
+     * NSD 只证明"服务被通告"，端口可能尚未就绪；这里用本地绑定探测：
+     * 127.0.0.1:port 绑定失败（被占用）说明服务端已在该端口监听。
+     * （命名与语义对齐：返回 true = 端口被对端占用 = 可用）
+     */
+    private fun isPortInUseByPeer(port: Int) = try {
         ServerSocket().use {
             it.bind(InetSocketAddress("127.0.0.1", port), 1)
             false

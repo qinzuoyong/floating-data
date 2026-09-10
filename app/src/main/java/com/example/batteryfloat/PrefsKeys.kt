@@ -63,10 +63,14 @@ object PrefsKeys {
     const val PRIV_BASELINE_TCP = "priv_baseline_tcp"
     const val PRIV_BASELINE_TRUSTED = "priv_baseline_trusted"
     const val PRIV_BASELINE_DONE = "priv_baseline_done"
+    /** trust-key 写入已尝试过(无论成功与否;幂等,避免每次连接重复执行刷日志) */
+    const val PRIV_BASELINE_KEY_TRIED = "priv_baseline_key_tried"
     /** TCP 固化尝试次数(vivo 拒绝该属性,2 次失败后放弃重试) */
     const val PRIV_BASELINE_TCP_TRIES = "priv_baseline_tcp_tries"
     /** 用户在应用内主动关闭无障碍保活(此时系统侧被关视为用户意图,自愈不触发) */
     const val A11Y_USER_DISABLED = "a11y_user_disabled"
+    /** ADB 通道自动授予的权限/开关记录(AutoGrant 枚举名集合,供 UI 展示与一键撤销) */
+    const val AUTO_GRANT_LOG = "auto_grant_log"
 
     // ===== UI 状态 =====
     /** 主题模式（0=跟随系统, 1=浅色, 2=深色） */

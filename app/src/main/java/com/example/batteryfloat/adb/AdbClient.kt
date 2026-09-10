@@ -95,7 +95,19 @@ class AdbClient(private val host: String, private val port: Int, private val key
         if (message.command != AdbProtocol.A_CNXN) error("not A_CNXN")
     }
 
-    fun shellCommand(command: String, listener: ((ByteArray) -> Unit)?) {
+    /**
+     * 执行 shell 命令并逐块回调输出
+     *
+     * @param timeoutMs 本次命令的读超时。协程 withTimeout 无法打断阻塞读，
+     *   因此超时必须落到 socket 层（超时抛 SocketTimeoutException，由调用方降级处理）。
+     *   listener 保持为最后一个参数，保证既有 `shellCommand(cmd) { ... }` 尾随 lambda 写法不变。
+     */
+    fun shellCommand(
+        command: String,
+        timeoutMs: Int = SO_TIMEOUT_MS,
+        listener: ((ByteArray) -> Unit)?
+    ) {
+        applyReadTimeout(timeoutMs)
         val localId = 1
         write(AdbProtocol.A_OPEN, localId, 0, "shell:$command")
 
@@ -125,6 +137,23 @@ class AdbClient(private val host: String, private val port: Int, private val key
             else -> {
                 error("not A_OKAY or A_CLSE")
             }
+        }
+    }
+
+    /**
+     * 把读超时应用到当前生效的 socket（明文 / TLS）。
+     * 阻塞读（DataInputStream.readFully）不会被协程取消打断，
+     * 只能靠 socket soTimeout 兜底，否则 adbd 半死不活时读会永久挂起。
+     */
+    private fun applyReadTimeout(timeoutMs: Int) {
+        try {
+            if (useTls) {
+                tlsSocket.soTimeout = timeoutMs
+            } else {
+                socket.soTimeout = timeoutMs
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "设置读超时失败: ${e.message}")
         }
     }
 

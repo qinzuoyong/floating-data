@@ -32,6 +32,12 @@ object BfdChannel {
     private const val EXEC_TIMEOUT_MS = 15_000L
     private const val PING_TIMEOUT_MS = 2_000L
     private const val ALIVE_CACHE_MS = 5_000L
+    /** 单端口连接超时(环回连接是毫秒级,给短超时避免端口遍历拖太久) */
+    private const val CONNECT_TIMEOUT_MS = 300
+    /** 端口遍历总预算(daemon 只会在 BASE_PORT..BASE_PORT+9 内监听) */
+    private const val CONNECT_BUDGET_MS = 3_000L
+    /** 命令响应读超时:socket 层生效,保证阻塞读不会永久挂起 */
+    private const val RESPONSE_TIMEOUT_MS = 8_000
 
     /** 当前 daemon 的认证令牌(仅进程内持有,重启进程后由下次拉起重置) */
     @Volatile
@@ -42,22 +48,19 @@ object BfdChannel {
     private var aliveCache: Pair<Long, Boolean>? = null
 
     /**
-     * daemon 是否存活(带 5s 缓存);ping 失败即视为死亡,下次重新探测。
-     * 主线程(UI)只读缓存不做探测——探测是网络 IO,主线程会抛
-     * NetworkOnMainThreadException;缓存由后台调用(canExec/采样/拉起)填充
+     * daemon 是否存活(带 [ALIVE_CACHE_MS] 缓存)。
+     * 探测是网络 IO,故为 suspend:主线程调用会抛 NetworkOnMainThreadException,
+     * 同步/UI 场景请改用 [aliveCached]。
      */
-    fun alive(): Boolean {
+    suspend fun alive(): Boolean {
         if (token == null) return false
         aliveCache?.let { (at, v) ->
             if (System.currentTimeMillis() - at < ALIVE_CACHE_MS) return v
         }
-        if (android.os.Looper.myLooper() == android.os.Looper.getMainLooper()) {
-            return aliveCache?.second ?: false
-        }
         var detail = ""
         val v = runCatching {
-            kotlinx.coroutines.runBlocking {
-                kotlinx.coroutines.withTimeoutOrNull(PING_TIMEOUT_MS) { execOnce("ping") }
+            withContext(Dispatchers.IO) {
+                withTimeoutOrNull(PING_TIMEOUT_MS) { execOnce("ping") }
             } == "pong"
         }.getOrElse {
             detail = "${it.javaClass.simpleName}: ${it.message}"
@@ -66,6 +69,15 @@ object BfdChannel {
         aliveCache = System.currentTimeMillis() to v
         if (!v && detail.isNotEmpty()) AdbConnectionManager.logDiag("bfd: ping 失败 $detail")
         return v
+    }
+
+    /**
+     * 缓存态读数(不发起任何探测)：null=尚不可知。
+     * 供 UI 做"未知/可用/不可用"三态展示——避免把"还没探测过"误报成"不可用"。
+     */
+    fun aliveCached(): Boolean? {
+        if (token == null) return false
+        return aliveCache?.second
     }
 
     fun invalidateAlive() {
@@ -122,13 +134,19 @@ object BfdChannel {
     /**
      * 连接 daemon：daemon 启动时若默认端口被占用会向上顺延监听
      * (bfd_server.c 内 BASE_PORT..BASE_PORT+PORT_SPAN-1)，客户端同范围逐个尝试。
+     *
+     * 带总预算 + 短连接超时 + 读超时：协程的 withTimeout 无法打断阻塞 connect/read，
+     * 超时必须由 socket 层兜住，否则 daemon 异常时会把调用线程长期占住。
      */
     private fun connectDaemon(): Socket {
         var last: Exception? = null
+        val deadline = System.currentTimeMillis() + CONNECT_BUDGET_MS
         for (p in BASE_PORT until BASE_PORT + PORT_SPAN) {
+            if (System.currentTimeMillis() >= deadline) break
             val s = Socket()
             try {
-                s.connect(InetSocketAddress("127.0.0.1", p), 2_000)
+                s.connect(InetSocketAddress("127.0.0.1", p), CONNECT_TIMEOUT_MS)
+                s.soTimeout = RESPONSE_TIMEOUT_MS
                 return s
             } catch (e: Exception) {
                 last = e

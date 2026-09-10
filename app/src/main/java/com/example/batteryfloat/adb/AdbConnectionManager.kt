@@ -74,6 +74,9 @@ object AdbConnectionManager {
 
     private var reconnectJob: Job? = null
 
+    /** 密钥初始化任务(仅启动一次):密钥的密钥库 IO 全部在 IO 线程执行,不阻塞主线程 */
+    private var keyInitJob: Job? = null
+
     /** 当前重连退避间隔(重连循环与亮屏触发器共用,亮屏时重置) */
     @Volatile
     private var backoffMs = RECONNECT_MIN_MS
@@ -107,26 +110,43 @@ object AdbConnectionManager {
         }
     }
 
-    /** 进程内幂等初始化(MainActivity onCreate 调用);已启用则启动自动重连 */
+    /**
+     * 进程内幂等初始化(MainActivity onCreate / App.onCreate 调用);已启用则启动自动重连。
+     *
+     * 主线程只做上下文登记与开关读取;AdbKey 的构造(AndroidKeyStore 读写、
+     * 首次 RSA-2048 生成、证书签发,耗时数百毫秒~数秒)放到 IO 协程执行,
+     * 否则 Application.onCreate 会被阻塞,导致冷启动白屏乃至 ANR。
+     * 密钥就绪前 [exec] 一律返回 null,消费方按"无特权通道"降级,行为与未启用一致。
+     */
     fun setup(context: Context) {
         if (appContext != null) return
         synchronized(this) {
             if (appContext != null) return
-            appContext = context.applicationContext
-            keyStore = appContext!!.getSharedPreferences(ADB_PREFS_NAME, Context.MODE_PRIVATE)
-            enabled = appContext!!.getSharedPreferences(PrefsKeys.PREFS_NAME, Context.MODE_PRIVATE)
+            val ctx = context.applicationContext
+            appContext = ctx
+            keyStore = ctx.getSharedPreferences(ADB_PREFS_NAME, Context.MODE_PRIVATE)
+            enabled = ctx.getSharedPreferences(PrefsKeys.PREFS_NAME, Context.MODE_PRIVATE)
                 .getBoolean(PrefsKeys.ADB_PRIV_ENABLED, false)
-            PrivShell.init(appContext!!)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                key = try {
+            PrivShell.init(ctx)
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return
+            registerUnlockTrigger(ctx)
+            if (keyInitJob?.isActive == true || key != null) return
+            keyInitJob = scope.launch {
+                val created = try {
                     AdbKey(PreferenceAdbKeyStore(keyStore!!), KEY_NAME)
                 } catch (e: Throwable) {
                     Log.e(TAG, "AdbKey 初始化失败", e)
                     null
                 }
-                _state.value = if (key != null) AdbState.DISCONNECTED else AdbState.NOT_PAIRED
-                registerUnlockTrigger(appContext!!)
-                if (enabled && key != null) startReconnectLoop()
+                key = created
+                if (_state.value == AdbState.NOT_PAIRED) {
+                    _state.value = if (created != null) AdbState.DISCONNECTED else AdbState.NOT_PAIRED
+                }
+                // 密钥就绪时若开关已开(setEnabled 早于密钥就绪的场景),补一次启动连接
+                if (created != null && enabled) {
+                    startReconnectLoop()
+                    connectOnceInternal()
+                }
             }
         }
     }
@@ -191,7 +211,8 @@ object AdbConnectionManager {
                 val c = ensureConnected() ?: return@withTimeout null
                 val sb = StringBuilder()
                 try {
-                    c.shellCommand(command) { bytes -> sb.append(String(bytes)) }
+                    // 读超时下沉到 socket：withTimeout 无法打断阻塞读，二者需配合
+                    c.shellCommand(command, EXEC_TIMEOUT_MS.toInt()) { bytes -> sb.append(String(bytes)) }
                     lastSuccessAt = System.currentTimeMillis()
                     sb.toString()
                 } catch (e: Throwable) {
@@ -330,11 +351,12 @@ object AdbConnectionManager {
     private fun launchCarrier(ctx: Context) {
         when (PrivShell.carrierMode()) {
             PrivShell.CarrierMode.SHIZUKU -> ShizukuChannel.onConnected(ctx)
-            PrivShell.CarrierMode.BUILTIN -> if (!BfdChannel.alive()) {
-                scope.launch {
-                    BfdChannel.startViaAdb(ctx)
-                    PrivBaseline.onConnected(ctx)
-                }
+            PrivShell.CarrierMode.BUILTIN -> scope.launch {
+                // 存活探测是网络 IO：放在协程内执行（本方法由持 connectMutex 的
+                // connectOnceInternal 调用，锁内不做 IO）
+                if (BfdChannel.alive()) return@launch
+                BfdChannel.startViaAdb(ctx)
+                PrivBaseline.onConnected(ctx)
             }
         }
     }

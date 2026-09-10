@@ -17,7 +17,8 @@
  *
  * 协议(每连接):4字节小端令牌长 + 令牌 + 4字节小端命令长 + 命令 →
  * 4字节小端输出长 + 输出。特殊命令:"ping"→"pong";"shutdown" 退出;
- * "trust-key <base64>" 追加本应用 ADB 公钥到 /data/misc/adb/adb_keys。
+ * "trust-key <adb 公钥行>" 追加本应用 ADB 公钥到 /data/misc/adb/adb_keys
+ * (参数即 adb_keys 的行内容「<base64 公钥> <name>」,不再做额外编码)。
  */
 #include <arpa/inet.h>
 #include <dirent.h>
@@ -164,29 +165,40 @@ static int run_command(const char *cmd, char *out, size_t outcap, size_t *outlen
     return 0;
 }
 
-/* 追加本应用 ADB 公钥到 adb_keys(经典 adbd 信任);已存在则跳过 */
+/* 追加本应用 ADB 公钥到 adb_keys(经典 adbd 信任);已存在则跳过。
+ * 注意:文件存在 != 已受信——必须逐行比对后再决定是否追加。
+ * 旧实现只要文件存在就只查不写,而 adb_keys 在开启过 USB 调试的设备上几乎必然存在,
+ * 导致自愈基座的密钥受信步骤长期静默失效。 */
 static void handle_trust_key(int conn, const char *arg) {
     char resp[256];
-    FILE *f = fopen(ADB_KEYS_PATH, "r");
-    if (f) {
-        char line[1024];
-        int exists = 0;
-        while (fgets(line, sizeof(line), f)) {
-            if (strncmp(line, arg, strlen(arg)) == 0) {
-                exists = 1;
-                break;
-            }
-        }
-        fclose(f);
-        strcpy(resp, exists ? "already-trusted" : "not-exists");
+    if (arg == NULL || arg[0] == 0) {
+        snprintf(resp, sizeof(resp), "empty-arg");
     } else {
-        FILE *o = fopen(ADB_KEYS_PATH, "a");
-        if (!o) {
-            snprintf(resp, sizeof(resp), "open-failed errno=%d", errno);
+        int exists = 0;
+        FILE *f = fopen(ADB_KEYS_PATH, "r");
+        if (f) {
+            char line[2048];
+            size_t arg_len = strlen(arg);
+            while (fgets(line, sizeof(line), f)) {
+                if (strncmp(line, arg, arg_len) == 0) {
+                    exists = 1;
+                    break;
+                }
+            }
+            fclose(f);
+        }
+        if (exists) {
+            strcpy(resp, "already-trusted");
         } else {
-            fprintf(o, "%s\n", arg);
-            fclose(o);
-            strcpy(resp, "trusted");
+            FILE *o = fopen(ADB_KEYS_PATH, "a");
+            if (!o) {
+                snprintf(resp, sizeof(resp), "open-failed errno=%d", errno);
+            } else {
+                /* 每行以换行结尾,避免与后写入的公钥粘连成非法行 */
+                fprintf(o, "%s\n", arg);
+                fclose(o);
+                strcpy(resp, "trusted");
+            }
         }
     }
     unsigned int rlen = (unsigned int) strlen(resp);

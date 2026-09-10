@@ -68,8 +68,11 @@ object PrivShell {
         false
     }
 
-    /** 是否存在任一可执行通道(供门控判断,不发命令) */
-    fun canExec(): Boolean = when (mode) {
+    /**
+     * 是否存在任一可执行通道(供门控判断,不发命令)。
+     * suspend:BUILTIN 模式下需要探测 daemon 存活(网络 IO),不能在主线程直接调用。
+     */
+    suspend fun canExec(): Boolean = when (mode) {
         CarrierMode.BUILTIN -> BfdChannel.alive() || AdbConnectionManager.isReady
         CarrierMode.SHIZUKU -> shizukuReady() || AdbConnectionManager.isReady
     }
