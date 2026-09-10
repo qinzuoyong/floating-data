@@ -14,22 +14,27 @@ android {
 
     // 正式签名（Release 使用 release.keystore，无需手动签名）
     // 口令等敏感项从项目根的 keystore.properties 读取（已 gitignore，绝不硬编码进仓库）
-    val keystoreProps = Properties().apply {
-        val propsFile = rootProject.file("keystore.properties")
-        if (!propsFile.exists()) {
-            throw GradleException(
-                "缺少 keystore.properties：请在项目根按 AGENTS.md 签名说明创建，" +
-                    "内容为 storeFile/storePassword/keyAlias/keyPassword 四行"
-            )
-        }
-        propsFile.inputStream().use { load(it) }
+    //
+    // 懒要求：仅当本次构建需要 release 签名时才强制要求该文件存在。
+    // 否则 debug 构建与 IDE Sync 会因缺文件直接失败（配置期异常）。
+    val needsReleaseSigning = gradle.startParameter.taskNames.any {
+        it.contains("release", ignoreCase = true) || it.contains("bundle", ignoreCase = true)
     }
     signingConfigs {
         create("releaseKey") {
-            storeFile = rootProject.file(keystoreProps.getProperty("storeFile"))
-            storePassword = keystoreProps.getProperty("storePassword")
-            keyAlias = keystoreProps.getProperty("keyAlias")
-            keyPassword = keystoreProps.getProperty("keyPassword")
+            val propsFile = rootProject.file("keystore.properties")
+            if (propsFile.exists()) {
+                val keystoreProps = Properties().apply { propsFile.inputStream().use { load(it) } }
+                storeFile = rootProject.file(keystoreProps.getProperty("storeFile"))
+                storePassword = keystoreProps.getProperty("storePassword")
+                keyAlias = keystoreProps.getProperty("keyAlias")
+                keyPassword = keystoreProps.getProperty("keyPassword")
+            } else if (needsReleaseSigning) {
+                throw GradleException(
+                    "缺少 keystore.properties：请在项目根按 AGENTS.md 签名说明创建，" +
+                        "内容为 storeFile/storePassword/keyAlias/keyPassword 四行"
+                )
+            }
         }
     }
 
@@ -70,12 +75,26 @@ android {
         }
         val baiduAk = lp.getProperty("BAIDU_MAP_AK", "")
         val amapKey = lp.getProperty("AMAP_KEY", "")
-        val signalUrl = lp.getProperty("SIGNAL_URL", "ws://47.94.212.176/family-signal")
+        // 信令地址必须显式配置：不再提供硬编码默认值。
+        // 旧默认值内嵌明文 ws:// 且带固定 IP，配置缺失时会静默连到未加密服务器（位置数据裸奔）；
+        // 缺失时注入空串，由运行时给出明确提示（FamilyLocationService.setup）。
+        val signalUrl = lp.getProperty("SIGNAL_URL", "")
 
         buildConfigField("String", "BAIDU_MAP_AK", "\"${baiduAk}\"")
         buildConfigField("String", "AMAP_KEY", "\"${amapKey}\"")
         manifestPlaceholders["amapKey"] = amapKey
         buildConfigField("String", "SIGNAL_URL", "\"${signalUrl}\"")
+
+        if (signalUrl.isBlank()) {
+            logger.warn(
+                "⚠️ local.properties 未配置 SIGNAL_URL：家人位置共享将不可用（不再有硬编码兜底地址）"
+            )
+        } else if (signalUrl.startsWith("ws://")) {
+            logger.warn(
+                "⚠️ SIGNAL_URL 为明文 ws://：位置数据未加密传输，建议迁移到 wss:// 后从 " +
+                    "network_security_config 移除明文放行"
+            )
+        }
 
         // 只保留中文资源，剪掉多语言（AGP 9.x 移除 resConfigs，改用 androidResources.localeFilters 但需 initscript）
 

@@ -24,9 +24,11 @@
         tools:ignore="ProtectedPermissions" />
     <!-- Shizuku 桥接:声明 API 权限并挂 provider 接收 server 的 binder(方案一) -->
     <uses-permission android:name="moe.shizuku.manager.permission.API_V23" />
+    <!-- allowBackup=false：floating_prefs 含家庭码、成员备注与上次位置经纬度，
+         不应进入云备份 / adb backup（安全优先，代价是换机需重新配置） -->
     <application
         android:name=".App"
-        android:allowBackup="true"
+        android:allowBackup="false"
         android:icon="@mipmap/ic_launcher"
         android:installLocation="auto"
         android:label="@string/app_name"

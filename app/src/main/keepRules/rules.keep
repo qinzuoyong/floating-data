@@ -29,3 +29,10 @@
 -keep class com.amap.api.** { *; }
 -dontwarn com.amap.ams.gnss.**
 -dontwarn net.jafama.**
+
+# 发布版剥离调试日志：Log.d 会打印完整 ADB 报文与 shell 命令内容（AdbMessage.toStringShort），
+# 既无必要也构成信息外泄面；assumenosideeffects 同时移除日志调用与其参数拼接。
+-assumenosideeffects class android.util.Log {
+    public static *** d(...);
+    public static *** v(...);
+}
