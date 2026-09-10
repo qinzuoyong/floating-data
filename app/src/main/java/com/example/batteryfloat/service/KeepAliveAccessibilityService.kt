@@ -60,7 +60,11 @@ class KeepAliveAccessibilityService : AccessibilityService() {
         isRunning = false
         removeAliveOverlay()
         Log.i(TAG, "无障碍保活已断开")
-        Toast.makeText(applicationContext, "无障碍保活已关闭", Toast.LENGTH_SHORT).show()
+        // 仅"用户在应用内主动关闭"时提示：系统重绑、进程回收、自愈写回都会走到 onDestroy，
+        // 无条件弹 Toast 会在保活链路抖动时反复打扰用户
+        if (A11ySelfHealer.isUserDisabled(this)) {
+            Toast.makeText(applicationContext, "无障碍保活已关闭", Toast.LENGTH_SHORT).show()
+        }
         // 无障碍退位 → 周期兜底层无缝顶上：重排看门狗，并借 onStartCommand 既有路径
         // 重排心跳 + 补挂 1px 应用层 overlay（接替刚移除的无障碍 overlay）
         if (FloatingWindowService.isRunning) {

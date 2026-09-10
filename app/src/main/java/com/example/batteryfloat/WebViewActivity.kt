@@ -43,6 +43,12 @@ class WebViewActivity : ComponentActivity() {
         enableEdgeToEdge()
 
         val url = intent.getStringExtra(EXTRA_URL) ?: run { finish(); return }
+        // 首跳同样只允许 https：shouldOverrideUrlLoading 只能拦后续跳转，
+        // 若 EXTRA_URL 被注入 file:// / javascript: 等 scheme 会直接加载
+        if (!url.startsWith("https://", ignoreCase = true)) {
+            finish()
+            return
+        }
         val title = intent.getStringExtra(EXTRA_TITLE) ?: "浏览"
         val ctx: Context = this
         val density = resources.displayMetrics.density

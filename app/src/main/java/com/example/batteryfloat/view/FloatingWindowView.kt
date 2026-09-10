@@ -163,6 +163,8 @@ class FloatingWindowView(context: Context) : LinearLayout(context) {
         // 锁定状态通过边框指示，温度文本保持不变，与功耗文本对齐
         val text = String.format(Locale.US, "%.1f\u00b0C", celsius)
         if (text == lastTempText) return
+        // 文本长度变化会改变测量宽高，缓存尺寸须失效（如 9.9°C → 100.0°C），否则边界钳位偏差
+        if (lastTempText?.length != text.length) sizeCacheDirty = true
         lastTempText = text
         tempText.text = text
     }
@@ -175,6 +177,7 @@ class FloatingWindowView(context: Context) : LinearLayout(context) {
         val text = if (!watts.isFinite()) "--W"
         else String.format(Locale.US, "%+.1fW", watts) // 带符号，颜色由 applyAppearance() 统一管理
         if (text == lastPowerText) return
+        if (lastPowerText?.length != text.length) sizeCacheDirty = true
         lastPowerText = text
         powerText.text = text
     }

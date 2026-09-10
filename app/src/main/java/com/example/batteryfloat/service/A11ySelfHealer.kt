@@ -4,6 +4,7 @@ import android.app.NotificationManager
 import android.content.ComponentName
 import android.content.Context
 import android.content.pm.PackageManager
+import android.os.SystemClock
 import android.provider.Settings
 import android.util.Log
 import androidx.core.content.ContextCompat
@@ -42,8 +43,16 @@ object A11ySelfHealer {
     /** 一轮自愈进行中(写回→复查)时拒绝重入 */
     private val healing = AtomicBoolean(false)
 
+    /** 连续失败次数(退避档位索引) */
+    @Volatile
     private var healAttempts = 0
-    private var backoffUntil = 0L
+
+    /**
+     * 退避截止点。基于 elapsedRealtime 而非墙钟：
+     * System.currentTimeMillis 会被 NTP 校时/用户改时间拨动，导致退避窗口误判。
+     */
+    @Volatile
+    private var backoffUntilElapsed = 0L
 
     /**
      * 自愈入口:条件满足则写回并复查(非阻塞)。
@@ -58,7 +67,18 @@ object A11ySelfHealer {
             try {
                 if (isUserDisabled(ctx)) return@launch
                 if (KeepAliveAccessibilityService.isEnabledInSettings(ctx)) return@launch
-                if (System.currentTimeMillis() < backoffUntil) return@launch
+                val now = SystemClock.elapsedRealtime()
+                if (now < backoffUntilElapsed) {
+                    // 早于退避截止点被触发（延迟抖动/时钟跳变）：补排一次。
+                    // 旧实现在此直接 return 且不再排程，会让自愈链条永久中断。
+                    val wait = backoffUntilElapsed - now
+                    Log.i(TAG, "退避未到期,${wait}ms 后重试")
+                    scope.launch {
+                        delay(wait)
+                        maybeHeal(ctx, trigger = "backoff-requeue")
+                    }
+                    return@launch
+                }
                 Log.i(TAG, "检测到无障碍被关(触发:$trigger),尝试自愈")
                 if (!writeBack(ctx)) {
                     onHealFailed(ctx)
@@ -68,7 +88,7 @@ object A11ySelfHealer {
                 if (KeepAliveAccessibilityService.isEnabledInSettings(ctx)) {
                     Log.i(TAG, "自愈成功,无障碍已恢复")
                     healAttempts = 0
-                    backoffUntil = 0
+                    backoffUntilElapsed = 0
                     notifyHealed(ctx)
                 } else {
                     onHealFailed(ctx)
@@ -160,7 +180,7 @@ object A11ySelfHealer {
     private fun onHealFailed(ctx: Context) {
         val step = BACKOFF_STEPS_MS[healAttempts.coerceAtMost(BACKOFF_STEPS_MS.size - 1)]
         healAttempts++
-        backoffUntil = System.currentTimeMillis() + step
+        backoffUntilElapsed = SystemClock.elapsedRealtime() + step
         Log.w(TAG, "自愈未生效,退避 ${step / 1000}s 后自动重试(第 $healAttempts 次)")
         // 退避期满自动重试一次;不依赖外部触发源(onDestroy/巡检)以免冷启动场景恢复过慢
         scope.launch {
@@ -169,8 +189,12 @@ object A11ySelfHealer {
         }
     }
 
-    private fun isUserDisabled(ctx: Context): Boolean =
-        ctx.getSharedPreferences(PrefsKeys.PREFS_NAME, Context.MODE_PRIVATE)
+    /**
+     * 是否为"用户在应用内主动关闭"（决定自愈是否触发）。
+     * 公开供无障碍服务在 onDestroy 判断"本次断开是否用户意图"，据此决定是否提示。
+     */
+    fun isUserDisabled(ctx: Context): Boolean =
+        ctx.applicationContext.getSharedPreferences(PrefsKeys.PREFS_NAME, Context.MODE_PRIVATE)
             .getBoolean(PrefsKeys.A11Y_USER_DISABLED, false)
 
     private fun notifyHealed(ctx: Context) {
