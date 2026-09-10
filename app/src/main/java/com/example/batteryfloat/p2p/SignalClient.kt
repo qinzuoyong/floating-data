@@ -284,6 +284,9 @@ class SignalClient(
                     _state.value = State.Disconnected(detail)
                 } else if (_state.value is State.Connecting) {
                     _state.value = State.Disconnected("connect failed")
+                } else if (_state.value is State.PendingApproval) {
+                    // 等待审核期间断线：状态必须回落，否则界面会一直停在"等待创建人审核"
+                    _state.value = State.Disconnected(detail)
                 }
                 onDisconnected?.invoke(detail)
                 scheduleReconnect()

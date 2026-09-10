@@ -23,10 +23,66 @@ const fs = require('fs');
 
 const PORT = 8088;
 const STATE_FILE = '/opt/family-signal/rooms.json';
+/** 房间码结构约束（4-16 位字母数字，兼容历史房间；不通过即拒绝注册/查询） */
+const ROOM_PATTERN = /^[A-Za-z0-9_-]{4,16}$/;
+/** 新建房间数量上限：防止外部批量注册把内存与状态文件刷爆 */
+const MAX_ROOMS = 5000;
+/** 成员显示名长度上限（客户端 16 字限制可被绕过，服务端必须独立约束） */
+const MAX_NAME_LEN = 32;
 const wss = new WebSocket.Server({ port: PORT, host: '0.0.0.0' });
 
 /** room -> { owner: uid, members: Map(uid->{ws,name,isAlive}), pending: Map(uid->{ws,name}), approved: Map(uid->name) } */
 const rooms = new Map();
+
+/**
+ * 简易内存限流：key → { count, resetAt }。
+ * 用于阻断家庭码枚举（room-check）、批量注册（register）与高频位置请求（loc-req）：
+ * 这三者分别对应"猜房间"、"刷房间"、"刷定位"三种滥用路径。
+ */
+const rateBuckets = new Map();
+function rateLimited(key, limit, windowMs) {
+  const now = Date.now();
+  const bucket = rateBuckets.get(key);
+  if (!bucket || now >= bucket.resetAt) {
+    rateBuckets.set(key, { count: 1, resetAt: now + windowMs });
+    if (rateBuckets.size > 8192) {
+      for (const [k, v] of rateBuckets) { if (now >= v.resetAt) rateBuckets.delete(k); }
+    }
+    return false;
+  }
+  bucket.count++;
+  return bucket.count > limit;
+}
+
+/**
+ * 位置载荷白名单校验（服务端侧第二道防线）：
+ * 客户端已做校验，但中继前的规范化可避免畸形 payload 被转发给其他成员的 App。
+ */
+function sanitizeLocationPayload(payload) {
+  if (!payload || typeof payload !== 'object') return null;
+  const lat = Number(payload.lat);
+  const lng = Number(payload.lng);
+  const ts = Number(payload.ts);
+  const accuracy = Number(payload.accuracy);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  if (lat < -90 || lat > 90 || lng < -180 || lng > 180) return null;
+  if (lat === 0 && lng === 0) return null;
+  return {
+    lat,
+    lng,
+    ts: Number.isFinite(ts) ? ts : Date.now(),
+    accuracy: Number.isFinite(accuracy) && accuracy >= 0 ? accuracy : 0
+  };
+}
+
+/** 清理显示名：去除控制字符并截断，防止超长/畸形文本进入广播与持久化 */
+function sanitizeName(name, fallbackUid) {
+  const cleaned = String(name || '')
+    .replace(/[\u0000-\u001f\u007f]/g, '')
+    .trim()
+    .slice(0, MAX_NAME_LEN);
+  return cleaned || fallbackUid;
+}
 
 // 房间关系（owner/approved 名册）持久化：服务器重启不丢失家庭
 let saveTimer = null;
@@ -38,7 +94,13 @@ function saveRooms() {
     for (const [room, rs] of rooms) {
       data[room] = { owner: rs.owner, approved: Object.fromEntries(rs.approved) };
     }
-    try { fs.writeFileSync(STATE_FILE, JSON.stringify(data)); } catch (e) { /* ignore */ }
+    try {
+      // 原子写：先写临时文件再 rename，避免写入过程中崩溃留下半截 JSON
+      // （loadRooms 捕获异常后会把全部家庭关系静默丢弃，属不可接受的退化路径）
+      const tmpFile = STATE_FILE + '.tmp';
+      fs.writeFileSync(tmpFile, JSON.stringify(data));
+      fs.renameSync(tmpFile, STATE_FILE);
+    } catch (e) { /* ignore */ }
   }, 500);
 }
 
@@ -79,9 +141,43 @@ function broadcast(room, obj, exceptUid) {
   }
 }
 
-// 家庭关系（owner/approved）持久保留：成员全部离线不清除房间，重连自动恢复
+// 家庭关系（owner/approved）持久保留：成员全部离线不清除房间，重连自动恢复。
+// 但"只有 owner、从未有第二个 approved 成员、且长期无连接"的空房间会过期回收，
+// 避免批量注册刷出大量僵尸房间把内存与状态文件撑爆。
+const ROOM_IDLE_TTL_MS = 7 * 24 * 3600 * 1000; // 7 天无任何连接即回收
+const roomLastSeen = new Map(); // room -> 最后活跃时间戳
+
+function touchRoom(room) {
+  roomLastSeen.set(room, Date.now());
+  if (roomLastSeen.size > MAX_ROOMS * 2) {
+    const cutoff = Date.now() - ROOM_IDLE_TTL_MS;
+    for (const [r, t] of roomLastSeen) { if (t < cutoff) roomLastSeen.delete(r); }
+  }
+}
+
 function cleanupRoom(room) {
-  /* no-op：房间仅在持久化状态中保留 */
+  /* no-op：房间仅在持久化状态中保留；过期回收见 reapIdleRooms */
+}
+
+/** 回收长期无连接、且无第二个成员名册的空房间 */
+function reapIdleRooms() {
+  const cutoff = Date.now() - ROOM_IDLE_TTL_MS;
+  let removed = 0;
+  for (const [room, rs] of rooms) {
+    if (rs.members.size > 0 || rs.pending.size > 0) continue;
+    const last = roomLastSeen.get(room) || 0;
+    if (last >= cutoff) continue;
+    // 仅回收"只有创建人"的空房间，有多个 approved 成员的真实家庭永不回收
+    if (rs.approved.size <= 1) {
+      rooms.delete(room);
+      roomLastSeen.delete(room);
+      removed++;
+    }
+  }
+  if (removed > 0) {
+    console.log('family-signal reaped ' + removed + ' idle rooms');
+    saveRooms();
+  }
 }
 
 function leave(ws) {
@@ -122,11 +218,12 @@ function rosterOf(rs, exceptUid) {
   return list;
 }
 
-wss.on('connection', (ws) => {
+wss.on('connection', (ws, req) => {
   ws.isAlive = true;
   ws.room = null;
   ws.uid = null;
   ws.name = null;
+  ws.remoteIp = (req && req.socket && req.socket.remoteAddress) || 'unknown';
 
   ws.on('pong', () => { ws.isAlive = true; });
 
@@ -137,7 +234,16 @@ wss.on('connection', (ws) => {
 
     switch (msg.type) {
       case 'room-check': {
+        // 限流：家庭码空间有限，不限制即可被逐个枚举出全部在用房间
+        if (rateLimited('rc:' + ws.remoteIp, 30, 60000)) {
+          send(ws, { type: 'error', code: 'rate_limited', message: '查询过于频繁' });
+          break;
+        }
         const room = String(msg.room || '').trim();
+        if (!ROOM_PATTERN.test(room)) {
+          send(ws, { type: 'room-check-res', room, exists: false, ownerName: '' });
+          break;
+        }
         const rs = rooms.get(room);
         const ownerName = rs && rs.members.get(rs.owner) ? rs.members.get(rs.owner).name : '';
         send(ws, { type: 'room-check-res', room, exists: !!rs, ownerName });
@@ -145,28 +251,33 @@ wss.on('connection', (ws) => {
       }
 
       case 'register': {
+        if (rateLimited('reg:' + ws.remoteIp, 20, 60000)) {
+          send(ws, { type: 'error', code: 'rate_limited', message: '注册过于频繁' });
+          return;
+        }
         const room = String(msg.room || '').trim();
         const uid = String(msg.uid || '').trim();
-        const name = String(msg.name || '').trim() || uid;
-        if (!room || !uid || room.length > 16 || uid.length > 64) {
+        if (!ROOM_PATTERN.test(room) || !uid || uid.length > 64) {
           send(ws, { type: 'error', code: 'bad_register', message: 'room/uid 非法' });
           return;
         }
+        const name = sanitizeName(msg.name, uid);
         if (ws.room && ws.room !== room) leave(ws);
         let rs = rooms.get(room);
         if (!rs) {
+          if (rooms.size >= MAX_ROOMS) {
+            send(ws, { type: 'error', code: 'server_full', message: '服务器房间数已达上限' });
+            return;
+          }
           // 房间不存在：首个注册者成为创建人，直接进房
           rs = { owner: uid, members: new Map(), pending: new Map(), approved: new Map() };
           rooms.set(room, rs);
           saveRooms();
         }
+        touchRoom(room);
         const old = rs.members.get(uid);
         if (old && old.ws !== ws) { old.ws.terminate(); }
-        // 加入审核停用（2026-09）：新成员直接进房，无需创建人批准；
-        // 客户端审核 UI 仅在收到 join-pending/join-request 时显示，服务器不再下发即自动隐藏。
-        // 恢复审核：删除下面条件中的 APPROVAL_DISABLED || 并取消 else 分支注释
-        const APPROVAL_DISABLED = true;
-        if (APPROVAL_DISABLED || rs.owner === uid || rs.members.has(uid) || rs.approved.has(uid)) {
+        if (rs.owner === uid || rs.members.has(uid) || rs.approved.has(uid)) {
           // 创建人或已批准成员：进房；名字刷新进名册（创建人也入名册）
           ws.room = room;
           ws.uid = uid;
@@ -176,9 +287,14 @@ wss.on('connection', (ws) => {
           saveRooms();
           send(ws, { type: 'registered', uid, room, peers: memberPeers(rs, uid), roster: rosterOf(rs, uid) });
           broadcast(room, { type: 'presence', uid, name, online: true }, uid);
+          if (rs.owner === uid) {
+            // 创建人上线：补发离线期间积压的加入申请（申请仅在到达时推送一次，离线即丢失）
+            for (const [pendingUid, p] of rs.pending) {
+              send(ws, { type: 'join-request', uid: pendingUid, name: p.name });
+            }
+          }
         } else {
-          /* [加入审核已停用 2026-09]
-          // 新成员：进 pending，等待创建人审核
+          // 新成员：进 pending，等待创建人审核；审核通过前不接收 presence、不能请求位置
           ws.room = room;
           ws.uid = uid;
           ws.name = name;
@@ -186,7 +302,6 @@ wss.on('connection', (ws) => {
           send(ws, { type: 'join-pending', room });
           const ownerEntry = rs.members.get(rs.owner);
           if (ownerEntry) send(ownerEntry.ws, { type: 'join-request', uid, name });
-          */
         }
         break;
       }
@@ -222,6 +337,12 @@ wss.on('connection', (ws) => {
       case 'signal':
       case 'loc-req': {
         const to = String(msg.to || '').trim();
+        if (!ws.uid || !ws.room) { send(ws, { type: 'error', code: 'not_registered' }); break; }
+        // 限流：单成员高频请求会让对端 GNSS 持续采集（耗电），也属可被滥用的探测手段
+        if (rateLimited('loc:' + ws.room + ':' + ws.uid, 10, 60000)) {
+          send(ws, { type: 'error', code: 'rate_limited', message: '位置请求过于频繁' });
+          break;
+        }
         console.log('[' + new Date().toISOString() + '] ' + msg.type + ' from=' + ws.uid + ' room=' + ws.room + ' to=' + to);
         if (!to) { send(ws, { type: 'error', code: 'no_target' }); break; }
         const rs = ws.room ? rooms.get(ws.room) : undefined;
@@ -232,17 +353,23 @@ wss.on('connection', (ws) => {
           break;
         }
         console.log('[' + new Date().toISOString() + ']   -> forwarded to ' + to);
-        send(entry.ws, { type: msg.type, from: ws.uid, name: ws.name, to, payload: msg.payload || {} });
+        send(entry.ws, { type: msg.type, from: ws.uid, name: ws.name, to, payload: {} });
         break;
       }
 
       case 'loc-res': {
         const to = String(msg.to || '').trim();
-        if (!to) break;
+        if (!ws.uid || !ws.room || !to) break;
+        // 中继前规范化载荷：畸形/越界数据在服务端即被拦下，不再转发给其他成员的 App
+        const payload = sanitizeLocationPayload(msg.payload);
+        if (!payload) {
+          console.log('[' + new Date().toISOString() + '] loc-res dropped (invalid payload) from=' + ws.uid);
+          break;
+        }
         const rs = ws.room ? rooms.get(ws.room) : undefined;
         const entry = rs ? rs.members.get(to) : undefined;
         if (entry && entry.ws.readyState === WebSocket.OPEN) {
-          send(entry.ws, { type: 'loc-res', from: ws.uid, name: ws.name, to, payload: msg.payload || {} });
+          send(entry.ws, { type: 'loc-res', from: ws.uid, name: ws.name, to, payload });
         }
         break;
       }
@@ -286,6 +413,10 @@ const heartbeat = setInterval(() => {
   }
 }, 30000);
 heartbeat.unref?.();
+
+// 房间过期回收：每小时一次
+const reaper = setInterval(reapIdleRooms, 3600 * 1000);
+reaper.unref?.();
 
 wss.on('listening', () => {
   console.log('family-signal listening on 0.0.0.0:' + PORT);

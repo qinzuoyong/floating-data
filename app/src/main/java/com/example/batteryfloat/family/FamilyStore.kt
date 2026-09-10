@@ -85,7 +85,8 @@ class FamilyStore private constructor(context: Context) {
 
     // ===== 我的身份 =====
 
-    /** 我的设备 uid（首次生成并持久化） */
+    /** 我的设备 uid（首次生成并持久化）；@Synchronized 防并发首调生成两个 uid */
+    @Synchronized
     fun myUid(): String {
         val cached = prefs.getString(PrefsKeys.FAMILY_MY_UID, null)
         if (cached != null) return cached
@@ -159,10 +160,15 @@ class FamilyStore private constructor(context: Context) {
         persistMembers()
     }
 
-    /** 收到位置应答：更新上次位置与时间戳 */
+    /**
+     * 收到位置应答：更新上次位置与时间戳
+     *
+     * 仅接受名册内成员：服务端中继不校验来源，房间内任意成员均可主动投递 loc-res，
+     * 若对未知 uid 自动建档，会被注入"幽灵成员"并随 [persistMembers] 落盘。
+     */
     @Synchronized
     fun updateLocation(uid: String, loc: LocationPayload) {
-        val current = _members.value[uid] ?: FamilyMember(uid = uid)
+        val current = _members.value[uid] ?: return
         val member = current.copy(
             lastLat = loc.lat,
             lastLng = loc.lng,
@@ -180,10 +186,12 @@ class FamilyStore private constructor(context: Context) {
         persistMembers()
     }
 
-    /** 清空全部成员（退出家庭） */
+    /** 清空全部成员（退出家庭）；同时清空审核态，避免残留待审申请/被拒状态 */
     @Synchronized
     fun clearMembers() {
         _members.value = emptyMap()
+        _pendingJoins.value = emptyMap()
+        _joinState.value = JoinState.NONE
         persistMembers()
     }
 
