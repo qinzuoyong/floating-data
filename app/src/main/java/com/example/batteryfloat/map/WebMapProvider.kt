@@ -30,21 +30,30 @@ class WebMapProvider : MapProvider {
 
     private val gson = Gson()
 
-    /** 桥接对象：JS 侧 initMap 后主动拉取最新数据 / 上报地图就绪 */
+    /**
+     * 桥接对象：只保留"事件上报"能力。
+     *
+     * 数据一律由原生侧 [pushData] 主动推送，网页脚本无法反向拉取位置数据
+     * （此前暴露 getData() 会返回全部家人坐标，配合页面内注入可越权读取位置）。
+     */
     private class Bridge(private val holder: WebMapHolder) {
-        @JavascriptInterface
-        fun getData(): String? = holder.latestJson
-
+        /** 页面就绪：重推一次最新数据，覆盖"推送早于页面加载完成"的时序问题 */
         @JavascriptInterface
         fun onMapReady() {
             Log.i(TAG, "MAP READY")
+            holder.repush()
         }
 
-        /** JS 逆地理编码结果：坐标 → 详细地址 */
+        /** JS 逆地理编码结果：坐标 → 详细地址（仅接受当前展示的成员 uid，长度截断） */
         @JavascriptInterface
-        fun onAddress(uid: String, address: String) {
-            Log.i(TAG, "address: " + uid + " = " + address)
-            holder.onAddress?.invoke(uid, address)
+        fun onAddress(uid: String?, address: String?) {
+            val safeUid = uid ?: return
+            val safeAddress = address ?: return
+            if (!holder.isKnownUid(safeUid)) {
+                Log.w(TAG, "drop onAddress for unknown uid")
+                return
+            }
+            holder.onAddress?.invoke(safeUid, safeAddress.take(MAX_ADDRESS_LENGTH))
         }
     }
 
@@ -151,9 +160,15 @@ class WebMapProvider : MapProvider {
         val json = gson.toJson(data)
         // 数据未变化时跳过推送：地址回调触发重组 → update 再次 pushData 会形成
         // "推送→逆地理编码→回调→重组→推送" 的无限循环，瞬间打爆百度并发配额
+        // 记录本次展示的成员 uid，作为 JS 回调（onAddress）的来源白名单
+        val uids = mutableSetOf<String>()
+        myLocation?.let { uids.add(it.title) }
+        targets.forEach { uids.add(it.title) }
+        holder.knownUids = uids
         if (json == holder.lastPushedJson) return
         holder.lastPushedJson = json
-        holder.latestJson = json
+        // 缓存最近一次数据：页面 onMapReady 时由 Bridge 触发重推（替代 JS 反向拉取）
+        holder.pendingJson = json
         runCatching {
             view.evaluateJavascript("window.applyData(" + json + ")", null)
         }.onFailure { e ->
@@ -170,14 +185,35 @@ class WebMapProvider : MapProvider {
     /** 跨重组持有的 WebView 与最新数据 */
     private class WebMapHolder {
         var webView: WebView? = null
-        var latestJson: String? = null
         /** 上次已推送给 JS 的 json（防重复推送） */
         var lastPushedJson: String? = null
+        /** 最近一次推送内容：页面 onMapReady 后重推用（替代 JS 反向拉取） */
+        var pendingJson: String? = null
+        /** 当前展示的成员 uid 集合（校验 JS 回调来源，防跨成员伪造） */
+        var knownUids: Set<String> = emptySet()
         /** JS 逆地理编码结果回调（uid → 详细地址） */
         var onAddress: ((String, String) -> Unit)? = null
+
+        fun isKnownUid(uid: String): Boolean = knownUids.contains(uid)
+
+        /**
+         * 页面就绪后重推最新数据。
+         * onMapReady 由 JS 桥线程回调，evaluateJavascript 必须在视图线程执行，故 post。
+         */
+        fun repush() {
+            val view = webView ?: return
+            val json = pendingJson ?: return
+            view.post {
+                runCatching { view.evaluateJavascript("window.applyData(" + json + ")", null) }
+                    .onFailure { Log.w(TAG, "repush failed", it) }
+            }
+        }
     }
 
     private companion object {
         const val TAG = "WebMapProvider"
+
+        /** 地址文本长度上限（与 JS 侧截断保持一致） */
+        const val MAX_ADDRESS_LENGTH = 300
     }
 }

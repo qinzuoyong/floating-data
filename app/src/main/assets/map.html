@@ -60,6 +60,20 @@
   // 操作提示定时器：全景视野显示 5 秒后自动淡出
   var hintTimer = null;
 
+  /**
+   * HTML 转义。家人备注名、百度返回的地址/POI 名称都是"外部文本"，
+   * 直接拼进 InfoWindow 的 HTML 会造成脚本注入（可进而调用原生桥读取位置数据）。
+   */
+  function escapeHtml(value) {
+    if (value === null || value === undefined) return "";
+    return String(value)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+  }
+
   function hideHint() {
     var el = document.getElementById("hint");
     el.style.opacity = "0";
@@ -105,8 +119,9 @@
     marker.addEventListener("click", function () {
       map.centerAndZoom(meta.point, 17);
       var addr = addrCache[meta.title];
+      // 全部外部文本经 escapeHtml 处理后再拼 HTML
       var html = "<div style=\"font-size:13px;line-height:1.6;max-width:220px\"><b>" +
-          meta.label + "</b>" + (addr ? "<br/>" + addr : "") + "</div>";
+          escapeHtml(meta.label) + "</b>" + (addr ? "<br/>" + escapeHtml(addr) : "") + "</div>";
       var win = new BMap.InfoWindow(html, { width: 240, enableMessage: false });
       marker.openInfoWindow(win, meta.point);
       document.getElementById("resetBtn").style.display = "block";
@@ -126,14 +141,12 @@
     map.enableScrollWheelZoom(true);
     document.getElementById("error").style.display = "none";
     try { map.resize(); } catch (e) {}
-    try { AndroidBridge.onMapReady(); } catch (e) {}
-    // 页面就绪后主动拉取原生最新数据（覆盖 update 早于加载完成的情况）
+    // 通知原生"页面就绪"：原生侧收到后重推一次最新数据，覆盖"推送早于加载完成"的时序，
+    // 不再由 JS 反向拉取全量位置（原生桥只保留事件上报，杜绝网页脚本读取位置数据）
     try {
-      var raw = AndroidBridge.getData();
-      if (raw) applyData(JSON.parse(raw));
+      AndroidBridge.onMapReady();
     } catch (e) {
-      // 桥未就绪时等待推送；其余异常必须留痕(此前 fitAll 异常被吞导致视野不生效难排查)
-      console.log('applyData pull err: ' + e);
+      console.log('onMapReady err: ' + e);
     }
   }
 
@@ -234,7 +247,9 @@
           if (d < best) { best = d; nearest = pois[k]; }
         }
         var addr = nearest ? result.address + "（近" + nearest.title + "）" : result.address;
-        // 缓存带坐标，供位移判断复用
+        // 长度上限：百度返回内容异常时避免超长文本占满信息窗口与原生 UI
+        if (addr.length > 300) addr = addr.substring(0, 300);
+        // 缓存带坐标，供位移判断复用（缓存存原文，渲染时统一 escapeHtml）
         addrCache[uid] = addr;
         addrPoints[uid] = point;
         try {

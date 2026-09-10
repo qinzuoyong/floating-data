@@ -63,9 +63,7 @@ object UpdateChecker {
 
     /**
      * 尝试从指定 API 获取最新 Release 信息
-     * @param apiUrl API 地址
-     * @param owner 仓库所有者
-     * @param repo 仓库名
+     * @param apiUrl API 地址（仓库信息由 URL 常量决定）
      * @param currentVersion 当前版本号
      * @return UpdateInfo 或 null（失败时）
      */
