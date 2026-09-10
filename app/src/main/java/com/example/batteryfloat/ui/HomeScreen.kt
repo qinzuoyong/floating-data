@@ -27,6 +27,7 @@ import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -43,6 +44,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.example.batteryfloat.PrefsKeys
 import com.example.batteryfloat.adb.AdbConnectionManager
+import com.example.batteryfloat.adb.AdbAutoGrant
 import com.example.batteryfloat.adb.AdbState
 import com.example.batteryfloat.adb.BfdChannel
 import com.example.batteryfloat.adb.PrivShell
@@ -51,6 +53,7 @@ import com.example.batteryfloat.service.A11ySelfHealer
 import com.example.batteryfloat.service.FloatingWindowService
 import com.example.batteryfloat.service.KeepAliveAccessibilityService
 import com.example.batteryfloat.ui.theme.DesignSystem
+import kotlinx.coroutines.launch
 
 /**
  * 首页 - 悬浮窗控制
@@ -85,10 +88,14 @@ fun HomeScreen(
     // Shizuku 常驻服务可用性(页面恢复时刷新;生效时无线调试可关)
     var shizukuAlive by remember { mutableStateOf(PrivShell.shizukuReady()) }
     // 内置常驻服务可用性 + 载体模式选择
-    var bfdAlive by remember { mutableStateOf(BfdChannel.alive()) }
+    // 三态:true=可用/false=不可用/null=尚未探测过(只读缓存,不发起网络探测)
+    var bfdAlive by remember { mutableStateOf(BfdChannel.aliveCached()) }
     var carrierMode by remember { mutableStateOf(PrivShell.carrierMode()) }
     var showAdbPairing by remember { mutableStateOf(false) }
     val adbState by AdbConnectionManager.state.collectAsState()
+    // 自动授权记录（透明化：展示"已由 ADB 自动授予"的权限并提供撤销入口）
+    var autoGrantItems by remember { mutableStateOf(AdbAutoGrant.loggedItems(context)) }
+    val scope = rememberCoroutineScope()
 
     // 页面恢复时刷新服务运行状态
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -99,8 +106,10 @@ fun HomeScreen(
                 a11yKeepAlive = KeepAliveAccessibilityService.isEnabledInSettings(context)
                 adbEnabled = prefs.getBoolean(PrefsKeys.ADB_PRIV_ENABLED, false)
                 shizukuAlive = PrivShell.shizukuReady()
-                bfdAlive = BfdChannel.alive()
+                bfdAlive = BfdChannel.aliveCached()
                 carrierMode = PrivShell.carrierMode()
+                // 刷新自动授权记录（特权通道连通后可能新增）
+                autoGrantItems = AdbAutoGrant.loggedItems(context)
                 // Shizuku 载体下,服务在跑但未授权时弹一次管理器授权对话框(永久授权)
                 if (carrierMode == PrivShell.CarrierMode.SHIZUKU) {
                     PrivShell.requestPermissionIfNeeded(context)
@@ -316,7 +325,7 @@ fun HomeScreen(
                 adbState == AdbState.CONNECTED -> "已连接 · 高精度数据生效(功率直读)"
                 adbState == AdbState.NOT_PAIRED -> "未配对——重新打开开关,按通知栏引导配对"
                 adbState == AdbState.AUTH_FAILED -> "设备已撤销信任——请点击下方「重新配对」"
-                bfdAlive -> "内置常驻服务生效 · 无线调试可关闭"
+                bfdAlive == true -> "内置常驻服务生效 · 无线调试可关闭"
                 shizukuAlive -> "Shizuku 常驻通道生效 · 无线调试可关闭"
                 else -> {
                     val fail = AdbConnectionManager.lastFailure
@@ -401,245 +410,31 @@ fun HomeScreen(
             }
         }
 
+        // 自动授权透明卡片：展示并支持一键撤销（撤销走 IO 协程，完成后刷新）
+        if (adbEnabled && autoGrantItems.isNotEmpty()) {
+            AdbAutoGrantCard(
+                items = autoGrantItems,
+                onRevoke = {
+                    scope.launch {
+                        AdbAutoGrant.revokeAutoGranted(context)
+                        autoGrantItems = AdbAutoGrant.loggedItems(context)
+                    }
+                }
+            )
+        }
+
         // 底部间距
         Spacer(Modifier.height(DesignSystem.SpacingXl))
     }
 
     if (showAdbPairing) {
         AdbPairingDialog(
-            onDismiss = { showAdbPairing = false },
+            onDismiss = {
+                showAdbPairing = false
+                // 配对可能在通知栏完成：关闭对话框时同步开关状态，避免"已连接但开关仍显示关闭"
+                adbEnabled = prefs.getBoolean(PrefsKeys.ADB_PRIV_ENABLED, false)
+            },
             onOpenDevSettings = onOpenDevSettings
         )
-    }
-}
-
-/**
- * 特权通道载体单选项行
- */
-@Composable
-private fun CarrierOptionRow(
-    title: String,
-    subtitle: String,
-    selected: Boolean,
-    onClick: () -> Unit
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(DesignSystem.CornerM))
-            .background(
-                if (selected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
-                else Color.Transparent
-            )
-            .clickable(onClick = onClick)
-            .padding(vertical = DesignSystem.SpacingS, horizontal = DesignSystem.SpacingS),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        RadioButton(selected = selected, onClick = onClick)
-        Column(Modifier.padding(start = DesignSystem.SpacingXs)) {
-            Text(title, style = MaterialTheme.typography.bodyMedium)
-            Text(
-                subtitle,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-    }
-}
-
-/**
- * 悬浮窗开关卡片
- * 
- * 设计特点：
- * 1. 状态指示灯：绿色=运行中，灰色=已停止
- * 2. 动画按钮：带缩放效果
- * 3. 状态文字：清晰的状态描述
- */
-@Composable
-private fun FloatingWindowCard(isServiceRunning: Boolean, onToggle: () -> Unit) {
-    val bgColor by animateColorAsState(
-        targetValue = if (isServiceRunning) {
-            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f)
-        } else {
-            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-        },
-        animationSpec = tween(DesignSystem.AnimationDurationNormal),
-        label = "cardBg"
-    )
-    
-    val statusColor by animateColorAsState(
-        targetValue = if (isServiceRunning) {
-            Color(0xFF4CAF50)  // 成功绿
-        } else {
-            Color(0xFFBDBDBD)  // 中性灰
-        },
-        animationSpec = tween(DesignSystem.AnimationDurationNormal),
-        label = "statusColor"
-    )
-
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(DesignSystem.CornerXl),
-        elevation = CardDefaults.cardElevation(defaultElevation = DesignSystem.ElevationNone),
-        colors = CardDefaults.cardColors(containerColor = bgColor)
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(DesignSystem.CardPaddingLarge),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Column {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    // 状态指示灯
-                    Box(
-                        modifier = Modifier
-                            .size(DesignSystem.SpacingS + DesignSystem.SpacingXs)
-                            .clip(CircleShape)
-                            .background(statusColor)
-                    )
-                    Spacer(Modifier.width(DesignSystem.SpacingS))
-                    Text(
-                        "悬浮窗",
-                        fontWeight = FontWeight.SemiBold,
-                        fontSize = DesignSystem.FontSizeHeading
-                    )
-                }
-                Spacer(Modifier.height(DesignSystem.SpacingXs))
-                Text(
-                    if (isServiceRunning) "运行中" else "已停止",
-                    fontSize = DesignSystem.FontSizeCaption,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            
-            // 动画切换按钮
-            AnimatedToggleButton(isRunning = isServiceRunning, onClick = onToggle)
-        }
-    }
-}
-
-/**
- * 通用动作设置卡片（点击触发动作，无开关状态）
- * 视觉与 SettingSwitchCard 保持一致
- *
- * @param icon Material Icon 组件
- * @param iconBackgroundColor 图标圆形背景色
- * @param title 设置项标题
- * @param subtitle 设置项副标题说明
- * @param onClick 点击回调
- */
-@Composable
-private fun SettingActionCard(
-    icon: @Composable () -> Unit,
-    iconBackgroundColor: Color,
-    title: String,
-    subtitle: String,
-    onClick: () -> Unit
-) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(DesignSystem.CornerL),
-        elevation = CardDefaults.cardElevation(defaultElevation = DesignSystem.ElevationNone),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
-        )
-    ) {
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .clickable(onClick = onClick)
-                .padding(DesignSystem.CardPadding),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(DesignSystem.SpacingXl + DesignSystem.SpacingXs)
-                    .background(iconBackgroundColor, CircleShape),
-                contentAlignment = Alignment.Center
-            ) {
-                icon()
-            }
-            Spacer(Modifier.width(DesignSystem.SpacingS))
-            Column {
-                Text(
-                    title,
-                    fontWeight = FontWeight.SemiBold,
-                    style = MaterialTheme.typography.titleMedium
-                )
-                Text(
-                    subtitle,
-                    fontSize = DesignSystem.FontSizeCaption,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        }
-    }
-}
-
-/**
- * 带缩放动画的切换按钮
- * 
- * 设计特点：
- * 1. 点击时缩放反馈
- * 2. 状态对应颜色：运行=红色停止，停止=绿色启动
- * 3. 图标+文字组合
- */
-@Composable
-private fun AnimatedToggleButton(isRunning: Boolean, onClick: () -> Unit) {
-    var isPressed by remember { mutableStateOf(false) }
-    val scale by animateFloatAsState(
-        targetValue = if (isPressed) 0.92f else 1f,
-        animationSpec = spring(
-            dampingRatio = 0.6f,
-            stiffness = Spring.StiffnessLow
-        ),
-        label = "btnScale"
-    )
-    
-    Button(
-        onClick = {
-            isPressed = true
-            onClick()
-        },
-        colors = ButtonDefaults.buttonColors(
-            containerColor = if (isRunning) {
-                MaterialTheme.colorScheme.error
-            } else {
-                MaterialTheme.colorScheme.primary
-            },
-            contentColor = if (isRunning) {
-                MaterialTheme.colorScheme.onError
-            } else {
-                MaterialTheme.colorScheme.onPrimary
-            }
-        ),
-        shape = RoundedCornerShape(DesignSystem.CornerM),
-        modifier = Modifier.scale(scale),
-        contentPadding = PaddingValues(
-            horizontal = DesignSystem.CardPadding,
-            vertical = DesignSystem.SpacingS + DesignSystem.SpacingXs
-        )
-    ) {
-        Icon(
-            imageVector = if (isRunning) Icons.Filled.PowerOff else Icons.Filled.PlayArrow,
-            contentDescription = null,
-            modifier = Modifier.size(DesignSystem.FontSizeHeading.value.dp)
-        )
-        Spacer(Modifier.width(DesignSystem.SpacingS))
-        Text(
-            if (isRunning) "关闭" else "启动",
-            fontWeight = FontWeight.SemiBold,
-            fontSize = DesignSystem.FontSizeBody
-        )
-    }
-    
-    // 点击后恢复
-    LaunchedEffect(isPressed) {
-        if (isPressed) {
-            kotlinx.coroutines.delay(DesignSystem.AnimationDurationFast.toLong())
-            isPressed = false
-        }
     }
 }

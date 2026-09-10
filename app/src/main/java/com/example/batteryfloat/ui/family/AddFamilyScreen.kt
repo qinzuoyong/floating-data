@@ -159,7 +159,10 @@ fun AddFamilyScreen(
 
                 OutlinedTextField(
                     value = name,
-                    onValueChange = { name = it.take(16) },
+                    onValueChange = {
+                        // 过滤控制字符并截断到 16 字（服务端另有独立约束，此处仅改善输入体验）
+                        name = it.filter { ch -> ch.code >= 0x20 }.take(16)
+                    },
                     label = { Text(stringResource(R.string.family_name_input_hint)) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()

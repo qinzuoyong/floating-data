@@ -16,7 +16,8 @@ import com.example.batteryfloat.ui.theme.DesignSystem
  * @param currentValue 当前值的文本显示
  * @param value 滑块当前数值
  * @param valueRange 滑块取值范围
- * @param onValueChange 数值变化回调
+ * @param onValueChange 拖动过程中的数值变化回调（仅更新界面状态）
+ * @param onValueChangeFinished 拖动结束回调（落盘持久化用，避免逐帧写 SharedPreferences）
  * @param startLabel 范围起始标签
  * @param midLabel 范围中间标签
  * @param endLabel 范围结束标签
@@ -28,6 +29,7 @@ fun SliderSettingCard(
     value: Float,
     valueRange: ClosedFloatingPointRange<Float>,
     onValueChange: (Float) -> Unit,
+    onValueChangeFinished: (() -> Unit)? = null,
     startLabel: String = "",
     midLabel: String = "",
     endLabel: String = ""
@@ -56,6 +58,7 @@ fun SliderSettingCard(
             Slider(
                 value = value,
                 onValueChange = onValueChange,
+                onValueChangeFinished = onValueChangeFinished,
                 valueRange = valueRange,
                 modifier = Modifier.fillMaxWidth()
             )

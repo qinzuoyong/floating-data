@@ -100,7 +100,7 @@ fun FamilyScreen(
     }
 
     var route by remember { mutableStateOf<FamilyRoute>(FamilyRoute.List) }
-    var serviceOn by remember { mutableStateOf(isServiceRunning(context)) }
+    var serviceOn by remember { mutableStateOf(isServiceRunning()) }
 
     // 后台定位权限（系统要求分段授权：前台定位授予后单独请求"始终允许"）。
     // 前台服务被系统重启拉起（app 不在前台）时，无后台定位权限将无法定位应答。
@@ -138,8 +138,11 @@ fun FamilyScreen(
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { result ->
-        // 授权后：未加入家庭则引导加入，已加入则自动开启服务
-        if (result.values.any { it }) {
+        // 授权后：未加入家庭则引导加入，已加入则自动开启服务。
+        // 判定必须落在"定位权限"：仅授予通知权限时视为未授权，否则会启动失败并弹出停用通知。
+        val locationGranted = result[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
+            result[Manifest.permission.ACCESS_COARSE_LOCATION] == true
+        if (locationGranted) {
             val code = prefs.getString(PrefsKeys.FAMILY_CODE, "") ?: ""
             if (code.isBlank()) {
                 route = FamilyRoute.Add
@@ -162,7 +165,7 @@ fun FamilyScreen(
         if (missing.isNotEmpty()) {
             onBeforeExternalIntent()
             permissionLauncher.launch(missing.toTypedArray())
-        } else if ((prefs.getString(PrefsKeys.FAMILY_CODE, "") ?: "").isNotBlank() && !isServiceRunning(context)) {
+        } else if ((prefs.getString(PrefsKeys.FAMILY_CODE, "") ?: "").isNotBlank() && !isServiceRunning()) {
             // 已授权且已加入家庭：自动开启位置共享服务，保证可被家人请求到位置
             FamilyLocationService.start(context)
             serviceOn = true
@@ -622,10 +625,10 @@ private fun connectionColor(state: SignalClient.State, serviceOn: Boolean): Colo
     }
 }
 
-/** 家人服务是否在运行（进程内查询） */
-private fun isServiceRunning(context: Context): Boolean {
-    val am = context.getSystemService(Context.ACTIVITY_SERVICE) as android.app.ActivityManager
-    return am.getRunningServices(100).any {
-        it.service.className == FamilyLocationService::class.java.name
-    }
-}
+/**
+ * 家人服务是否在运行
+ *
+ * 使用服务自身维护的进程内标志：ActivityManager.getRunningServices 已废弃，
+ * 且其语义在 API 26+ 才收窄为"仅本应用服务"，直接读标志更可靠也更省。
+ */
+private fun isServiceRunning(): Boolean = FamilyLocationService.isRunning

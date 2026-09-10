@@ -72,17 +72,19 @@ fun AppearanceScreen(prefs: SharedPreferences) {
             currentValue = "${fontSliderValue.toInt()} sp",
             value = fontSliderValue,
             valueRange = 1f..30f,
-            onValueChange = { fontSliderValue = it; prefs.edit().putFloat(PrefsKeys.FONT_SIZE, it).apply() },
+            onValueChange = { fontSliderValue = it },
+            onValueChangeFinished = { prefs.edit().putFloat(PrefsKeys.FONT_SIZE, fontSliderValue).apply() },
             startLabel = "1", midLabel = "15", endLabel = "30"
         )
 
         // 圆角曲率
         SliderSettingCard(
             title = "圆角曲率",
-            currentValue = "${cornerSliderValue.toInt()} px",
+            currentValue = "${cornerSliderValue.toInt()} dp",
             value = cornerSliderValue,
             valueRange = 0f..60f,
-            onValueChange = { cornerSliderValue = it; prefs.edit().putFloat(PrefsKeys.CORNER_RADIUS, it).apply() },
+            onValueChange = { cornerSliderValue = it },
+            onValueChangeFinished = { prefs.edit().putFloat(PrefsKeys.CORNER_RADIUS, cornerSliderValue).apply() },
             startLabel = "0", midLabel = "30", endLabel = "60"
         )
 
@@ -108,7 +110,8 @@ fun AppearanceScreen(prefs: SharedPreferences) {
             currentValue = "${(bgAlphaValue * 100).toInt()}%",
             value = bgAlphaValue,
             valueRange = 0.1f..1f,
-            onValueChange = { bgAlphaValue = it; prefs.edit().putFloat(PrefsKeys.BG_ALPHA, it).apply() },
+            onValueChange = { bgAlphaValue = it },
+            onValueChangeFinished = { prefs.edit().putFloat(PrefsKeys.BG_ALPHA, bgAlphaValue).apply() },
             startLabel = "10%", midLabel = "50%", endLabel = "100%"
         )
 
