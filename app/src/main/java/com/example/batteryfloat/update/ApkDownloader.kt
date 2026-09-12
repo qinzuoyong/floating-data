@@ -53,7 +53,14 @@ object ApkDownloader {
     /** 允许的最大跳转次数（Gitee/GitHub → CDN 通常 1~2 跳） */
     private const val MAX_REDIRECTS = 5
 
-    /** 允许的 APK 下载域（自家发布渠道；跟随 302 到 CDN 子域属正常） */
+    /**
+     * 允许的 APK 下载域（自家发布渠道）。
+     *
+     * 匹配规则为"精确相等 或 .后缀"，故各发布渠道的官方子域已自动覆盖：
+     * Gitee 附件 CDN foruda.gitee.com（实测跳转链末跳）、GitHub Asset CDN
+     * objects.githubusercontent.com 等均在列；同时 evil-gitee.com、
+     * gitee.com.evil.com 这类前后缀伪造不会命中。
+     */
     private val ALLOWED_DOWNLOAD_HOSTS = setOf(
         "gitee.com",
         "github.com",
