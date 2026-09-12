@@ -6,6 +6,7 @@ import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
+import android.util.Log
 import android.widget.Toast
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.*
@@ -416,8 +417,21 @@ fun HomeScreen(
                 items = autoGrantItems,
                 onRevoke = {
                     scope.launch {
-                        AdbAutoGrant.revokeAutoGranted(context)
+                        // 撤销结果必须回传用户：失败的条目会保留在记录中（卡片仍在），
+                        // 不能"发完命令就当成功"——否则用户以为已撤销而权限其实还在
+                        val failed = try {
+                            AdbAutoGrant.revokeAutoGranted(context)
+                        } catch (e: Exception) {
+                            Log.w("HomeScreen", "撤销自动授权失败", e)
+                            AdbAutoGrant.loggedItems(context).map { it.kind }
+                        }
                         autoGrantItems = AdbAutoGrant.loggedItems(context)
+                        Toast.makeText(
+                            context,
+                            if (failed.isEmpty()) "已撤销全部自动授权"
+                            else "以下项撤销未生效：" + failed.joinToString("、") { it.label },
+                            Toast.LENGTH_LONG
+                        ).show()
                     }
                 }
             )

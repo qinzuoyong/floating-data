@@ -12,6 +12,7 @@ import com.example.batteryfloat.service.KeepAliveAccessibilityService
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /**
@@ -154,17 +155,24 @@ object AdbAutoGrant {
             ?.isIgnoringBatteryOptimizations(ctx.packageName) == true
     }
 
+    /** 无障碍撤销后等待服务异步销毁的宽限期（disableSelf 不在命令返回时立即生效） */
+    private const val ACCESSIBILITY_REVOKE_GRACE_MS = 1_000L
+
     /**
      * 撤销本模块自动授予的全部权限/开关（用户显式操作，逐项执行反向命令）。
-     * 撤销后清空记录；无障碍保活走"标记用户主动关闭 + disableSelf"，避免自愈立即写回。
      *
-     * @return 是否全部执行完毕（命令失败不影响其余项，返回 false 仅表示有项未成功）
+     * 每项撤销后**读回实际状态**复核：只有确实不再生效的条目才从记录中移除，
+     * 撤销失败的条目保留在记录里，UI 仍可展示并重试——不能"命令发出去就当成功"，
+     * 否则记录被清空后用户无从得知权限其实还在。
+     * 无障碍保活走"标记用户主动关闭 + disableSelf"，避免自愈立即写回。
+     *
+     * @return 撤销失败的条目（空列表 = 全部撤销成功）
      */
-    suspend fun revokeAutoGranted(ctx: Context): Boolean {
+    suspend fun revokeAutoGranted(ctx: Context): List<AutoGrant> {
         val kinds = loggedKinds(ctx)
-        if (kinds.isEmpty()) return true
+        if (kinds.isEmpty()) return emptyList()
         val pkg = ctx.packageName
-        var allOk = true
+        val failed = mutableListOf<AutoGrant>()
         for (kind in kinds) {
             val result = when (kind) {
                 AutoGrant.SECURE_SETTINGS ->
@@ -185,14 +193,20 @@ object AdbAutoGrant {
                     // 先打"用户主动关"标记，再关服务：onDestroy 的自愈钩子据此跳过，避免立即写回
                     A11ySelfHealer.markUserDisabled(ctx, true)
                     KeepAliveAccessibilityService.instance?.disableSelf()
+                    // disableSelf 是异步销毁：等服务退出后再复核，避免把"尚未销毁"误判为失败
+                    delay(ACCESSIBILITY_REVOKE_GRACE_MS)
                     null
                 }
             }
-            if (result == null && kind != AutoGrant.ACCESSIBILITY) allOk = false
-            Log.i(TAG, "撤销 $kind -> ${result ?: "self-disable"}")
+            if (isGranted(ctx, kind)) {
+                failed.add(kind)
+                Log.w(TAG, "撤销 $kind 未生效(输出=${result?.take(80)})")
+            } else {
+                removeGrantLog(ctx, kind)
+                Log.i(TAG, "已撤销 $kind (输出=${result?.take(80)})")
+            }
         }
-        clearGrantLog(ctx)
-        return allOk
+        return failed
     }
 
     private fun kindOf(perm: String): AutoGrant =
@@ -213,9 +227,13 @@ object AdbAutoGrant {
         return names.mapNotNull { name -> AutoGrant.entries.firstOrNull { it.name == name } }
     }
 
-    private fun clearGrantLog(ctx: Context) {
-        ctx.getSharedPreferences(PrefsKeys.PREFS_NAME, Context.MODE_PRIVATE)
-            .edit().remove(PrefsKeys.AUTO_GRANT_LOG).apply()
+    /** 移除单条记录（该条已确认撤销生效时调用；不再整体清空，失败项得以保留供重试） */
+    private fun removeGrantLog(ctx: Context, kind: AutoGrant) {
+        val prefs = ctx.getSharedPreferences(PrefsKeys.PREFS_NAME, Context.MODE_PRIVATE)
+        val current = prefs.getStringSet(PrefsKeys.AUTO_GRANT_LOG, emptySet()).orEmpty().toMutableSet()
+        if (current.remove(kind.name)) {
+            prefs.edit().putStringSet(PrefsKeys.AUTO_GRANT_LOG, current).apply()
+        }
     }
 
     private fun hasPermission(ctx: Context, perm: String) = ContextCompat.checkSelfPermission(
