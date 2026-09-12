@@ -37,3 +37,6 @@ publish.sh
 
 # Native 构建中间产物(NDK/CMake)
 app/.cxx/
+
+# Node 依赖（family-signal 测试用 ws，仅本机安装）
+node_modules/
