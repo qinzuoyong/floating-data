@@ -55,10 +55,15 @@ object PrivBaseline {
         // vivo 拒绝 setprop persist.adb.tcp.port 时,旧逻辑会提前 return 导致 trust-key 永远不可达。
         // 写不进去(shell 域被 SELinux 拦)会如实返回 open-failed,由环回授权弹窗兜底。
         // 只尝试一次(幂等),避免每次连接反复写/刷日志。
+        // 注意:密钥初始化是异步的(见 AdbConnectionManager.setup),key 可能尚未就绪。
+        // 此时**不能**置"已尝试"标记——否则公钥从未写入、标记却已落盘,
+        // 该设备将永远不再尝试 trust-key,环回自愈基座静默失效。
         if (!prefs.getBoolean(PrefsKeys.PRIV_BASELINE_KEY_TRIED, false)) {
-            prefs.edit().putBoolean(PrefsKeys.PRIV_BASELINE_KEY_TRIED, true).apply()
             val key = AdbConnectionManager.peekKey()
-            if (key != null) {
+            if (key == null) {
+                Log.w(TAG, "ADB 密钥尚未就绪,trust-key 留待下次连接重试")
+            } else {
+                prefs.edit().putBoolean(PrefsKeys.PRIV_BASELINE_KEY_TRIED, true).apply()
                 // adb_keys 的每行格式为「<base64 公钥> <name>」,而 adbPublicKey 已是该格式
                 // (见 AdbKey.adbEncoded),必须原样写入——再整体 Base64 一次会写成非法公钥行。
                 // 单引号包裹:内容含空格(name 段),不加引号会被 sh 拆成两个参数。
