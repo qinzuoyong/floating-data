@@ -21,8 +21,9 @@
 const WebSocket = require('ws');
 const fs = require('fs');
 
-const PORT = 8088;
-const STATE_FILE = '/opt/family-signal/rooms.json';
+// 监听端口与状态文件路径允许经环境变量覆盖（仅供本机测试注入，默认值即生产值）
+const PORT = Number(process.env.FAMILY_SIGNAL_PORT || 8088);
+const STATE_FILE = process.env.FAMILY_SIGNAL_STATE_FILE || '/opt/family-signal/rooms.json';
 /** 房间码结构约束（4-16 位字母数字，兼容历史房间；不通过即拒绝注册/查询） */
 const ROOM_PATTERN = /^[A-Za-z0-9_-]{4,16}$/;
 /** 新建房间数量上限：防止外部批量注册把内存与状态文件刷爆 */
@@ -251,7 +252,9 @@ wss.on('connection', (ws, req) => {
       }
 
       case 'register': {
-        if (rateLimited('reg:' + ws.remoteIp, 20, 60000)) {
+        // 限流阈值放宽到 60/分钟：家庭成员共用同一出口 IP，升级/重装后的正常重连
+        // 不应被误判为批量注册（房间创建另受 MAX_ROOMS 约束）
+        if (rateLimited('reg:' + ws.remoteIp, 60, 60000)) {
           send(ws, { type: 'error', code: 'rate_limited', message: '注册过于频繁' });
           return;
         }
@@ -277,7 +280,11 @@ wss.on('connection', (ws, req) => {
         touchRoom(room);
         const old = rs.members.get(uid);
         if (old && old.ws !== ws) { old.ws.terminate(); }
-        if (rs.owner === uid || rs.members.has(uid) || rs.approved.has(uid)) {
+        // 加入审核停用（2026-09）：新成员直接进房，无需创建人批准；
+        // 客户端审核 UI 仅在收到 join-pending/join-request 时显示，服务器不再下发即自动隐藏。
+        // 恢复审核：删除下面条件中的 APPROVAL_DISABLED || 并取消 else 分支注释
+        const APPROVAL_DISABLED = true;
+        if (APPROVAL_DISABLED || rs.owner === uid || rs.members.has(uid) || rs.approved.has(uid)) {
           // 创建人或已批准成员：进房；名字刷新进名册（创建人也入名册）
           ws.room = room;
           ws.uid = uid;
@@ -353,7 +360,7 @@ wss.on('connection', (ws, req) => {
           break;
         }
         console.log('[' + new Date().toISOString() + ']   -> forwarded to ' + to);
-        send(entry.ws, { type: msg.type, from: ws.uid, name: ws.name, to, payload: {} });
+        send(entry.ws, { type: msg.type, from: ws.uid, name: ws.name, to, payload: msg.payload || {} });
         break;
       }
 
