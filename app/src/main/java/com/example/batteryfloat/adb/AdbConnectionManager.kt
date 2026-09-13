@@ -60,6 +60,13 @@ object AdbConnectionManager {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val connectMutex = Mutex()
 
+    /**
+     * shell 命令串行锁：所有 exec 共用同一条 ADB 连接（一个 AdbClient），
+     * 并发 shellCommand 会让 A_OPEN/WRTE/OKAY/CLSE 帧在同一条流上交错（且 localId 恒为 1），
+     * 造成输出串包与协议错乱。只串行化命令段，连接建立走 connectMutex，二者无嵌套不死锁。
+     */
+    private val execMutex = Mutex()
+
     private var appContext: Context? = null
     private var keyStore: SharedPreferences? = null
 
@@ -211,8 +218,11 @@ object AdbConnectionManager {
                 val c = ensureConnected() ?: return@withTimeout null
                 val sb = StringBuilder()
                 try {
-                    // 读超时下沉到 socket：withTimeout 无法打断阻塞读，二者需配合
-                    c.shellCommand(command, EXEC_TIMEOUT_MS.toInt()) { bytes -> sb.append(String(bytes)) }
+                    // 读超时下沉到 socket：withTimeout 无法打断阻塞读，二者需配合；
+                    // 命令段持 execMutex，防并发 exec 在共享连接上串包
+                    execMutex.withLock {
+                        c.shellCommand(command, EXEC_TIMEOUT_MS.toInt()) { bytes -> sb.append(String(bytes)) }
+                    }
                     lastSuccessAt = System.currentTimeMillis()
                     sb.toString()
                 } catch (e: Throwable) {
