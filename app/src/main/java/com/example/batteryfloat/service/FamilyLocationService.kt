@@ -52,11 +52,19 @@ class FamilyLocationService : Service() {
     private var stateCollectJob: Job? = null
 
     /**
-     * 本机已发出、尚待应答的位置请求(uid → 受理时间戳)。
+     * 本机已发出/已受理的位置请求记录(uid → 受理时间戳)。
      * 仅接受"曾请求过位置"的成员在有效期内回传的 loc-res,防止房间内任意成员
-     * 伪造位置或注入幽灵成员;同时用于同一成员重复请求的合并(耗电保护)。
+     * 伪造位置或注入幽灵成员;重复请求的去重见 [incomingLocReqAt]。
      */
     private val requestedLocations = java.util.concurrent.ConcurrentHashMap<String, Long>()
+
+    /**
+     * 家人发来的位置请求去重窗口(uid → 上次受理时间戳)。
+     * 与 [requestedLocations] 分开记:后者含"本机主动请求对方"的记录,
+     * 若共用一张表,本机刚请求过对方位置时,对方反向发来的请求会被误判成
+     * "重复请求"而静默丢弃(双方先后打开彼此地图页的真实场景)。
+     */
+    private val incomingLocReqAt = java.util.concurrent.ConcurrentHashMap<String, Long>()
 
     override fun onCreate() {
         super.onCreate()
@@ -111,6 +119,7 @@ class FamilyLocationService : Service() {
         // 顺带回收过期记录,避免长时间运行后无界增长
         val expireBefore = System.currentTimeMillis() - LOC_REQ_TTL_MS
         requestedLocations.entries.removeAll { it.value < expireBefore }
+        incomingLocReqAt.entries.removeAll { it.value < expireBefore }
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -120,7 +129,11 @@ class FamilyLocationService : Service() {
         isRunning = false
         stateCollectJob?.cancel()
         stateCollectJob = null
+        // 收集器已取消，断开时状态流不会再更新：复位为 Idle，
+        // 否则 UI 的连接状态滞留在"已连接"，与服务实际存活状态不符
+        _connection.value = SignalClient.State.Idle
         requestedLocations.clear()
+        incomingLocReqAt.clear()
         signal?.disconnect()
         provider?.close()
         workScope.cancel()
@@ -273,13 +286,17 @@ class FamilyLocationService : Service() {
                     Log.w(TAG, "provider missing, cannot answer " + from)
                     return
                 }
-                // 同一成员在合并窗口内的重复请求直接忽略：防止家人连点把 GNSS 拉成持续采集（耗电）
+                // 同一成员在合并窗口内的重复请求直接忽略：防止家人连点把 GNSS 拉成持续采集（耗电）。
+                // 去重只看"对方发来的请求"记录（incomingLocReqAt），不能混入本机主动请求
+                // 对方的记录，否则双方先后请求彼此位置时，后到的反向请求会被误丢弃
                 val now = System.currentTimeMillis()
-                val last = requestedLocations[from]
-                if (last != null && now - last < LOC_REQ_COOLDOWN_MS) {
+                val lastIncoming = incomingLocReqAt[from]
+                if (lastIncoming != null && now - lastIncoming < LOC_REQ_COOLDOWN_MS) {
                     Log.i(TAG, "ignore duplicated loc-req from " + from)
                     return
                 }
+                incomingLocReqAt[from] = now
+                // 受理后记入 requestedLocations：对该成员回传的 loc-res 在有效期内放行
                 requestedLocations[from] = now
                 workScope.launch {
                     // 先粗后精多次回传：NETWORK 粗定位先到先发（对方几秒内出图），
