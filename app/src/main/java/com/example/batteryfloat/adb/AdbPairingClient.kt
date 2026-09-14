@@ -13,12 +13,23 @@ import androidx.annotation.RequiresApi
 import java.io.Closeable
 import java.io.DataInputStream
 import java.io.DataOutputStream
+import java.net.InetSocketAddress
 import java.net.Socket
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import javax.net.ssl.SSLSocket
 
 private const val TAG = "AdbPairClient"
+
+/** 连接配对端口的超时(端口来自 mDNS,不通时快速失败而非等系统默认超时) */
+private const val CONNECT_TIMEOUT_MS = 5_000
+
+/**
+ * 配对握手读超时:socket 层生效。握手与后续 readFully 都是阻塞读,
+ * 协程取消打断不了——对端（adbd 配对服务）半开且不再回包时,
+ * 没有读超时会永久占住线程、socket 与 native PairingContext
+ */
+private const val READ_TIMEOUT_MS = 30_000
 
 private const val kCurrentKeyHeaderVersion = 1.toByte()
 private const val kMinSupportedKeyHeaderVersion = 1.toByte()
@@ -207,8 +218,12 @@ class AdbPairingClient(private val host: String, private val port: Int, private 
     }
 
     private fun setupTlsConnection() {
-        socket = Socket(host, port)
+        socket = Socket()
         socket.tcpNoDelay = true
+        socket.connect(InetSocketAddress(host, port), CONNECT_TIMEOUT_MS)
+        // 读超时先落在底层 socket 上:握手(含 TLS handshake)与后续读取都据此兜底,
+        // 否则进程被杀/服务销毁时协程取消也解不开阻塞读
+        socket.soTimeout = READ_TIMEOUT_MS
 
         val sslContext = key.sslContext
         val sslSocket = sslContext.socketFactory.createSocket(socket, host, port, true) as SSLSocket

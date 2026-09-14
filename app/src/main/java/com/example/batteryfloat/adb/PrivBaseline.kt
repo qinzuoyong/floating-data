@@ -66,11 +66,13 @@ object PrivBaseline {
                 prefs.edit().putBoolean(PrefsKeys.PRIV_BASELINE_KEY_TRIED, true).apply()
                 // adb_keys 的每行格式为「<base64 公钥> <name>」,而 adbPublicKey 已是该格式
                 // (见 AdbKey.adbEncoded),必须原样写入——再整体 Base64 一次会写成非法公钥行。
-                // 单引号包裹:内容含空格(name 段),不加引号会被 sh 拆成两个参数。
+                // 不要用单引号包裹:能执行 trust-key 的只有内置 daemon,它把 "trust-key " 之后的
+                // 整段参数原样写入 adb_keys(bfd_server.c handle_trust_key),加引号会写进
+                // `'AAAAB3... batteryfloat@local'` 这样的非法行,adbd 无法据以受信。
                 val pubKeyLine = String(key.adbPublicKey, Charsets.ISO_8859_1)
                     .substringBefore('\u0000')
                     .trim()
-                val resp = PrivShell.exec("trust-key '$pubKeyLine'")?.trim()
+                val resp = PrivShell.exec("trust-key $pubKeyLine")?.trim()
                 Log.i(TAG, "trust-key 结果: $resp")
                 AdbConnectionManager.logDiag(ctx, "基座:trust-key 写入结果=$resp")
             }

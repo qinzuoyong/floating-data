@@ -396,6 +396,10 @@ object AdbConnectionManager {
                 // 幂等自动授权引导(与 TLS 通道路径一致;独立协程:其内部 exec 会走
                 // ensureConnected,若在持锁协程内调用会重入 connectMutex 死锁)
                 AdbAutoGrant.onConnected(ctx)
+                // 常驻载体同样要拉起:环回直连是重启后的主路径,而重启会杀掉 daemon。
+                // 此处若与 TLS 通道路径不一致地跳过 launchCarrier,daemon 永不重建、
+                // 自愈基座也不推进,一旦本段 ADB 会话结束就只能退回基础档数据源
+                launchCarrier(ctx)
                 attempt
             } else {
                 Log.w(TAG, "环回连接自检失败: $id")

@@ -25,6 +25,12 @@ private const val CONNECT_TIMEOUT_MS = 3_000
 private const val SO_TIMEOUT_MS = 5_000
 /** 经典通道首次注册公钥时,等待用户在手机上点「一律允许」的时长(弹窗节奏不可控) */
 private const val DIALOG_TIMEOUT_MS = 60_000
+/**
+ * 单帧数据长度上限。A_CNXN 已声明 A_MAXDATA=4096,adbd 回发的 A_WRTE 载荷不会超过它,
+ * 留足余量仅作兜底:环回端口可能被非 adbd 进程应答或流错位,此时若直接拿头部的
+ * 32 位长度分配数组,会瞬间申请数 GB 内存并把进程拖进 OOM
+ */
+private const val MAX_FRAME_DATA_LENGTH = 1 * 1024 * 1024
 
 class AdbClient(private val host: String, private val port: Int, private val key: AdbKey) : Closeable {
 
@@ -180,6 +186,7 @@ class AdbClient(private val host: String, private val port: Int, private val key
         val magic = buffer.int
         val data: ByteArray?
         if (dataLength >= 0) {
+            if (dataLength > MAX_FRAME_DATA_LENGTH) error("帧数据长度异常: $dataLength")
             data = ByteArray(dataLength)
             inputStream.readFully(data, 0, dataLength)
         } else {

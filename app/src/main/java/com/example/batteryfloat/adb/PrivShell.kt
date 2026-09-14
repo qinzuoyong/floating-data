@@ -85,11 +85,10 @@ object PrivShell {
         // 1) 所选载体的常驻服务
         when (mode) {
             CarrierMode.BUILTIN -> if (BfdChannel.alive()) {
-                try {
-                    return BfdChannel.exec(command)?.also { lastChannel = "bfd" }
-                } catch (e: Throwable) {
-                    Log.w(TAG, "内置服务执行失败,降级内置通道: ${e.message}")
-                }
+                // BfdChannel.exec 内部 runCatching,失败返回 null 而不抛异常;
+                // 用 let 而非 ?.also 返回,使"daemon 存活但本次执行失败"能按类注释
+                // 约定的链路继续降级到内置 ADB 通道,而不是直接把 null 交给消费方
+                BfdChannel.exec(command)?.let { return it.also { lastChannel = "bfd" } }
             }
             CarrierMode.SHIZUKU -> if (shizukuReady()) {
                 try {

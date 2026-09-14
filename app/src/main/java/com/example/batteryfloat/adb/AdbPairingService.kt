@@ -171,6 +171,7 @@ class AdbPairingService : Service() {
             title = "配对失败"
             text = when (exception) {
                 is ConnectException -> "无法连接配对端口:配对弹窗是否已关闭?重新打开后重试"
+                is java.net.SocketTimeoutException -> "配对超时(对端无响应):请重新打开手机上的配对弹窗后重试"
                 is AdbInvalidPairingCodeException -> "配对码错误或已过期(系统每次弹窗会刷新),请重试"
                 is AdbKeyException -> "密钥存储错误,请重试或重启应用"
                 else -> {
