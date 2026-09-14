@@ -147,6 +147,13 @@ function broadcast(room, obj, exceptUid) {
 // 避免批量注册刷出大量僵尸房间把内存与状态文件撑爆。
 const ROOM_IDLE_TTL_MS = 7 * 24 * 3600 * 1000; // 7 天无任何连接即回收
 const roomLastSeen = new Map(); // room -> 最后活跃时间戳
+/**
+ * 进程启动时刻：roomLastSeen 不落盘，重启后无法得知房间的历史活跃时间。
+ * 若把"没有记录"当成 0，loadRooms 载入的房间会在重启后第一次回收时（`|| 0` 恒小于 cutoff）
+ * 被整批清掉，连"只有创建人"的真实家庭也会被删——与 7 天 TTL 的本意相反。
+ * 以启动时刻兜底：未被 touch 过的房间从进程启动起重新计 7 天。
+ */
+const STARTED_AT = Date.now();
 
 function touchRoom(room) {
   roomLastSeen.set(room, Date.now());
@@ -166,7 +173,7 @@ function reapIdleRooms() {
   let removed = 0;
   for (const [room, rs] of rooms) {
     if (rs.members.size > 0 || rs.pending.size > 0) continue;
-    const last = roomLastSeen.get(room) || 0;
+    const last = roomLastSeen.get(room) || STARTED_AT;
     if (last >= cutoff) continue;
     // 仅回收"只有创建人"的空房间，有多个 approved 成员的真实家庭永不回收
     if (rs.approved.size <= 1) {
