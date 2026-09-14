@@ -240,40 +240,57 @@ class OnDemandLocationProvider(private val context: Context) {
         withTimeoutOrNull(timeoutMs) {
             Log.i(TAG, "amap request start")
             suspendCancellableCoroutine { cont ->
-                val client = AMapLocationClient(context.applicationContext)
-                val opt = AMapLocationClientOption().apply {
-                    locationMode = AMapLocationClientOption.AMapLocationMode.Hight_Accuracy
-                    isOnceLocation = true
-                    isOnceLocationLatest = true
-                    isSensorEnable = false
-                    isNeedAddress = false
-                    httpTimeOut = timeoutMs
+                // AMapLocationClient 的构造声明 throws Exception(隐私协议/Key/环境异常时抛出),
+                // setLocationOption/startLocation 亦可能抛运行时异常。本方法跑在多源并发流的
+                // 子协程里,异常冒泡会取消整条 channelFlow 并沿调用方作用域上抛——家人位置请求
+                // 是远端可触发的路径,不能因第三方 SDK 抛异常而崩掉进程。
+                // 与系统 Provider 分支(requestOnce)保持一致:失败即 resume(null) 退回其余定位源
+                val client = runCatching { AMapLocationClient(context.applicationContext) }
+                    .onFailure { Log.w(TAG, "amap client init failed", it) }
+                    .getOrNull()
+                if (client == null) {
+                    if (cont.isActive) cont.resume(null)
+                    return@suspendCancellableCoroutine
                 }
-                client.setLocationOption(opt)
-                client.setLocationListener { loc ->
+                try {
+                    val opt = AMapLocationClientOption().apply {
+                        locationMode = AMapLocationClientOption.AMapLocationMode.Hight_Accuracy
+                        isOnceLocation = true
+                        isOnceLocationLatest = true
+                        isSensorEnable = false
+                        isNeedAddress = false
+                        httpTimeOut = timeoutMs
+                    }
+                    client.setLocationOption(opt)
+                    client.setLocationListener { loc ->
+                        runCatching { client.stopLocation(); client.onDestroy() }
+                        if (!cont.isActive) return@setLocationListener
+                        if (loc == null || loc.errorCode != 0) {
+                            Log.w(TAG, "amap locate failed code=" + (loc?.errorCode ?: -1) + " " + (loc?.errorInfo ?: ""))
+                            cont.resume(null)
+                            return@setLocationListener
+                        }
+                        // 高德SDK不设置 elapsedRealtimeNanos(默认0=开机时刻),须用 epoch 时间差判龄
+                        val ageMs = if (loc.elapsedRealtimeNanos > 0L) {
+                            (SystemClock.elapsedRealtimeNanos() - loc.elapsedRealtimeNanos) / 1_000_000L
+                        } else {
+                            System.currentTimeMillis() - loc.time
+                        }
+                        if (ageMs > FRESH_MAX_AGE_MS) {
+                            Log.w(TAG, "amap result stale filtered age=${ageMs}ms")
+                            cont.resume(null) // 高德源同样不采纳陈旧缓存
+                            return@setLocationListener
+                        }
+                        Log.i(TAG, "amap result ok acc=" + accuracyOf(loc) + "m")
+                        cont.resume(loc)
+                    }
+                    cont.invokeOnCancellation { runCatching { client.stopLocation(); client.onDestroy() } }
+                    client.startLocation()
+                } catch (e: Exception) {
+                    Log.w(TAG, "amap request failed", e)
                     runCatching { client.stopLocation(); client.onDestroy() }
-                    if (!cont.isActive) return@setLocationListener
-                    if (loc == null || loc.errorCode != 0) {
-                        Log.w(TAG, "amap locate failed code=" + (loc?.errorCode ?: -1) + " " + (loc?.errorInfo ?: ""))
-                        cont.resume(null)
-                        return@setLocationListener
-                    }
-                    // 高德SDK不设置 elapsedRealtimeNanos(默认0=开机时刻),须用 epoch 时间差判龄
-                    val ageMs = if (loc.elapsedRealtimeNanos > 0L) {
-                        (SystemClock.elapsedRealtimeNanos() - loc.elapsedRealtimeNanos) / 1_000_000L
-                    } else {
-                        System.currentTimeMillis() - loc.time
-                    }
-                    if (ageMs > FRESH_MAX_AGE_MS) {
-                        Log.w(TAG, "amap result stale filtered age=${ageMs}ms")
-                        cont.resume(null) // 高德源同样不采纳陈旧缓存
-                        return@setLocationListener
-                    }
-                    Log.i(TAG, "amap result ok acc=" + accuracyOf(loc) + "m")
-                    cont.resume(loc)
+                    if (cont.isActive) cont.resume(null)
                 }
-                cont.invokeOnCancellation { runCatching { client.stopLocation(); client.onDestroy() } }
-                client.startLocation()
             }
         }
 
