@@ -196,6 +196,10 @@ class FloatingWindowService : Service() {
         startForeground(NOTIFICATION_ID, notification)
 
         showFloatingWindow()
+        // 上面的 startForeground 用的是占位通知（"--°C / --W"），同 ID 覆盖了监控器刷新的真实数值；
+        // 监控器只在自己缓存的变化越过阈值时才重发通知，温度稳定时通知会长期停在占位内容，
+        // 故此处复位其缓存，让下一次采样（≤2 秒）立即把真实数值贴回通知
+        batteryMonitor?.invalidateNotification()
         // 每次启动都添加 1x1 保活覆盖层
         addAliveOverlay()
         // 重新调度下次心跳（setExactAndAllowWhileIdle 是一次性的，需每次触发后重新设置）
@@ -504,6 +508,9 @@ class FloatingWindowService : Service() {
     /** 保活覆盖层重试添加（延迟 3 秒后执行一次） */
     private fun tryAddAliveOverlayRetry() {
         if (aliveView != null) return
+        // 服务已销毁（onDestroy 里 isRunning 置 false）:重试任务若因字段被后续
+        // 失败重试覆盖而漏取消,此处兜住,否则会在服务销毁后加出一个永不移除的隐形窗口
+        if (!isRunning) return
         // 同 addAliveOverlay：无障碍 overlay 在位时跳过
         if (KeepAliveAccessibilityService.isRunning) return
         val wm = getSystemService(WINDOW_SERVICE) as WindowManager

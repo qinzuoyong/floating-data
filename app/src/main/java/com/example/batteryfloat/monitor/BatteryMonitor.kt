@@ -33,9 +33,15 @@ class BatteryMonitor(
     // lastNotifiedPower 用 -Infinity 而非 NaN 作哨兵：
     // NaN 会污染 abs(watts - NaN) 比较（恒为 NaN→false）并回写缓存，
     // 导致功耗从"不可用"转为有效时通知不更新。-Infinity 与有限值比较为 true，能正确首帧触发。
+    // 三个缓存均由采样协程(Dispatchers.Default)读写,另有主线程的 invalidateNotification 复位,故为 @Volatile
+    @Volatile
     private var lastNotifiedTemp = -100f
+
+    @Volatile
     private var lastNotifiedPower = Float.NEGATIVE_INFINITY
+
     /** 上次通知刷新的时间戳(elapsedRealtime 基准,通知节流用) */
+    @Volatile
     private var lastNotifyAt = 0L
 
     companion object {
@@ -71,6 +77,20 @@ class BatteryMonitor(
         isRunning.set(false)
         // 优雅关闭协程，等待正在执行的任务完成
         scope.cancel()
+    }
+
+    /**
+     * 复位通知变化缓存，令下一次采样立即重发真实数值。
+     *
+     * 场景：前台服务每次 onStartCommand（15 分钟心跳、划掉后重启等）都会用占位通知
+     * 调 startForeground，同 ID 覆盖掉"温度 --°C · 功耗 --W"以外的真实内容；而缓存未越过
+     * 阈值时本类不会重发通知，屏幕又不再变化，通知会长期停在占位内容。
+     * 灭屏暂停后重新亮屏（缓存仍是暂停前的值）同理受益。
+     */
+    fun invalidateNotification() {
+        lastNotifiedTemp = -100f
+        lastNotifiedPower = Float.NEGATIVE_INFINITY
+        lastNotifyAt = 0L
     }
 
     /** 经数据源采样一次，温度有效时驱动展示（语义与原实现一致） */

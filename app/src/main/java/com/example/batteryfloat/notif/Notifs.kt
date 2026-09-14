@@ -132,6 +132,9 @@ object Notifs {
             .setContentIntent(pendingIntent)
             .setOngoing(true)
             .setPriority(NotificationCompat.PRIORITY_LOW)
+            // 与 floatingForeground 保持一致:否则本条以 Builder 默认的 VISIBILITY_PRIVATE
+            // 覆盖渠道的 lockscreenVisibility=SECRET,首次刷新后通知就出现在锁屏上
+            .setVisibility(NotificationCompat.VISIBILITY_SECRET)
             .build()
     }
 
