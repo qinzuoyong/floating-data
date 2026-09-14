@@ -65,8 +65,8 @@ android {
         applicationId = "com.yongge.batteryfloat"
         minSdk = 34
         targetSdk = 34
-        versionCode = 49
-        versionName = "1.85"
+        versionCode = 50
+        versionName = "1.86"
 
         // 家人位置共享 A 方案：凭据从 local.properties 注入（gitignore，不进 Git）
         val lpFile = rootProject.file("local.properties")
