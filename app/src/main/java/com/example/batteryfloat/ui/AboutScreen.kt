@@ -29,6 +29,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.example.batteryfloat.BuildConfig
 import com.example.batteryfloat.PrefsKeys
 import com.example.batteryfloat.update.ApkDownloader
@@ -112,6 +115,10 @@ fun AboutScreen(
                         updateVersion = info.latestVersion
                         updateApkUrl = info.apkDownloadUrl
                         showUpdateDialog = true
+                    } else if (info.failed) {
+                        // 所有检测源都失败与"确实没有新版本"必须区分：
+                        // 否则断网时会对用户断言"已是最新版本"
+                        Toast.makeText(context, "检查更新失败，请检查网络后重试", Toast.LENGTH_SHORT).show()
                     } else {
                         Toast.makeText(context, "已是最新版本", Toast.LENGTH_SHORT).show()
                     }
@@ -158,7 +165,9 @@ fun AboutScreen(
             },
             onDismiss = {
                 showUpdateDialog = false
-                if (downloadState is DownloadState.Completed) {
+                // 已完成：保留已校验的安装包（按钮文案是"稍后安装"，删掉文件会让用户白下次下载）；
+                // 失败：清掉可能残留的半截文件并复位状态
+                if (downloadState is DownloadState.Error) {
                     ApkDownloader.cleanup(context)
                 }
             }
@@ -187,7 +196,22 @@ private fun PermissionGuideCard(
 ) {
     val context = LocalContext.current
     val powerManager = context.getSystemService(Context.POWER_SERVICE) as PowerManager
-    val isIgnoringBatteryOptimizations = powerManager.isIgnoringBatteryOptimizations(context.packageName)
+    // 电池优化白名单状态来自系统，不是可观察的 Compose 状态：
+    // 用户跳去设置页授权后返回，必须重新读取，否则按钮文案一直停在跳转前的旧值
+    var isIgnoringBatteryOptimizations by remember {
+        mutableStateOf(powerManager.isIgnoringBatteryOptimizations(context.packageName))
+    }
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                isIgnoringBatteryOptimizations =
+                    powerManager.isIgnoringBatteryOptimizations(context.packageName)
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(DesignSystem.CornerL),

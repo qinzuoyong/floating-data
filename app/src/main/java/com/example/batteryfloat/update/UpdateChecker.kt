@@ -14,12 +14,14 @@ import java.net.URL
  * @param latestVersion 最新版本号（不含 v 前缀）
  * @param downloadUrl 下载页面 URL
  * @param apkDownloadUrl APK 文件直链下载地址
+ * @param failed 所有检测源均失败（区别于"确实没有新版本"，供 UI 给出正确提示）
  */
 data class UpdateInfo(
     val hasUpdate: Boolean,
     val latestVersion: String,
     val downloadUrl: String,
-    val apkDownloadUrl: String = ""
+    val apkDownloadUrl: String = "",
+    val failed: Boolean = false
 )
 
 /**
@@ -51,7 +53,7 @@ object UpdateChecker {
         }
         // 都失败
         Log.w(TAG, "所有更新源均检测失败")
-        UpdateInfo(false, "", "")
+        UpdateInfo(false, "", "", failed = true)
     }
 
     // Gitee 仓库信息

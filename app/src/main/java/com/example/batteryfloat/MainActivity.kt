@@ -184,7 +184,9 @@ class MainActivity : ComponentActivity() {
                         },
                         onDismiss = {
                             showUpdateDialog = false
-                            if (downloadState is DownloadState.Completed) ApkDownloader.cleanup(this@MainActivity)
+                            // 已完成：保留已校验的安装包（按钮文案是"稍后安装"，删掉文件会让用户白下次下载）；
+                            // 失败：清掉可能残留的半截文件并复位状态
+                            if (downloadState is DownloadState.Error) ApkDownloader.cleanup(this@MainActivity)
                         }
                     )
                 }
