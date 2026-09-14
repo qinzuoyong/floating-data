@@ -18,6 +18,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.material3.Card
@@ -33,6 +34,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -56,18 +58,28 @@ import com.example.batteryfloat.ui.theme.DesignSystem
  *
  * 输入 6 位家庭码 + 我的备注名（展示给家人）→ 保存并启动服务。
  * 家庭码规则：6 位数字；两台设备输入相同码即配对（信令按房间隔离）。
+ *
+ * @param onDone 提交成功后回调（调用方负责切回列表并启动位置共享服务）
+ * @param onBack 返回上一页（左上角箭头与系统返回键共用；只导航，不提交、不启动服务）
+ * @param onBeforeExternalIntent 启动外部界面（权限弹窗）前的标记回调，防「隐藏后台」误杀应用
  */
 @Composable
 fun AddFamilyScreen(
     onDone: () -> Unit,
+    onBack: () -> Unit,
     onBeforeExternalIntent: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val prefs = context.getSharedPreferences(PrefsKeys.PREFS_NAME, android.content.Context.MODE_PRIVATE)
     val store = remember { FamilyStore.get(context) }
 
-    var code by remember { mutableStateOf("") }
-    var name by remember { mutableStateOf(prefs.getString(PrefsKeys.FAMILY_MY_NAME, "") ?: "") }
+    // 系统返回键与左上角箭头保持一致：回列表页；若不在本页注册，
+    // 返回键会被 MainActivity 的「隐藏后台」回调接走，直接把应用 finishAndRemoveTask 掉
+    BackHandler(onBack = onBack)
+
+    // 输入内容用 rememberSaveable：旋转屏幕（Activity 重建）后已填写的家庭码/备注名不丢失
+    var code by rememberSaveable { mutableStateOf("") }
+    var name by rememberSaveable { mutableStateOf(prefs.getString(PrefsKeys.FAMILY_MY_NAME, "") ?: "") }
     var allowLoc by remember { mutableStateOf(store.allowLocReq()) }
     var error by remember { mutableStateOf<String?>(null) }
 
@@ -121,7 +133,7 @@ fun AddFamilyScreen(
         verticalArrangement = Arrangement.spacedBy(DesignSystem.SpacingM)
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onDone) {
+            IconButton(onClick = onBack) {
                 Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.family_back))
             }
             SectionTitle(stringResource(R.string.family_add_title))

@@ -187,6 +187,8 @@ fun FamilyScreen(
                     FamilyLocationService.start(context)
                     serviceOn = true
                 },
+                // 返回只导航（不提交、不启动服务）：与系统返回键走同一入口
+                onBack = { route = FamilyRoute.List },
                 // 权限弹窗会触发 MainActivity.onUserLeaveHint，需标记外部跳转防 finish
                 onBeforeExternalIntent = onBeforeExternalIntent
             )
@@ -522,7 +524,12 @@ private fun MemberCard(
                     fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.weight(1f)
                 )
-                IconButton(onClick = { editingNote = true }) {
+                IconButton(onClick = {
+                    // 每次打开都以已保存的备注为初值：否则上次取消编辑时残留的文本
+                    // 会在下次打开时冒充内容，点确定就把被放弃的修改存了下去
+                    noteText = member.note
+                    editingNote = true
+                }) {
                     Icon(
                         Icons.Filled.Edit,
                         contentDescription = stringResource(R.string.family_edit_note_desc),

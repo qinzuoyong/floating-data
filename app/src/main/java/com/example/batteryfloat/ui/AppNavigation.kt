@@ -15,6 +15,7 @@ import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -57,7 +58,9 @@ fun AppNavigation(
     onInstallApk: (File) -> Unit = {},
     onBeforeExternalIntent: () -> Unit = {}
 ) {
-    var selectedTab by remember { mutableIntStateOf(0) }
+    // rememberSaveable：Activity 因配置变更（旋转/深色模式切换等）重建后仍停在原 Tab，
+    // 用 remember 会被重置回首页
+    var selectedTab by rememberSaveable { mutableIntStateOf(0) }
     val haptic = LocalHapticFeedback.current
 
     Scaffold(
