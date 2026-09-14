@@ -267,6 +267,20 @@ class SignalClient(
                         _state.value = State.PendingApproval(room)
                         scope.launch { onMessage?.invoke(msg) }
                     }
+                    SignalTypes.ERROR -> {
+                        // 注册阶段的拒绝(rate_limited / bad_register / server_full)只回一条 error:
+                        // 服务器既不回 registered 也不关连接,若只把错误转给 UI,客户端会永远停在
+                        // "正在连接"(应用级心跳还替这条死连接续命),家人位置共享静默失效到重启应用。
+                        // 故先上屏提示,再主动断开——onClose 会统一收尾并调度退避重连,
+                        // 限流窗口(60 秒)过去后自动恢复。
+                        scope.launch { onMessage?.invoke(msg) }
+                        if (_state.value is State.Connecting) {
+                            Log.w(TAG, "register rejected: " + (msg.code ?: msg.message))
+                            runCatching {
+                                closeConnection(CloseFrame.ABNORMAL_CLOSE, "register rejected")
+                            }
+                        }
+                    }
                     else -> scope.launch { onMessage?.invoke(msg) }
                 }
             }
