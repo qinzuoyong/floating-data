@@ -1,4 +1,4 @@
-# 手机信息悬浮窗
+# 神奇悬浮窗（手机信息悬浮窗）
 
 > 实时监测电池温度与功耗的 Android 悬浮窗工具
 > 版本: 1.87 | 最低支持: Android 14 (API 34)
@@ -67,6 +67,8 @@ https://github.com/qinzuoyong/floating-data/releases
   - Android Studio
   - JDK 17+
   - Android SDK 36+
+  # 仓库内 gradle.properties 写死了作者本机的 JDK 路径(org.gradle.java.home)，
+  # 换机器构建时请在用户级 ~/.gradle/gradle.properties 覆盖为你的 JDK 17+ 路径
 
 构建命令:
   ./gradlew.bat assembleRelease --no-configuration-cache
@@ -77,12 +79,9 @@ APK 说明:
   - 正式包仅含 arm64-v8a（Android 14+ 真机全覆盖）
   - 加 -PdevEmulatorAbi 后含 arm64-v8a + x86_64（仅用于模拟器联调，不发布）
 
-一键发布（构建正式版 + 清理 + 打 tag + 推送 + 发布）:
-  bash publish.sh "发布说明(可选)"
-
-APK 输出路径:
-  release/yongge.apk   （正式版 APK）
-  release/mapping.txt  （R8 混淆映射，线上崩溃还原用）
+APK 输出路径（构建产物统一输出到 _build/，保持项目根整洁）:
+  _build/app/outputs/apk/release/yongge.apk       （正式版 APK，已签名）
+  _build/app/outputs/mapping/release/mapping.txt  （R8 混淆映射，线上崩溃还原用）
 
 技术栈:
   Kotlin         2.2.10
