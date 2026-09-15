@@ -101,8 +101,9 @@ fun AddFamilyScreen(
     }
 
     // 提交前查询家庭码占用情况（仅提示用途，不影响流程；失败按已占用处理走加入流程）
+    // 与家人服务共用同一份主/备端点状态，保证查询落在家庭实际所在的那台服务器上
     val joinWithCheck: () -> Unit = {
-        SignalClient(BuildConfig.SIGNAL_URL).checkRoom(code) { exists, ownerName ->
+        SignalClient(BuildConfig.SIGNAL_URL, BuildConfig.SIGNAL_URL_BACKUP).checkRoom(code) { exists, ownerName ->
             if (!exists) {
                 Toast.makeText(context, "家庭码可用，将创建新家庭", Toast.LENGTH_SHORT).show()
             } else if (ownerName != null) {

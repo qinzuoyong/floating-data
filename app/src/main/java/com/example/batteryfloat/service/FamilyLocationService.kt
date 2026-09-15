@@ -200,7 +200,12 @@ class FamilyLocationService : Service() {
         // 重建通道（幂等：先清理旧连接）
         signal?.disconnect()
 
-        val sig = SignalClient(signalUrl).also {
+        // 备用信令地址（可选）：主地址不可达时自动切换，主恢复后自动切回。
+        // 非法/未配置则传空串 → SignalClient 单端点，行为与改造前完全一致。
+        val backupUrl = BuildConfig.SIGNAL_URL_BACKUP
+            .takeIf { it.startsWith("ws://") || it.startsWith("wss://") } ?: ""
+
+        val sig = SignalClient(signalUrl, backupUrl).also {
             it.onMessage = ::handleSignal
         }
         signal = sig

@@ -79,11 +79,15 @@ android {
         // 旧默认值内嵌明文 ws:// 且带固定 IP，配置缺失时会静默连到未加密服务器（位置数据裸奔）；
         // 缺失时注入空串，由运行时给出明确提示（FamilyLocationService.setup）。
         val signalUrl = lp.getProperty("SIGNAL_URL", "")
+        // 备用信令地址（可选）：主地址连续握手失败时自动切换，主恢复后自动切回。
+        // 未配置/非法时注入空串 → SignalClient 退化为单端点，行为与改造前完全一致。
+        val signalUrlBackup = lp.getProperty("SIGNAL_URL_BACKUP", "")
 
         buildConfigField("String", "BAIDU_MAP_AK", "\"${baiduAk}\"")
         buildConfigField("String", "AMAP_KEY", "\"${amapKey}\"")
         manifestPlaceholders["amapKey"] = amapKey
         buildConfigField("String", "SIGNAL_URL", "\"${signalUrl}\"")
+        buildConfigField("String", "SIGNAL_URL_BACKUP", "\"${signalUrlBackup}\"")
 
         if (signalUrl.isBlank()) {
             logger.warn(
@@ -94,6 +98,11 @@ android {
                 "⚠️ SIGNAL_URL 为明文 ws://：位置数据未加密传输，建议迁移到 wss:// 后从 " +
                     "network_security_config 移除明文放行"
             )
+        }
+        if (signalUrlBackup.isNotBlank() &&
+            !signalUrlBackup.startsWith("ws://") && !signalUrlBackup.startsWith("wss://")
+        ) {
+            logger.warn("⚠️ SIGNAL_URL_BACKUP 非法（须以 ws:// 或 wss:// 开头）：运行时按未配置处理")
         }
 
         // 只保留中文资源，剪掉多语言（AGP 9.x 移除 resConfigs，改用 androidResources.localeFilters 但需 initscript）
