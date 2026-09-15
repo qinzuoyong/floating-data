@@ -1,0 +1,14 @@
+{
+  "name": "family-signal",
+  "version": "1.0.0",
+  "private": true,
+  "description": "BatteryFloating 家人位置共享信令中继服务：server.js 的依赖清单，用于在新机器上复现部署",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node test/protocol.test.js && node test/app-fix-assertions.test.js && node test/download-allowlist.test.js && node test/download-redirect.e2e.js"
+  },
+  "dependencies": {
+    "ws": "8.21.3"
+  }
+}
