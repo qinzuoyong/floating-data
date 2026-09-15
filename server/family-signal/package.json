@@ -6,7 +6,7 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "test": "node test/protocol.test.js && node test/app-fix-assertions.test.js && node test/download-allowlist.test.js && node test/download-redirect.e2e.js"
+    "test": "node test/protocol.test.js && node test/app-fix-assertions.test.js && node test/failover-assertions.test.js && node test/download-allowlist.test.js && node test/download-redirect.e2e.js"
   },
   "dependencies": {
     "ws": "8.21.3"
