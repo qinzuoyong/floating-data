@@ -226,12 +226,42 @@ function rosterOf(rs, exceptUid) {
   return list;
 }
 
+/**
+ * 客户端真实 IP —— 限流 key 的取值来源。
+ *
+ * 本服务对外只经 nginx 反代（`proxy_set_header X-Real-IP $remote_addr`），
+ * 直连 socket 看到的对端恒为回环地址。若直接拿 socket 地址当限流 key，
+ * 全服务器的限流会退化成"所有人共用一个桶"：单个客户端刷满 room-check 配额后，
+ * 其他家庭会在同一个 60 秒窗口内被连坐限流（实测：不同来源声明不同 X-Real-IP
+ * 仍互相影响）。
+ *
+ * 因此仅在"对端确实是回环地址"时才采信 X-Real-IP —— 外部直连无法伪造：
+ * 其 socket 对端不是回环，该头一律忽略；同时对取值做 IP 格式校验，
+ * 避免畸形字符串进入限流表。未带该头时退回 socket 地址，与改造前行为一致。
+ */
+const IPV4_PATTERN = /^(\d{1,3}\.){3}\d{1,3}$/;
+function isLoopbackAddress(addr) {
+  return addr === '127.0.0.1' || addr === '::1' || addr === '::ffff:127.0.0.1';
+}
+function isValidIpLiteral(ip) {
+  if (IPV4_PATTERN.test(ip)) return true;
+  // IPv6（含压缩写法与 ::ffff: 映射写法）：限长、必须含冒号、仅允许十六进制与冒号点
+  return ip.length <= 45 && ip.includes(':') && /^[0-9a-fA-F:.]+$/.test(ip);
+}
+function clientIpOf(req) {
+  const socketIp = (req && req.socket && req.socket.remoteAddress) || 'unknown';
+  if (!isLoopbackAddress(socketIp)) return socketIp;
+  const header = req && req.headers ? req.headers['x-real-ip'] : undefined;
+  const candidate = typeof header === 'string' ? header.trim() : '';
+  return isValidIpLiteral(candidate) ? candidate : socketIp;
+}
+
 wss.on('connection', (ws, req) => {
   ws.isAlive = true;
   ws.room = null;
   ws.uid = null;
   ws.name = null;
-  ws.remoteIp = (req && req.socket && req.socket.remoteAddress) || 'unknown';
+  ws.remoteIp = clientIpOf(req);
 
   ws.on('pong', () => { ws.isAlive = true; });
 
