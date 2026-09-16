@@ -52,6 +52,16 @@ object A11ySelfHealer {
     /** 强制重绑后等待系统完成绑定的时间(供 [ensureEnabled] 同步判定结果) */
     private const val BIND_SETTLE_MS = 3_000L
 
+    /**
+     * 「摘掉 → 写回」两次写之间的间隔。
+     *
+     * 必须留出间隔:系统对 ENABLED_ACCESSIBILITY_SERVICES 的观察是异步的,同一进程内
+     * 背靠背连续两次写会被合并成一次变更、只读到最终值(与原值相同)→ 判定为"没变"→
+     * 不触发任何重绑(实测:真机上强制重绑因此静默失效)。经 shell 分两条命令写时
+     * 每条命令的启动开销恰好提供了间隔,所以手工验证"能生效"而代码里"不生效"。
+     */
+    private const val REBIND_WRITE_GAP_MS = 1_000L
+
     private val BACKOFF_STEPS_MS = longArrayOf(60_000L, 5 * 60_000L, 30 * 60_000L, 12 * 3_600_000L)
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -235,7 +245,7 @@ object A11ySelfHealer {
         return PrivShell.exec(buildShellRebindCmd(ctx)) != null
     }
 
-    private fun rebindDirect(ctx: Context): Boolean {
+    private suspend fun rebindDirect(ctx: Context): Boolean {
         val cr = ctx.contentResolver
         val cn = ComponentName(ctx, KeepAliveAccessibilityService::class.java).flattenToString()
         return try {
@@ -248,6 +258,8 @@ object A11ySelfHealer {
                     removeComponent(current, cn)
                 )
             ) return false
+            // 两次写之间必须留间隔,否则被系统合并成一次、不触发重绑(见 REBIND_WRITE_GAP_MS)
+            delay(REBIND_WRITE_GAP_MS)
             Settings.Secure.putString(
                 cr, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES, current
             )
@@ -261,13 +273,14 @@ object A11ySelfHealer {
     private fun removeComponent(list: String, cn: String): String =
         list.split(':').filter { it.isNotBlank() && !it.equals(cn, true) }.joinToString(":")
 
-    /** 辅路径一条命令:读现状→剔除本服务写回(触发解绑)→再写回原值(触发重绑) */
+    /** 辅路径一条命令:读现状→剔除本服务写回(触发解绑)→ sleep 留间隔 →再写回原值(触发重绑) */
     private fun buildShellRebindCmd(ctx: Context): String {
         val cn = ComponentName(ctx, KeepAliveAccessibilityService::class.java).flattenToString()
         return "v=\$(settings get secure enabled_accessibility_services); " +
                 "case \"\$v\" in null|NULL|'') ;; *) " +
                 "w=\$(echo \"\$v\" | sed 's|$cn||' | sed 's/::/:/g; s/^://; s/:$//'); " +
                 "settings put secure enabled_accessibility_services \"\$w\"; " +
+                "sleep 1; " +
                 "settings put secure enabled_accessibility_services \"\$v\";; esac"
     }
 
