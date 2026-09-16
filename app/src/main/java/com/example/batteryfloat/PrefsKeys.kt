@@ -91,4 +91,6 @@ object PrefsKeys {
     const val FAMILY_MEMBERS = "family_members"
     /** 后台定位权限是否已请求过（引导一次，避免反复弹系统授权框） */
     const val FAMILY_BG_LOC_ASKED = "family_bg_loc_asked"
+    /** 家人位置共享服务上次是否在运行（进程/设备重建后据此恢复，语义同 FLOATING_WAS_RUNNING） */
+    const val FAMILY_WAS_RUNNING = "family_was_running"
 }

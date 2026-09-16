@@ -9,6 +9,7 @@ import android.os.IBinder
 import android.util.Log
 import androidx.core.content.ContextCompat
 import com.example.batteryfloat.BuildConfig
+import com.example.batteryfloat.PrefsKeys
 import com.example.batteryfloat.R
 import com.example.batteryfloat.family.FamilyStore
 import com.example.batteryfloat.location.OnDemandLocationProvider
@@ -34,8 +35,15 @@ import kotlinx.coroutines.withContext
  * 职责：常驻后台保持信令连接（WebSocket）→ 按需响应家人位置请求
  * （一次性定位 → 信令回传）；收到家人位置时写入 [FamilyStore]，Compose UI 实时观察。
  *
- * 保活依赖：本服务为普通后台服务（无专属前台通知），进程后台常驻依赖同进程的
- * 悬浮窗前台服务（[FloatingWindowService]）；悬浮窗未运行时本服务可被系统回收。
+ * 保活：本服务是普通后台服务（无专属前台通知、不占用前台服务名额）。
+ * - 平台不会停它：系统只在「UID 沦为 idle」时才停其中的后台服务，而 UID 是否 idle
+ *   取决于其进程 procstate 是否属后台类；无障碍保活（[KeepAliveAccessibilityService]）
+ *   由 system_server 以 BIND_FOREGROUND_SERVICE_WHILE_AWAKE 绑定本进程，使其处于
+ *   BOUND_FOREGROUND_SERVICE / IMPORTANT_FOREGROUND，均低于后台阈值，故 UID 不进入
+ *   idle 倒计时。电池优化白名单（AdbAutoGrant 自动加白）是第二层保障。
+ * - 进程/设备重建后的恢复：开机广播 + 无障碍保活通道按 [shouldAutoRestore] 恢复，
+ *   另有 START_STICKY 兜底；[PrefsKeys.FAMILY_WAS_RUNNING] 只在用户主动停止时清除。
+ * - 既未开无障碍、也无悬浮窗前台服务时，进程属 cached 类，可被系统/厂商回收。
  *
  * 权限前置：需已授予定位权限（FINE/COARSE），否则降级提示。
  */
@@ -81,6 +89,9 @@ class FamilyLocationService : Service() {
         when (intent?.action) {
             ACTION_STOP -> {
                 Log.i(TAG, "stop requested")
+                // 用户主动停止:清除「应在运行」标记,此后开机与进程重建不再自动恢复
+                // (系统回收进程不会走 ACTION_STOP,故不会误清标记)
+                markRunning(this, false)
                 stopSelf()
                 return START_NOT_STICKY
             }
@@ -187,6 +198,9 @@ class FamilyLocationService : Service() {
             Log.i(TAG, "未加入家庭，仅驻留前台")
             return
         }
+        // 记录「应在运行」:进程/设备重建后由开机广播与无障碍保活通道据此恢复。
+        // 只在用户主动停止时清除(见 ACTION_STOP),系统回收进程同理不写 false
+        markRunning(this, true)
 
         // 信令地址必须显式配置（local.properties → BuildConfig，代码不再内置兜底地址）。
         // 缺失/非法时不建立连接并给出明确提示，避免连到未知服务器或运行时抛异常。
@@ -422,13 +436,7 @@ class FamilyLocationService : Service() {
          * 权限前置校验：缺少定位权限时不启动服务，由 UI 层引导授权。
          */
         fun start(context: Context) {
-            val hasLoc = ContextCompat.checkSelfPermission(
-                context, Manifest.permission.ACCESS_FINE_LOCATION
-            ) == PackageManager.PERMISSION_GRANTED ||
-                ContextCompat.checkSelfPermission(
-                    context, Manifest.permission.ACCESS_COARSE_LOCATION
-                ) == PackageManager.PERMISSION_GRANTED
-            if (!hasLoc) {
+            if (!hasLocationPermission(context)) {
                 Log.w(TAG, "start skipped: 缺少定位权限")
                 return
             }
@@ -436,6 +444,42 @@ class FamilyLocationService : Service() {
                 Intent(context, FamilyLocationService::class.java).setAction(ACTION_START)
             )
         }
+
+        /**
+         * 记录「家人位置共享应在运行」（语义同 [PrefsKeys.FLOATING_WAS_RUNNING]）
+         *
+         * 只在用户主动开启/停止时写入；onDestroy 不写 false——系统回收进程同样会走
+         * onDestroy，写 false 会让开机自启与无障碍保活通道失去恢复依据。
+         * @param running true=已加入家庭并启动（见 setup），false=用户主动停止（见 ACTION_STOP）
+         */
+        fun markRunning(context: Context, running: Boolean) {
+            context.getSharedPreferences(PrefsKeys.PREFS_NAME, Context.MODE_PRIVATE)
+                .edit().putBoolean(PrefsKeys.FAMILY_WAS_RUNNING, running).apply()
+        }
+
+        /**
+         * 是否应在进程/设备重建后自动恢复家人位置共享
+         *
+         * 门控：开机自启动开 + 上次在运行 + 已加入家庭 + 已授定位权限。
+         * 供开机广播（[com.example.batteryfloat.receiver.BootReceiver]）与无障碍保活通道
+         * （[KeepAliveAccessibilityService]，system_server 绑定拉起进程）共用。
+         */
+        fun shouldAutoRestore(context: Context): Boolean {
+            val prefs = context.getSharedPreferences(PrefsKeys.PREFS_NAME, Context.MODE_PRIVATE)
+            if (!prefs.getBoolean(PrefsKeys.BOOT_AUTO_START, true)) return false
+            if (!prefs.getBoolean(PrefsKeys.FAMILY_WAS_RUNNING, false)) return false
+            if ((prefs.getString(PrefsKeys.FAMILY_CODE, "") ?: "").isBlank()) return false
+            return hasLocationPermission(context)
+        }
+
+        /** 定位权限就绪检查（启动前置与恢复门控共用同一判定，避免两处漂移） */
+        private fun hasLocationPermission(context: Context): Boolean =
+            ContextCompat.checkSelfPermission(
+                context, Manifest.permission.ACCESS_FINE_LOCATION
+            ) == PackageManager.PERMISSION_GRANTED ||
+                ContextCompat.checkSelfPermission(
+                    context, Manifest.permission.ACCESS_COARSE_LOCATION
+                ) == PackageManager.PERMISSION_GRANTED
 
         /** 停止服务 */
         fun stop(context: Context) {

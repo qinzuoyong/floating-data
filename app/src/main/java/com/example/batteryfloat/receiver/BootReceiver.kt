@@ -11,6 +11,7 @@ import android.os.PowerManager
 import android.provider.Settings
 import android.util.Log
 import com.example.batteryfloat.PrefsKeys
+import com.example.batteryfloat.service.FamilyLocationService
 import com.example.batteryfloat.service.FloatingWindowService
 
 /**
@@ -21,8 +22,9 @@ import com.example.batteryfloat.service.FloatingWindowService
  * 2. 如果开关关闭 → 不做任何事
  * 3. 读取 `floating_was_running` 记录上次悬浮窗运行状态
  * 4. 如果上次是开启状态 → 自动启动悬浮窗服务
- * 5. 如果上次是关闭状态 → 静默退出
+ * 5. 如果上次是关闭状态 → 跳过悬浮窗恢复（不再直接返回，仍需处理家人位置共享）
  * 6. 启动后延迟 15 秒再检查一次（防止系统开机阶段拉起失败）
+ * 7. 家人位置共享服务按 `family_was_running` 等门控独立恢复（见 restoreFamilyServiceIfNeeded）
  *
  * 注意：`floating_was_running` 只在以下情况被设为 false：
  * - 用户通过 MainActivity 主动关闭悬浮窗
@@ -71,27 +73,38 @@ class BootReceiver : BroadcastReceiver() {
             return
         }
 
-        // 2. 检查上次悬浮窗是否在运行
-        val wasRunning = prefs.getBoolean(PREF_FLOATING_RUNNING, false)
-        if (!wasRunning) {
+        // 2. 悬浮窗恢复（门控与行为保持原样：上次在运行 + 已授悬浮窗权限）
+        restoreFloatingWindowIfNeeded(context, prefs)
+
+        // 3. 家人位置共享恢复（独立门控，与悬浮窗开关无关）
+        restoreFamilyServiceIfNeeded(context)
+    }
+
+    /**
+     * 开机恢复悬浮窗服务
+     *
+     * 门控：上次在运行（`floating_was_running`）+ 已授悬浮窗权限（避免无权限时
+     * 启动"幽灵服务"）。行为与改造前完全一致，仅从 [onReceive] 抽出，
+     * 以便与家人位置共享恢复各自独立门控（原先的提前 return 会挡住后者）。
+     *
+     * @param prefs 已打开的 SharedPreferences
+     */
+    private fun restoreFloatingWindowIfNeeded(context: Context, prefs: SharedPreferences) {
+        if (!prefs.getBoolean(PREF_FLOATING_RUNNING, false)) {
             Log.i(TAG, "上次退出前悬浮窗未开启，跳过开机自启动")
             return
         }
-
-        // 3. 校验悬浮窗权限，避免无权限时启动"幽灵服务"
         if (!Settings.canDrawOverlays(context)) {
             Log.w(TAG, "无悬浮窗权限，跳过开机自启动")
             return
         }
-
-        // 4. 启动悬浮窗服务
         Log.i(TAG, "检测到上次悬浮窗运行中 → 开机自动启动")
         val wakeLock = acquireBootWakeLock(context)
         try {
             FloatingWindowService.start(context)
             Log.i(TAG, "开机启动悬浮窗服务成功")
 
-            // 5. 延迟 15 秒后再检查一次（防止系统开机阶段服务拉起失败）
+            // 延迟 15 秒后再检查一次（防止系统开机阶段服务拉起失败）
             scheduleDelayedCheck(context)
         } catch (e: Exception) {
             Log.e(TAG, "开机启动服务失败", e)
@@ -99,6 +112,27 @@ class BootReceiver : BroadcastReceiver() {
         } finally {
             // 主动释放,不依赖 10s 超时兜底
             runCatching { wakeLock?.release() }
+        }
+    }
+
+    /**
+     * 开机恢复家人位置共享服务
+     *
+     * 门控见 [FamilyLocationService.shouldAutoRestore]（开机自启开 + 上次在运行 +
+     * 已加入家庭 + 已授定位权限）。`BOOT_COMPLETED` 属官方豁免的后台启服务通道，
+     * 此处 startService 不受后台启动限制；启动失败静默降级——进程重建时
+     * `START_STICKY` 与无障碍保活通道仍会恢复，不因一次失败丢失保活能力。
+     */
+    private fun restoreFamilyServiceIfNeeded(context: Context) {
+        if (!FamilyLocationService.shouldAutoRestore(context)) {
+            Log.i(TAG, "家人位置共享无需恢复（未开启或前置条件不足）")
+            return
+        }
+        try {
+            FamilyLocationService.start(context)
+            Log.i(TAG, "开机恢复家人位置共享服务")
+        } catch (e: Exception) {
+            Log.w(TAG, "恢复家人位置共享服务失败", e)
         }
     }
 
