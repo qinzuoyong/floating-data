@@ -23,6 +23,13 @@ import java.util.concurrent.atomic.AtomicBoolean
  * - 辅路径:grant 不可用的机型退化用 shell 流直接 settings put 写回(依赖通道在线)
  *
  * 触发:无障碍 onDestroy 后延迟数秒(系统解绑收尾) + 悬浮窗服务周期巡检。
+ *
+ * 感知两类故障:
+ * - 被移出启用列表(系统/厂商关闭) → 写回;
+ * - **仍在启用列表但未被绑定**——应用真崩溃后系统会把服务列入 crashed 并停止绑定,
+ *   而它仍留在 ENABLED_ACCESSIBILITY_SERVICES 里,此时「已启用」不等于「已绑定」;
+ *   只判列表会漏判为健康、永不重绑,故按绑定实况复核后强制重绑。
+ *
  * 安全阀:
  * - 门控——用户在应用内主动关闭(走 disableSelf 前打标记)永不自愈;
  *   仅「系统侧被关而应用侧未关」视为意外
@@ -35,6 +42,15 @@ object A11ySelfHealer {
 
     /** 写回后延迟复查(给系统重新绑定留时间) */
     private const val RECHECK_DELAY_MS = 60_000L
+
+    /**
+     * 重绑宽限期。无障碍解绑后 system_server 通常 1 秒内自动重绑(vivo 实测),
+     * 超过该宽限仍未绑定,才判定为「已启用但被系统解绑」的异常态并强制重绑。
+     */
+    private const val BIND_GRACE_MS = 15_000L
+
+    /** 强制重绑后等待系统完成绑定的时间(供 [ensureEnabled] 同步判定结果) */
+    private const val BIND_SETTLE_MS = 3_000L
 
     private val BACKOFF_STEPS_MS = longArrayOf(60_000L, 5 * 60_000L, 30 * 60_000L, 12 * 3_600_000L)
 
@@ -66,7 +82,28 @@ object A11ySelfHealer {
             if (!healing.compareAndSet(false, true)) return@launch
             try {
                 if (isUserDisabled(ctx)) return@launch
-                if (KeepAliveAccessibilityService.isEnabledInSettings(ctx)) return@launch
+                if (KeepAliveAccessibilityService.isEnabledInSettings(ctx)) {
+                    // 已在启用列表:可能是系统正在重绑(正常过渡),也可能是被系统判为
+                    // crashed 后不再重绑——只看列表会漏判,故按「是否真的绑定」再核一次
+                    if (isBound()) return@launch
+                    delay(BIND_GRACE_MS)
+                    if (isBound()) return@launch
+                    Log.w(TAG, "无障碍已启用但未被绑定(触发:$trigger),尝试强制重绑")
+                    if (!forceRebind(ctx)) {
+                        onHealFailed(ctx)
+                        return@launch
+                    }
+                    delay(RECHECK_DELAY_MS)
+                    if (isBound()) {
+                        Log.i(TAG, "强制重绑成功,无障碍已恢复")
+                        healAttempts = 0
+                        backoffUntilElapsed = 0
+                        notifyHealed(ctx)
+                    } else {
+                        onHealFailed(ctx)
+                    }
+                    return@launch
+                }
                 val now = SystemClock.elapsedRealtime()
                 if (now < backoffUntilElapsed) {
                     // 早于退避截止点被触发（延迟抖动/时钟跳变）：补排一次。
@@ -112,7 +149,13 @@ object A11ySelfHealer {
      */
     suspend fun ensureEnabled(context: Context): Boolean {
         val ctx = context.applicationContext
-        if (KeepAliveAccessibilityService.isEnabledInSettings(ctx)) return true
+        if (KeepAliveAccessibilityService.isEnabledInSettings(ctx)) {
+            // 已启用但被系统解绑(crashed 态)同样要强制重绑,否则返回 true 会掩盖问题
+            if (isBound()) return true
+            if (!forceRebind(ctx)) return false
+            delay(BIND_SETTLE_MS)
+            return isBound()
+        }
         if (isUserDisabled(ctx)) return false
         if (!writeBack(ctx)) return false
         return KeepAliveAccessibilityService.isEnabledInSettings(ctx)
@@ -173,6 +216,59 @@ object A11ySelfHealer {
                 "case \":\$v:\" in *:\"$cn\":*) ;; *) " +
                 "settings put secure enabled_accessibility_services \"\${v:+\$v:}$cn\";; esac; " +
                 "settings put secure accessibility_enabled 1"
+    }
+
+    // ===== 强制重绑(已启用但被系统解绑的 crashed 态) =====
+
+    /** 无障碍是否真的在位:system_server 当前是否持有绑定(区分「已启用」与「已绑定」) */
+    private fun isBound(): Boolean = KeepAliveAccessibilityService.isRunning
+
+    /**
+     * 强制重绑:先把本服务从启用列表摘掉、再写回原值,逼 system_server 重走一遍绑定流程。
+     *
+     * 只写回同值不会触发变更(设置未变 → 不重绑),必须先移除再写回;
+     * 其余服务条目原样保留(同一字符串读改写,不会丢别人的无障碍服务)。
+     */
+    private suspend fun forceRebind(ctx: Context): Boolean {
+        if (hasSecureWritePermission(ctx)) return rebindDirect(ctx)
+        Log.i(TAG, "无 WRITE_SECURE_SETTINGS,退化 shell 强制重绑")
+        return PrivShell.exec(buildShellRebindCmd(ctx)) != null
+    }
+
+    private fun rebindDirect(ctx: Context): Boolean {
+        val cr = ctx.contentResolver
+        val cn = ComponentName(ctx, KeepAliveAccessibilityService::class.java).flattenToString()
+        return try {
+            val current = Settings.Secure.getString(
+                cr, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
+            )
+            if (current.isNullOrBlank()) return false
+            if (!Settings.Secure.putString(
+                    cr, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES,
+                    removeComponent(current, cn)
+                )
+            ) return false
+            Settings.Secure.putString(
+                cr, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES, current
+            )
+        } catch (e: Exception) {
+            Log.w(TAG, "强制重绑失败: ${e.message}")
+            false
+        }
+    }
+
+    /** 从冒号分隔的启用列表里剔除指定组件(保留其余条目与顺序) */
+    private fun removeComponent(list: String, cn: String): String =
+        list.split(':').filter { it.isNotBlank() && !it.equals(cn, true) }.joinToString(":")
+
+    /** 辅路径一条命令:读现状→剔除本服务写回(触发解绑)→再写回原值(触发重绑) */
+    private fun buildShellRebindCmd(ctx: Context): String {
+        val cn = ComponentName(ctx, KeepAliveAccessibilityService::class.java).flattenToString()
+        return "v=\$(settings get secure enabled_accessibility_services); " +
+                "case \"\$v\" in null|NULL|'') ;; *) " +
+                "w=\$(echo \"\$v\" | sed 's|$cn||' | sed 's/::/:/g; s/^://; s/:$//'); " +
+                "settings put secure enabled_accessibility_services \"\$w\"; " +
+                "settings put secure enabled_accessibility_services \"\$v\";; esac"
     }
 
     // ===== 退避与通知 =====
