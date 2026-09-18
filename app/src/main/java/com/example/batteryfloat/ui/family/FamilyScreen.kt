@@ -165,8 +165,13 @@ fun FamilyScreen(
         if (missing.isNotEmpty()) {
             onBeforeExternalIntent()
             permissionLauncher.launch(missing.toTypedArray())
-        } else if ((prefs.getString(PrefsKeys.FAMILY_CODE, "") ?: "").isNotBlank() && !isServiceRunning()) {
-            // 已授权且已加入家庭：自动开启位置共享服务，保证可被家人请求到位置
+        } else if ((prefs.getString(PrefsKeys.FAMILY_CODE, "") ?: "").isNotBlank() &&
+            !isServiceRunning() && prefs.getBoolean(PrefsKeys.FAMILY_WAS_RUNNING, false)
+        ) {
+            // 已授权且已加入家庭：自动开启位置共享服务，保证可被家人请求到位置。
+            // 必须以 FAMILY_WAS_RUNNING 为门控（用户主动停止时清除，见 ACTION_STOP）：
+            // 本 LaunchedEffect 每次进入家人 Tab 都会重跑，无此门控会把用户刚关闭
+            // 的服务又静默拉起（违背「停止共享」的用户意图）
             FamilyLocationService.start(context)
             serviceOn = true
             maybeRequestBackground()
