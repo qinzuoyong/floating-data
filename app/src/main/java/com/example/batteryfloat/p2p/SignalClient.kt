@@ -183,6 +183,14 @@ class SignalClient(
      * @param onResult 结果回调（Main 线程）：exists=是否已有家庭，ownerName=创建人备注名
      */
     fun checkRoom(room: String, onResult: (exists: Boolean, ownerName: String?) -> Unit) {
+        if (endpoints.isEmpty()) {
+            // 未配置任何信令地址（SIGNAL_URL/SIGNAL_URL_BACKUP 均缺失）时不得构造
+            // WebSocketClient：currentEndpoint() 在空列表上 coerceIn(0, -1) 会抛
+            // IllegalArgumentException 使加入流程在主线程崩溃。按"查询失败"同语义
+            // 兜底回调（按已占用处理走加入流程），与下方超时/关闭路径一致
+            onResult(true, null)
+            return
+        }
         val answered = java.util.concurrent.atomic.AtomicBoolean(false)
         // 用当前生效端点：家庭码是否有主，只有"家庭实际所在的那台服务器"才答得准，
         // 问另一台可能得到相反答案（备用节点上没有这个家庭）。此处不参与切换，
