@@ -93,10 +93,16 @@ class KeepAliveAccessibilityService : AccessibilityService() {
         if (!prefs.getBoolean(PrefsKeys.BOOT_AUTO_START, true)) return
         if (!prefs.getBoolean(PrefsKeys.FLOATING_WAS_RUNNING, false)) return
         if (!Settings.canDrawOverlays(this)) return
-        // 本进程正被系统绑定，不受后台 startForegroundService 限制
-        // （同 GKD StatusService.autoStart 的启动条件）
-        FloatingWindowService.start(this)
-        Log.i(TAG, "无障碍通道恢复悬浮窗服务")
+        // 本进程正被系统绑定，通常不受后台 startForegroundService 限制
+        // （同 GKD StatusService.autoStart 的启动条件）；个别 ROM 仍拦截时
+        // startForegroundService 会抛异常，必须在此兜底——onServiceConnected 冒泡
+        // 异常会令无障碍被判 crashed 停止绑定（降级策略与 tryRestoreFamilyService 一致）
+        try {
+            FloatingWindowService.start(this)
+            Log.i(TAG, "无障碍通道恢复悬浮窗服务")
+        } catch (e: Exception) {
+            Log.w(TAG, "无障碍通道恢复悬浮窗服务失败: ${e.message}")
+        }
     }
 
     /**
