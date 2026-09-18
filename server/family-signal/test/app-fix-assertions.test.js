@@ -54,5 +54,30 @@ ok('置"已尝试"标记位于 else 分支内（仅密钥就绪后才置位）',
   'markTried=' + idxMarkTried + ' else=' + idxElse + ' keyNull=' + idxKeyNull);
 ok('peekKey 先于标记写入', pb.indexOf('peekKey()') < idxMarkTried);
 
+// ---- 2026-09-18 审查修复回归锁定 ----
+console.log('[家人页自动启动门控 FamilyScreen.kt]');
+const FAMILY_SCREEN = path.join(ROOT, 'app/src/main/java/com/example/batteryfloat/ui/family/FamilyScreen.kt');
+const fsc = read(FAMILY_SCREEN);
+ok('家人页自动启动受 FAMILY_WAS_RUNNING 门控（尊重用户主动停止）',
+  /!isServiceRunning\(\) && prefs\.getBoolean\(PrefsKeys\.FAMILY_WAS_RUNNING, false\)/.test(fsc),
+  '自动启动分支未发现 FAMILY_WAS_RUNNING 门控');
+
+console.log('[信令空端点守卫 SignalClient.kt]');
+const SIGNAL_CLIENT = path.join(ROOT, 'app/src/main/java/com/example/batteryfloat/p2p/SignalClient.kt');
+const sc = read(SIGNAL_CLIENT);
+const idxCheckRoom = sc.indexOf('fun checkRoom(');
+const idxEmptyGuard = sc.indexOf('endpoints.isEmpty()');
+ok('checkRoom 存在空端点守卫（未配置 SIGNAL_URL 时不再 coerceIn(0,-1) 抛异常）',
+  idxCheckRoom > 0 && idxEmptyGuard > idxCheckRoom,
+  'endpoints.isEmpty() 未出现在 checkRoom 内');
+
+console.log('[无障碍通道恢复悬浮窗兜底 KeepAliveAccessibilityService.kt]');
+const KA_SERVICE = path.join(ROOT, 'app/src/main/java/com/example/batteryfloat/service/KeepAliveAccessibilityService.kt');
+const kas = read(KA_SERVICE);
+ok('恢复悬浮窗服务有异常兜底（onServiceConnected 不得冒泡异常）',
+  /try \{\s*\n\s*FloatingWindowService\.start\(this\)/.test(kas) &&
+  /恢复悬浮窗服务失败/.test(kas),
+  'FloatingWindowService.start 未被 try 包裹');
+
 console.log('\n== 结果: ' + pass + ' 通过 / ' + fail + ' 失败 ==');
 process.exit(fail === 0 ? 0 : 1);
