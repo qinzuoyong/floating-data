@@ -55,6 +55,14 @@ class AdbKey(private val adbKeyStore: AdbKeyStore, name: String) {
         private const val IV_SIZE_IN_BYTES = 12
         private const val TAG_SIZE_IN_BYTES = 16
 
+        /**
+         * PKCS#1 v1.5 填充前缀（0x00 0x01 || PS || 0x00 || SHA-1 DigestInfo）。
+         *
+         * 长度受模数约束，不可随意增减：sign() 先 update(PADDING) 再 doFinal(token)，
+         * 两段之和必须恰好等于模数字节数（2048 位 = 256 字节），否则 JCE 直接抛
+         * IllegalBlockSizeException，签名功能整体不可用。
+         * 即 2 + PS(218) + 1 + 15 = 236 字节，token 为 20 字节 ADB_AUTH_TOKEN。
+         */
         private val PADDING = byteArrayOf(
                 0x00, 0x01, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
                 -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
@@ -71,10 +79,7 @@ class AdbKey(private val adbKeyStore: AdbKeyStore, name: String) {
                 -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
                 -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
                 -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-                -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-                -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-                -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-                -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 0x00,
+                -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 0x00,
                 0x30, 0x21, 0x30, 0x09, 0x06, 0x05, 0x2b, 0x0e, 0x03, 0x02, 0x1a, 0x05, 0x00,
                 0x04, 0x14)
     }

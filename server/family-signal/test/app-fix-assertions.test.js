@@ -14,6 +14,7 @@ const ROOT = path.join(__dirname, '..', '..', '..');
 const AUTO_GRANT = path.join(ROOT, 'app/src/main/java/com/example/batteryfloat/adb/AdbAutoGrant.kt');
 const PRIV_BASELINE = path.join(ROOT, 'app/src/main/java/com/example/batteryfloat/adb/PrivBaseline.kt');
 const HOME = path.join(ROOT, 'app/src/main/java/com/example/batteryfloat/ui/HomeScreen.kt');
+const ADB_KEY = path.join(ROOT, 'app/src/main/java/com/example/batteryfloat/adb/AdbKey.kt');
 
 let pass = 0, fail = 0;
 function ok(name, cond, extra) {
@@ -78,6 +79,32 @@ ok('恢复悬浮窗服务有异常兜底（onServiceConnected 不得冒泡异常
   /try \{\s*\n\s*FloatingWindowService\.start\(this\)/.test(kas) &&
   /恢复悬浮窗服务失败/.test(kas),
   'FloatingWindowService.start 未被 try 包裹');
+
+// ---- 2026-09-24 审查修复回归锁定 ----
+// AdbKey.sign() 的 PKCS#1 v1.5 填充前缀长度受模数硬约束：update(PADDING) 与
+// doFinal(token) 两段之和必须恰好等于模数字节数，否则 JCE 抛 IllegalBlockSizeException，
+// 经典 A_AUTH 签名路径整体失效（编译期无法发现，且失败被上层 catch 静默降级）。
+console.log('[ADB 签名填充长度 AdbKey.kt]');
+const ak = read(ADB_KEY);
+const PAD_TAIL = '0x04, 0x14';
+const idxPad = ak.indexOf('PADDING = byteArrayOf(');
+const idxTail = ak.indexOf(PAD_TAIL + ')', idxPad);
+const padBody = ak.slice(ak.indexOf('(', idxPad) + 1, idxTail + PAD_TAIL.length);
+const padTokens = padBody.split(',').map((t) => t.trim()).filter((t) => t.length > 0);
+const padFf = padTokens.filter((t) => t === '-1').length;
+const MODULUS_BYTES = 2048 / 8;
+const TOKEN_BYTES = 20; // ADB_AUTH_TOKEN 长度
+ok('PADDING 数组可解析', padTokens.length > 0, 'PADDING 未找到或为空');
+ok('填充前缀 + token 恰好等于模数字节数 256',
+  padTokens.length + TOKEN_BYTES === MODULUS_BYTES,
+  'PADDING=' + padTokens.length + ' + token=' + TOKEN_BYTES + ' = ' + (padTokens.length + TOKEN_BYTES) + '，应为 ' + MODULUS_BYTES);
+ok('PS 0xff 段长度为 218',
+  padFf === MODULUS_BYTES - 3 - 15 - TOKEN_BYTES,
+  '0xff 个数=' + padFf + '，应为 ' + (MODULUS_BYTES - 3 - 15 - TOKEN_BYTES));
+ok('填充头为 0x00 0x01', padTokens[0] === '0x00' && padTokens[1] === '0x01');
+ok('DigestInfo(SHA-1) 前缀完整',
+  padBody.includes('0x30, 0x21, 0x30, 0x09, 0x06, 0x05, 0x2b, 0x0e, 0x03, 0x02, 0x1a, 0x05, 0x00') &&
+  padTokens.slice(-15).join(',') === '0x30,0x21,0x30,0x09,0x06,0x05,0x2b,0x0e,0x03,0x02,0x1a,0x05,0x00,0x04,0x14');
 
 console.log('\n== 结果: ' + pass + ' 通过 / ' + fail + ' 失败 ==');
 process.exit(fail === 0 ? 0 : 1);
