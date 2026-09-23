@@ -118,6 +118,10 @@ class FloatingWindowView(context: Context) : LinearLayout(context) {
 
     fun reloadAppearance() {
         applyAppearance()
+        // 字号/圆角/内边距变化会改变窗口尺寸，而位置钳位原先只在下一次拖拽或旋转时执行：
+        // 放大字号后窗口自原左上角向右下生长，右下角越出屏幕（底行文本被裁掉且无法看到）。
+        // applyAppearance 已置 sizeCacheDirty，故此处重钳位会按新尺寸测量后再收进屏幕。
+        clampToScreenBounds()
     }
 
     private fun applyAppearance() {
