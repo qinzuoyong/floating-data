@@ -106,5 +106,111 @@ ok('DigestInfo(SHA-1) 前缀完整',
   padBody.includes('0x30, 0x21, 0x30, 0x09, 0x06, 0x05, 0x2b, 0x0e, 0x03, 0x02, 0x1a, 0x05, 0x00') &&
   padTokens.slice(-15).join(',') === '0x30,0x21,0x30,0x09,0x06,0x05,0x2b,0x0e,0x03,0x02,0x1a,0x05,0x00,0x04,0x14');
 
+// ---- 2026-09-24 坐标豁免区域回归锁定 ----
+// 港澳台豁免此前用外接矩形：香港矩形（113.82~114.44°E / 22.15~22.57°N）把深圳主城区整片
+// 吞进去、澳门矩形（113.52~113.63°E / 22.10~22.24°N）吞掉珠海拱北/横琴，这些大陆坐标因此
+// 被跳过 GCJ-02 偏移（实测偏 603~620 m）。矩形在几何上无法与大陆分离（香港最北端
+// 22.5591°N 高于深圳福田 22.5448°N），故改用真实边界：香港北部边界线 + 澳门边界多边形。
+// 本断言直接解析 CoordTransform.kt 里的边界数据并在 JS 侧复算区域判定，锁定大陆点不被误豁免。
+console.log('[坐标豁免区域 CoordTransform.kt]');
+const COORD = path.join(ROOT, 'app/src/main/java/com/example/batteryfloat/location/CoordTransform.kt');
+const ct = read(COORD);
+const constOf = (n) => {
+  const m = ct.match(new RegExp('const val ' + n + '\\s*=\\s*(-?[0-9.]+)'));
+  return m ? parseFloat(m[1]) : NaN;
+};
+const HK_LNG_MIN = constOf('HK_LNG_MIN'), HK_LNG_MAX = constOf('HK_LNG_MAX');
+const HK_LAT_MIN = constOf('HK_LAT_MIN');
+const GUISHAN_LNG_MAX = constOf('GUISHAN_LNG_MAX'), GUISHAN_LAT_MAX = constOf('GUISHAN_LAT_MAX');
+const flatNumbers = (from, to) =>
+  ct.slice(ct.indexOf(from) + from.length, ct.indexOf(to, ct.indexOf(from)))
+    .split(/[,\s]+/).filter((t) => /^-?[0-9.]+$/.test(t)).map(parseFloat);
+const border = flatNumbers('private val HK_BORDER = doubleArrayOf(', 'private val MACAU_RINGS');
+const macauFlat = flatNumbers('private val MACAU_RINGS = arrayOf(', 'private fun transformLat');
+// 澳门按 doubleArrayOf(...) 分组还原成环
+const macauRings = [];
+{
+  const seg = ct.slice(ct.indexOf('private val MACAU_RINGS = arrayOf('), ct.indexOf('private fun transformLat'));
+  const groups = seg.split('doubleArrayOf(').slice(1);
+  for (const g of groups) {
+    const nums = g.slice(0, g.indexOf(')')).split(/[,\s]+/).filter((t) => /^-?[0-9.]+$/.test(t)).map(parseFloat);
+    macauRings.push(nums);
+  }
+}
+ok('香港边界折线可解析（经度升序、成对出现）',
+  border.length >= 40 && border.length % 2 === 0 &&
+  border.filter((_, i) => i % 2 === 0).every((v, i, a) => i === 0 || v > a[i - 1]),
+  '顶点数=' + border.length / 2);
+ok('澳门边界环可解析（每环闭合）',
+  macauRings.length >= 2 && macauRings.every((r) => r.length >= 8 && r[0] === r[r.length - 2] && r[1] === r[r.length - 1]),
+  '环数=' + macauRings.length + ' 顶点=' + macauRings.map((r) => r.length / 2).join('/'));
+
+/** 香港北部边界线在给定经度上的纬度上限（与 Kotlin 实现同算法：二分 + 线性插值） */
+function hkBorderLat(lng) {
+  const last = border.length / 2 - 1;
+  if (lng <= border[0]) return border[1];
+  if (lng >= border[last * 2]) return border[last * 2 + 1];
+  let lo = 0, hi = last;
+  while (hi - lo > 1) {
+    const mid = (lo + hi) >> 1;
+    if (border[mid * 2] <= lng) lo = mid; else hi = mid;
+  }
+  const x1 = border[lo * 2], y1 = border[lo * 2 + 1], x2 = border[hi * 2], y2 = border[hi * 2 + 1];
+  return y1 + (lng - x1) / (x2 - x1) * (y2 - y1);
+}
+function inHongKong(lat, lng) {
+  if (lat < HK_LAT_MIN || lng < HK_LNG_MIN || lng > HK_LNG_MAX) return false;
+  if (lng <= GUISHAN_LNG_MAX && lat <= GUISHAN_LAT_MAX) return false;
+  return lat <= hkBorderLat(lng);
+}
+function inMacau(lat, lng) {
+  let inside = false;
+  for (const ring of macauRings) {
+    for (let i = 0; i + 3 < ring.length; i += 2) {
+      const ax = ring[i], ay = ring[i + 1], bx = ring[i + 2], by = ring[i + 3];
+      if ((ay > lat) !== (by > lat) && lng < ax + (lat - ay) * (bx - ax) / (by - ay)) inside = !inside;
+    }
+  }
+  return inside;
+}
+const exempt = (lat, lng) =>
+  inHongKong(lat, lng) || inMacau(lat, lng) || (lng >= 119.90 && lng <= 122.01 && lat >= 21.87 && lat <= 25.35);
+
+// 大陆点（深圳主城区 + 珠海拱北/横琴/湾仔 + 桂山岛）：必须不被豁免，即必须施加 GCJ 偏移
+const MAINLAND = {
+  深圳市民中心: [22.5448, 114.0545], 深圳福田区府: [22.5410, 114.0550], 深圳罗湖口岸: [22.5310, 114.1178],
+  深圳南山: [22.5330, 113.9300], 深圳宝安中心: [22.5550, 113.8830], 深圳盐田: [22.5570, 114.2360],
+  深圳沙头角: [22.5480, 114.2400], 深圳前海: [22.5270, 113.8980], 深圳蛇口: [22.4800, 113.9200],
+  深圳福田口岸: [22.5333, 114.0666], 深圳皇岗口岸: [22.5210, 114.0700], 深圳大铲岛: [22.4700, 113.8600],
+  珠海拱北口岸: [22.2190, 113.5450], 珠海横琴口岸: [22.1120, 113.5300], 珠海湾仔: [22.1930, 113.5320],
+  珠海香洲: [22.2700, 113.5500], 珠海桂山岛: [22.1500, 113.8300], 珠海外伶仃岛: [22.0980, 114.0300],
+  北京天安门: [39.9073, 116.3912], 上海人民广场: [31.2304, 121.4737], 广州天河: [23.1250, 113.3610],
+};
+const badMainland = Object.entries(MAINLAND).filter(([, [lat, lng]]) => exempt(lat, lng)).map(([n]) => n);
+ok('大陆地标不被误豁免（深圳/珠海等 ' + Object.keys(MAINLAND).length + ' 点）',
+  badMainland.length === 0, '误豁免: ' + badMainland.join('、'));
+
+// 香港点（含离岛与最北/最南边界）：必须仍被豁免
+const HK = {
+  中环: [22.2830, 114.1560], 尖沙咀: [22.2970, 114.1720], 上水: [22.5020, 114.1280], 元朗: [22.4440, 114.0320],
+  天水围: [22.4600, 114.0040], 屯门: [22.3920, 113.9760], 东涌: [22.2890, 113.9430], 长洲: [22.2110, 114.0290],
+  西贡: [22.3820, 114.2740], 沙田: [22.3830, 114.1910], 将军澳: [22.3120, 114.2600], 赤柱: [22.2160, 114.2200],
+  东平洲: [22.5400, 114.4300], 塔门: [22.4710, 114.3630], 蒲台岛: [22.1660, 114.2630],
+  香港国际机场: [22.3090, 113.9150], 沙头角港侧: [22.5425, 114.2300], 迪士尼: [22.3130, 114.0450],
+  南丫岛: [22.2050, 114.1250], 坪洲: [22.2860, 114.0390], 吉澳: [22.5420, 114.2930], 罗湖站: [22.5270, 114.1170],
+  分流: [22.1960, 113.8480],
+};
+const badHk = Object.entries(HK).filter(([, [lat, lng]]) => !exempt(lat, lng)).map(([n]) => n);
+ok('香港地标仍被豁免（含离岛 ' + Object.keys(HK).length + ' 点）', badHk.length === 0, '漏豁免: ' + badHk.join('、'));
+
+// 澳门点：必须仍被豁免；珠海相邻点在上一组已覆盖
+const MO = { 澳门半岛: [22.1980, 113.5490], 氹仔: [22.1570, 113.5560], 路环黑沙: [22.1200, 113.5670], 澳门机场: [22.1520, 113.5900], 关闸: [22.2130, 113.5520] };
+const badMo = Object.entries(MO).filter(([, [lat, lng]]) => !exempt(lat, lng)).map(([n]) => n);
+ok('澳门地标仍被豁免（' + Object.keys(MO).length + ' 点）', badMo.length === 0, '漏豁免: ' + badMo.join('、'));
+
+ok('已移除港澳外接矩形（不再出现旧矩形常量）',
+  !/113\.82\.\.114\.44/.test(ct) && !/113\.52\.\.113\.63/.test(ct));
+ok('台湾矩形保留（其范围内无大陆陆地，无同类缺陷）', /lng in 119\.90\.\.122\.01 && lat in 21\.87\.\.25\.35/.test(ct));
+
 console.log('\n== 结果: ' + pass + ' 通过 / ' + fail + ' 失败 ==');
 process.exit(fail === 0 ? 0 : 1);
