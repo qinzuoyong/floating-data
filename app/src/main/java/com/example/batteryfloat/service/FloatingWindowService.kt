@@ -15,6 +15,7 @@ import android.os.Build
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
+import android.os.PowerManager
 import android.os.SystemClock
 import android.util.Log
 import android.view.Gravity
@@ -170,7 +171,8 @@ class FloatingWindowService : Service() {
                     Log.d(TAG, "灭屏,暂停电池采样")
                 }
                 Intent.ACTION_SCREEN_ON -> {
-                    batteryMonitor?.start()
+                    // 服务在灭屏期间被拉起时监控器尚未创建（见 startMonitoring 的灭屏门控），此时补建
+                    if (batteryMonitor == null) startMonitoring() else batteryMonitor?.start()
                     Log.d(TAG, "亮屏,恢复电池采样")
                 }
             }
@@ -460,6 +462,14 @@ class FloatingWindowService : Service() {
 
     private fun startMonitoring() {
         val view = floatingView ?: return
+        // 灭屏门控：SCREEN_OFF/ON 是边沿触发广播——服务在灭屏期间被拉起（开机恢复、无障碍
+        // 恢复、FGS 重投递等）时不会再收到 SCREEN_OFF 事件来停采样，2s 轮询（含特权 shell
+        // 直读）会整夜空转。灭屏时不建监控器，等 SCREEN_ON 广播再补建（见 screenReceiver）
+        val pm = getSystemService(POWER_SERVICE) as PowerManager
+        if (!pm.isInteractive) {
+            Log.i(TAG, "灭屏中，电池采样延迟到亮屏后启动")
+            return
+        }
         // PrivBatteryProvider 内部持有基础档:通道未连接时整体委托,开关切换无需重启监控
         batteryMonitor = BatteryMonitor(this, view, PrivBatteryProvider(this)).also {
             it.start()
