@@ -98,16 +98,22 @@ class FamilyLocationService : Service() {
             ACTION_REQUEST_LOCATION -> {
                 val uid = intent.getStringExtra(EXTRA_UID) ?: ""
                 if (uid.isNotBlank()) requestMemberLocation(uid)
+                // 通道未建立（如用户已停止共享后从地图页冷启动本服务）：提示已上屏（静态
+                // StateFlow，服务销毁后 UI 仍可读），随即退出——避免 isRunning=true 的僵尸
+                // 实例短路无障碍恢复路径（tryRestoreFamilyService 判 isRunning 即返回）并让 UI 状态失真
+                if (signal == null) stopSelf()
                 return START_STICKY
             }
             ACTION_APPROVE_JOIN -> {
                 val uid = intent.getStringExtra(EXTRA_JOIN_UID) ?: ""
                 if (uid.isNotBlank()) signal?.sendJoinApprove(uid)
+                if (signal == null) stopSelf()
                 return START_STICKY
             }
             ACTION_REJECT_JOIN -> {
                 val uid = intent.getStringExtra(EXTRA_JOIN_UID) ?: ""
                 if (uid.isNotBlank()) signal?.sendJoinReject(uid)
+                if (signal == null) stopSelf()
                 return START_STICKY
             }
             else -> {
