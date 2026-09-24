@@ -167,9 +167,23 @@ object BfdChannel {
 
     /**
      * 借 ADB 通道拉起 daemon(shell 域执行我们的 starter;幂等,失败返回 false)。
-     * 启动后轮询 ping 确认就绪。通道闪断时 exec 自身会等待重连,无需外层守卫
+     * 启动后轮询 ping 确认就绪。通道闪断时 exec 自身会等待重连,无需外层守卫。
+     * AtomicBoolean 防重入:并发连接各自 launchCarrier 会同时进入本方法,每个都换令牌
+     * 并杀旧实例,与在途 ping/exec 竞态(实测 diag 日志"尝试1/2/3"跨线程交错);
+     * 与 ShizukuChannel.starting 同款守卫,后到者直接返回由先到者完成拉起。
      */
+    private val starting = java.util.concurrent.atomic.AtomicBoolean(false)
+
     suspend fun startViaAdb(context: Context): Boolean {
+        if (!starting.compareAndSet(false, true)) return false
+        try {
+            return doStartViaAdb(context)
+        } finally {
+            starting.set(false)
+        }
+    }
+
+    private suspend fun doStartViaAdb(context: Context): Boolean {
         val ctx = context.applicationContext
         val starter = File(ctx.applicationInfo.nativeLibraryDir, "libbfd.so")
         AdbConnectionManager.logDiag(

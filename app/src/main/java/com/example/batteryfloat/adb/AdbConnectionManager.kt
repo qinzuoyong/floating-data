@@ -150,9 +150,11 @@ object AdbConnectionManager {
                     _state.value = if (created != null) AdbState.DISCONNECTED else AdbState.NOT_PAIRED
                 }
                 // 密钥就绪时若开关已开(setEnabled 早于密钥就绪的场景),补一次启动连接
+                // (持 connectMutex:connectOnceInternal 约定调用方持锁,裸调用会与重连循环
+                // 并发建连互踢 client,见 setEnabled 处注释)
                 if (created != null && enabled) {
                     startReconnectLoop()
-                    connectOnceInternal()
+                    connectMutex.withLock { connectOnceInternal() }
                 }
             }
         }
@@ -166,7 +168,10 @@ object AdbConnectionManager {
             .edit().putBoolean(PrefsKeys.ADB_PRIV_ENABLED, value).apply()
         if (value && key != null) {
             startReconnectLoop()
-            scope.launch { connectOnceInternal() }
+            // 持 connectMutex:connectOnceInternal 约定调用方持锁,裸调用会与重连循环
+            // 并发建连,双方各自 closeClientQuietly 互踢 client(实测:多线程同时"已连接",
+            // 随后 exec 失败(Socket closed/not A_WRTE or A_CLSE) 引发重连风暴)
+            scope.launch { connectMutex.withLock { connectOnceInternal() } }
         } else if (!value) {
             reconnectJob?.cancel()
             reconnectJob = null
@@ -200,7 +205,8 @@ object AdbConnectionManager {
             .edit().putBoolean(PrefsKeys.ADB_PRIV_ENABLED, true).apply()
         if (key != null) {
             startReconnectLoop()
-            scope.launch { connectOnceInternal() }
+            // 持锁调用,同 setEnabled(防与重连循环并发建连互踢)
+            scope.launch { connectMutex.withLock { connectOnceInternal() } }
         }
     }
 
