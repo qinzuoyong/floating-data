@@ -30,6 +30,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -83,6 +84,13 @@ fun AddFamilyScreen(
     var allowLoc by remember { mutableStateOf(store.allowLocReq()) }
     var error by remember { mutableStateOf<String?>(null) }
 
+    // 页面存活标记：room-check 回调最长 15s 后才到达（超时兜底），期间用户可能已返回取消；
+    // 迟到的回调不得再执行 doSubmit（写家庭码、清空成员、启动服务），否则违背用户取消意图
+    var pageActive by remember { mutableStateOf(true) }
+    DisposableEffect(Unit) {
+        onDispose { pageActive = false }
+    }
+
 
     // 提交：保存家庭信息并启动服务（仅权限已就绪时调用）
     val doSubmit: () -> Unit = {
@@ -104,6 +112,7 @@ fun AddFamilyScreen(
     // 与家人服务共用同一份主/备端点状态，保证查询落在家庭实际所在的那台服务器上
     val joinWithCheck: () -> Unit = {
         SignalClient(BuildConfig.SIGNAL_URL, BuildConfig.SIGNAL_URL_BACKUP).checkRoom(code) { exists, ownerName ->
+            if (!pageActive) return@checkRoom
             if (!exists) {
                 Toast.makeText(context, "家庭码可用，将创建新家庭", Toast.LENGTH_SHORT).show()
             } else if (ownerName != null) {
