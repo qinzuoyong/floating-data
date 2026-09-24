@@ -54,7 +54,9 @@ import com.example.batteryfloat.service.A11ySelfHealer
 import com.example.batteryfloat.service.FloatingWindowService
 import com.example.batteryfloat.service.KeepAliveAccessibilityService
 import com.example.batteryfloat.ui.theme.DesignSystem
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * 首页 - 悬浮窗控制
@@ -418,9 +420,14 @@ fun HomeScreen(
                 onRevoke = {
                     scope.launch {
                         // 撤销结果必须回传用户：失败的条目会保留在记录中（卡片仍在），
-                        // 不能"发完命令就当成功"——否则用户以为已撤销而权限其实还在
+                        // 不能"发完命令就当成功"——否则用户以为已撤销而权限其实还在。
+                        // revokeAutoGranted → PrivShell.exec 底层是阻塞 socket/binder IO，
+                        // 必须切到 IO 调度器：主线程走内置 ADB 通道会抛 NetworkOnMainThreadException
+                        // （被 exec 吞掉 → 撤销必失败且误断已连通道），走 Shizuku 载体则阻塞主线程至 10s（ANR）
                         val failed = try {
-                            AdbAutoGrant.revokeAutoGranted(context)
+                            withContext(Dispatchers.IO) {
+                                AdbAutoGrant.revokeAutoGranted(context)
+                            }
                         } catch (e: Exception) {
                             Log.w("HomeScreen", "撤销自动授权失败", e)
                             AdbAutoGrant.loggedItems(context).map { it.kind }
