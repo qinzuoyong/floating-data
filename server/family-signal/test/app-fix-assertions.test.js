@@ -212,5 +212,70 @@ ok('已移除港澳外接矩形（不再出现旧矩形常量）',
   !/113\.82\.\.114\.44/.test(ct) && !/113\.52\.\.113\.63/.test(ct));
 ok('台湾矩形保留（其范围内无大陆陆地，无同类缺陷）', /lng in 119\.90\.\.122\.01 && lat in 21\.87\.\.25\.35/.test(ct));
 
+// ---- 2026-09-24 全量审查修复回归锁定 ----
+console.log('[P1 加入提交可被返回取消 AddFamilyScreen.kt]');
+// room-check 最长 15s 才回调；期间用户返回离开页面后，迟到回调仍会 doSubmit()：
+// 违背用户取消意图写入家庭码、清空成员列表并启动共享服务。修复形态：组合生命周期门控。
+const ADD_FAMILY = path.join(ROOT, 'app/src/main/java/com/example/batteryfloat/ui/family/AddFamilyScreen.kt');
+const afs = read(ADD_FAMILY);
+ok('存在页面存活标记（remember + DisposableEffect 置 false）',
+  /var pageActive by remember \{ mutableStateOf\(true\) \}/.test(afs) &&
+  /DisposableEffect\(Unit\) \{\s*\n\s*onDispose \{ pageActive = false \}/.test(afs));
+ok('room-check 回调先检查 pageActive 再提交（离开页面后不再 doSubmit）',
+  /checkRoom\(code\) \{[\s\S]{0,400}?if \(!pageActive\) return@checkRoom/.test(afs));
+
+console.log('[P2 撤销自动授权不得在主线程执行特权命令 HomeScreen.kt]');
+// revokeAutoGranted → PrivShell.exec 底层是阻塞 socket/binder IO：
+// 走内置 ADB 通道时主线程 socket 抛 NetworkOnMainThreadException（撤销必失败且误断通道），
+// 走 Shizuku 载体时 readText() 阻塞主线程至 10s（ANR）。修复形态：withContext(Dispatchers.IO)。
+ok('撤销调用包裹在 withContext(Dispatchers.IO)',
+  /withContext\(Dispatchers\.IO\) \{\s*\n?\s*AdbAutoGrant\.revokeAutoGranted\(context\)/.test(hs));
+ok('已引入 withContext/Dispatchers 导入',
+  /import kotlinx\.coroutines\.Dispatchers/.test(hs) && /import kotlinx\.coroutines\.withContext/.test(hs));
+
+console.log('[P2 灭屏启动悬浮窗服务不得空转采样 FloatingWindowService.kt]');
+// SCREEN_OFF/ON 是边沿触发广播：服务在灭屏期间被拉起（开机恢复/无障碍恢复/FGS 重投递）时
+// 不会再收到 SCREEN_OFF，2s 采样（含特权 shell 直读）会整夜空转。修复形态：isInteractive 门控
+// + SCREEN_ON 时补建监控器。
+const FWS = path.join(ROOT, 'app/src/main/java/com/example/batteryfloat/service/FloatingWindowService.kt');
+const fws = read(FWS);
+ok('startMonitoring 有灭屏门控（isInteractive 为 false 时不启动采样）',
+  /private fun startMonitoring\(\)[\s\S]{0,400}?isInteractive/.test(fws));
+ok('SCREEN_ON 时监控器缺失会补建（先判空再 start）',
+  /Intent\.ACTION_SCREEN_ON -> \{[\s\S]{0,200}?if \(batteryMonitor == null\) startMonitoring\(\)/.test(fws));
+
+console.log('[P2 非 START 动作不得遗留僵尸家人服务 FamilyLocationService.kt]');
+// 服务未 setup 时被 REQUEST_LOCATION/APPROVE/REJECT 拉起：isRunning=true 但无信令连接，
+// 会短路无障碍恢复路径（tryRestoreFamilyService 判 isRunning 即返回）且 UI 状态失真。
+// 修复形态：这三个分支在 signal==null 时 stopSelf()。
+const FLS = path.join(ROOT, 'app/src/main/java/com/example/batteryfloat/service/FamilyLocationService.kt');
+const fls = read(FLS);
+const cntStopSelfGuard = (fls.match(/if \(signal == null\) stopSelf\(\)/g) || []).length;
+ok('三个非 START 动作分支均有 signal==null 即 stopSelf 守卫（共 3 处）',
+  cntStopSelfGuard === 3, '实际 ' + cntStopSelfGuard + ' 处');
+
+console.log('[P2 特权通道并发连接竞态 AdbConnectionManager.kt]');
+// connectOnceInternal 约定"调用方持有 connectMutex"；setEnabled/onPaired/keyInit 三处曾裸调用，
+// 并发连接各自 closeClientQuietly 互踢对方 client（实测模拟器环回通道 1ms 内多线程同时"已连接"，
+// 随后 exec 失败(Socket closed/not A_WRTE or A_CLSE) 引发重连风暴与守护进程令牌 churn）。
+const ACM = path.join(ROOT, 'app/src/main/java/com/example/batteryfloat/adb/AdbConnectionManager.kt');
+const acm = read(ACM);
+ok('不再存在未持锁的 scope.launch { connectOnceInternal() }',
+  (acm.match(/scope\.launch \{ connectOnceInternal\(\) \}/g) || []).length === 0);
+ok('三处触发点（setEnabled/onPaired/keyInit）均持 connectMutex 调用',
+  (acm.match(/connectMutex\.withLock \{ connectOnceInternal\(\) \}/g) || []).length === 3,
+  '实际 ' + (acm.match(/connectMutex\.withLock \{ connectOnceInternal\(\) \}/g) || []).length + ' 处');
+ok('keyInit 就绪后的补连接在锁内',
+  /if \(created != null && enabled\) \{[\s\S]{0,120}?connectMutex\.withLock \{ connectOnceInternal\(\) \}/.test(acm));
+
+console.log('[P2 内置守护进程拉起防重入 BfdChannel.kt]');
+// 并发连接各自 launchCarrier → 多个 startViaAdb 同时跑：每个都换令牌并杀旧实例，
+// 与在途 ping/exec 竞态（实测 diag 日志"尝试1/2/3"跨线程交错）。修复形态与 ShizukuChannel 一致。
+const BFD = path.join(ROOT, 'app/src/main/java/com/example/batteryfloat/adb/BfdChannel.kt');
+const bfd = read(BFD);
+ok('startViaAdb 有 AtomicBoolean 防重入守卫',
+  /AtomicBoolean\(false\)/.test(bfd) && /if \(!starting\.compareAndSet\(false, true\)\)/.test(bfd));
+ok('守卫在 finally 中复位', /finally \{[\s\S]{0,40}?starting\.set\(false\)/.test(bfd));
+
 console.log('\n== 结果: ' + pass + ' 通过 / ' + fail + ' 失败 ==');
 process.exit(fail === 0 ? 0 : 1);
