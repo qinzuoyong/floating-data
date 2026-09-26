@@ -6,7 +6,6 @@ import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
-import android.util.Log
 import android.widget.Toast
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.*
@@ -28,7 +27,6 @@ import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -54,9 +52,6 @@ import com.example.batteryfloat.service.A11ySelfHealer
 import com.example.batteryfloat.service.FloatingWindowService
 import com.example.batteryfloat.service.KeepAliveAccessibilityService
 import com.example.batteryfloat.ui.theme.DesignSystem
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 
 /**
  * 首页 - 悬浮窗控制
@@ -96,9 +91,8 @@ fun HomeScreen(
     var carrierMode by remember { mutableStateOf(PrivShell.carrierMode()) }
     var showAdbPairing by remember { mutableStateOf(false) }
     val adbState by AdbConnectionManager.state.collectAsState()
-    // 自动授权记录（透明化：展示"已由 ADB 自动授予"的权限并提供撤销入口）
+    // 自动授权记录（透明化：只读展示"已由 ADB 自动授予"的权限）
     var autoGrantItems by remember { mutableStateOf(AdbAutoGrant.loggedItems(context)) }
-    val scope = rememberCoroutineScope()
 
     // 页面恢复时刷新服务运行状态
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -288,6 +282,10 @@ fun HomeScreen(
             onCheckedChange = { enable ->
                 haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                 if (enable) {
+                    // 用户此刻的意图是「开启」:清除「用户主动关」标记,恢复自愈能力。
+                    // 该标记平时由 onServiceConnected 清除,此处提前清一道,避免用户
+                    // "先关后开"后标记残留、自愈被一直压制(用户并没有再走设置里那一趟)
+                    A11ySelfHealer.markUserDisabled(context, false)
                     // 应用无法程序化开启无障碍，跳系统设置由用户授权；
                     // Android 13+ 侧载受限时可提示用 adb install 重装解除
                     Toast.makeText(
@@ -304,7 +302,11 @@ fun HomeScreen(
                         svc.disableSelf()
                         a11yKeepAlive = false
                     } else {
-                        // 实例缺失（进程被杀后未重连等），回退到系统设置手动关闭
+                        // 实例缺失（进程被杀后未重连、被系统判 crashed 等）时无法 disableSelf，
+                        // 只能跳系统设置由用户关闭。此处必须同样打标记：用户随后在设置里关掉服务时，
+                        // onDestroy 钩子与周期巡检据此判定"用户主动关"，不再把刚关掉的服务写回
+                        // （否则表现为"无障碍关不掉"）。标记在服务重新连接或用户在应用内再开启时清除。
+                        A11ySelfHealer.markUserDisabled(context, true)
                         onOpenAccessibilitySettings()
                     }
                 }
@@ -413,35 +415,9 @@ fun HomeScreen(
             }
         }
 
-        // 自动授权透明卡片：展示并支持一键撤销（撤销走 IO 协程，完成后刷新）
+        // 自动授权透明卡片：只读展示由 ADB 通道自动授予的权限（不提供应用内撤销）
         if (adbEnabled && autoGrantItems.isNotEmpty()) {
-            AdbAutoGrantCard(
-                items = autoGrantItems,
-                onRevoke = {
-                    scope.launch {
-                        // 撤销结果必须回传用户：失败的条目会保留在记录中（卡片仍在），
-                        // 不能"发完命令就当成功"——否则用户以为已撤销而权限其实还在。
-                        // revokeAutoGranted → PrivShell.exec 底层是阻塞 socket/binder IO，
-                        // 必须切到 IO 调度器：主线程走内置 ADB 通道会抛 NetworkOnMainThreadException
-                        // （被 exec 吞掉 → 撤销必失败且误断已连通道），走 Shizuku 载体则阻塞主线程至 10s（ANR）
-                        val failed = try {
-                            withContext(Dispatchers.IO) {
-                                AdbAutoGrant.revokeAutoGranted(context)
-                            }
-                        } catch (e: Exception) {
-                            Log.w("HomeScreen", "撤销自动授权失败", e)
-                            AdbAutoGrant.loggedItems(context).map { it.kind }
-                        }
-                        autoGrantItems = AdbAutoGrant.loggedItems(context)
-                        Toast.makeText(
-                            context,
-                            if (failed.isEmpty()) "已撤销全部自动授权"
-                            else "以下项撤销未生效：" + failed.joinToString("、") { it.label },
-                            Toast.LENGTH_LONG
-                        ).show()
-                    }
-                }
-            )
+            AdbAutoGrantCard(items = autoGrantItems)
         }
 
         // 底部间距

@@ -12,7 +12,6 @@ import com.example.batteryfloat.service.KeepAliveAccessibilityService
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /**
@@ -30,8 +29,12 @@ import kotlinx.coroutines.launch
  * 每步执行后读回验证,失败只记日志不改状态:雷电等 ROM 的 TLS 通道 shell 流
  * 对 pm grant/appops 会静默失败(假成功),读回验证可如实暴露。
  *
- * 知情与可逆(审查整改):凡是"由本模块自动授予"的项都会落盘记录,
- * 供 UI 展示实际状态并支持一键撤销——自动授权不应成为用户不可见的既成事实。
+ * 知情(审查整改):凡是"由本模块自动授予"的项都会落盘记录,供 UI 展示实际状态——
+ * 自动授权不应成为用户不可见的既成事实。
+ *
+ * 2026-09 起不再提供应用内"一键撤销"：撤销遍历中撤到运行时权限(定位/通知)会被系统
+ * 强杀进程，序列后段执行不到、重连后又被本模块的自动授予流程授回，结果既不可靠也不
+ * 可解释；撤权需求改为引导用户在系统设置中逐项处理。
  */
 object AdbAutoGrant {
 
@@ -39,7 +42,7 @@ object AdbAutoGrant {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
-    /** 自动授权条目（落盘记录、UI 展示与撤销均以该枚举为准） */
+    /** 自动授权条目（落盘记录与 UI 展示均以该枚举为准） */
     enum class AutoGrant(val label: String) {
         SECURE_SETTINGS("安全设置写入（WRITE_SECURE_SETTINGS）"),
         ACCESSIBILITY("无障碍保活写回"),
@@ -134,16 +137,16 @@ object AdbAutoGrant {
         }
     }
 
-    // ===== 记录 / 状态 / 撤销 =====
+    // ===== 记录 / 状态 =====
 
     /**
-     * 已由本模块自动授权的条目（含当前实际生效状态），供 UI 展示与撤销入口使用。
+     * 已由本模块自动授权的条目（含当前实际生效状态），供 UI 只读展示使用。
      * 记录在授予成功时写入，用户手动授予的项不会被记入。
      */
     fun loggedItems(ctx: Context): List<AutoGrantItem> =
         loggedKinds(ctx).map { AutoGrantItem(it, isGranted(ctx, it)) }
 
-    /** 当前该条目是否仍然生效（撤销后即为 false） */
+    /** 当前该条目是否仍然生效（用户可在系统设置中自行关闭，故展示时需按实况读取） */
     fun isGranted(ctx: Context, kind: AutoGrant): Boolean = when (kind) {
         AutoGrant.SECURE_SETTINGS -> hasPermission(ctx, "android.permission.WRITE_SECURE_SETTINGS")
         AutoGrant.ACCESSIBILITY -> KeepAliveAccessibilityService.isEnabledInSettings(ctx)
@@ -153,60 +156,6 @@ object AdbAutoGrant {
         AutoGrant.NOTIFICATIONS -> hasPermission(ctx, "android.permission.POST_NOTIFICATIONS")
         AutoGrant.BATTERY_WHITELIST -> (ctx.getSystemService(Context.POWER_SERVICE) as? PowerManager)
             ?.isIgnoringBatteryOptimizations(ctx.packageName) == true
-    }
-
-    /** 无障碍撤销后等待服务异步销毁的宽限期（disableSelf 不在命令返回时立即生效） */
-    private const val ACCESSIBILITY_REVOKE_GRACE_MS = 1_000L
-
-    /**
-     * 撤销本模块自动授予的全部权限/开关（用户显式操作，逐项执行反向命令）。
-     *
-     * 每项撤销后**读回实际状态**复核：只有确实不再生效的条目才从记录中移除，
-     * 撤销失败的条目保留在记录里，UI 仍可展示并重试——不能"命令发出去就当成功"，
-     * 否则记录被清空后用户无从得知权限其实还在。
-     * 无障碍保活走"标记用户主动关闭 + disableSelf"，避免自愈立即写回。
-     *
-     * @return 撤销失败的条目（空列表 = 全部撤销成功）
-     */
-    suspend fun revokeAutoGranted(ctx: Context): List<AutoGrant> {
-        val kinds = loggedKinds(ctx)
-        if (kinds.isEmpty()) return emptyList()
-        val pkg = ctx.packageName
-        val failed = mutableListOf<AutoGrant>()
-        for (kind in kinds) {
-            val result = when (kind) {
-                AutoGrant.SECURE_SETTINGS ->
-                    PrivShell.exec("pm revoke $pkg android.permission.WRITE_SECURE_SETTINGS")
-                AutoGrant.OVERLAY ->
-                    PrivShell.exec("appops set $pkg SYSTEM_ALERT_WINDOW default")
-                AutoGrant.LOCATION -> {
-                    // 先撤后台定位再撤精确定位（顺序与系统依赖一致）
-                    PrivShell.exec("pm revoke $pkg android.permission.ACCESS_BACKGROUND_LOCATION")
-                    PrivShell.exec("pm revoke $pkg android.permission.ACCESS_FINE_LOCATION")
-                    PrivShell.exec("pm revoke $pkg android.permission.ACCESS_COARSE_LOCATION")
-                }
-                AutoGrant.NOTIFICATIONS ->
-                    PrivShell.exec("pm revoke $pkg android.permission.POST_NOTIFICATIONS")
-                AutoGrant.BATTERY_WHITELIST ->
-                    PrivShell.exec("dumpsys deviceidle whitelist -$pkg")
-                AutoGrant.ACCESSIBILITY -> {
-                    // 先打"用户主动关"标记，再关服务：onDestroy 的自愈钩子据此跳过，避免立即写回
-                    A11ySelfHealer.markUserDisabled(ctx, true)
-                    KeepAliveAccessibilityService.instance?.disableSelf()
-                    // disableSelf 是异步销毁：等服务退出后再复核，避免把"尚未销毁"误判为失败
-                    delay(ACCESSIBILITY_REVOKE_GRACE_MS)
-                    null
-                }
-            }
-            if (isGranted(ctx, kind)) {
-                failed.add(kind)
-                Log.w(TAG, "撤销 $kind 未生效(输出=${result?.take(80)})")
-            } else {
-                removeGrantLog(ctx, kind)
-                Log.i(TAG, "已撤销 $kind (输出=${result?.take(80)})")
-            }
-        }
-        return failed
     }
 
     private fun kindOf(perm: String): AutoGrant =
@@ -225,15 +174,6 @@ object AdbAutoGrant {
         val names = ctx.getSharedPreferences(PrefsKeys.PREFS_NAME, Context.MODE_PRIVATE)
             .getStringSet(PrefsKeys.AUTO_GRANT_LOG, emptySet()).orEmpty()
         return names.mapNotNull { name -> AutoGrant.entries.firstOrNull { it.name == name } }
-    }
-
-    /** 移除单条记录（该条已确认撤销生效时调用；不再整体清空，失败项得以保留供重试） */
-    private fun removeGrantLog(ctx: Context, kind: AutoGrant) {
-        val prefs = ctx.getSharedPreferences(PrefsKeys.PREFS_NAME, Context.MODE_PRIVATE)
-        val current = prefs.getStringSet(PrefsKeys.AUTO_GRANT_LOG, emptySet()).orEmpty().toMutableSet()
-        if (current.remove(kind.name)) {
-            prefs.edit().putStringSet(PrefsKeys.AUTO_GRANT_LOG, current).apply()
-        }
     }
 
     private fun hasPermission(ctx: Context, perm: String) = ContextCompat.checkSelfPermission(

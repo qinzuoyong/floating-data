@@ -69,7 +69,7 @@ object PrefsKeys {
     const val PRIV_BASELINE_TCP_TRIES = "priv_baseline_tcp_tries"
     /** 用户在应用内主动关闭无障碍保活(此时系统侧被关视为用户意图,自愈不触发) */
     const val A11Y_USER_DISABLED = "a11y_user_disabled"
-    /** ADB 通道自动授予的权限/开关记录(AutoGrant 枚举名集合,供 UI 展示与一键撤销) */
+    /** ADB 通道自动授予的权限/开关记录(AutoGrant 枚举名集合,供 UI 只读展示) */
     const val AUTO_GRANT_LOG = "auto_grant_log"
 
     // ===== UI 状态 =====
