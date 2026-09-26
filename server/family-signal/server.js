@@ -76,6 +76,24 @@ function sanitizeLocationPayload(payload) {
   };
 }
 
+/**
+ * 状态载荷白名单校验（与位置载荷同一目的）：
+ * 只放行电量百分比与合理时间戳，畸形/越界数据在服务端即被拦下，不转发给其他成员的 App。
+ */
+function sanitizeStatusPayload(payload) {
+  if (!payload || typeof payload !== 'object') return null;
+  const battery = Number(payload.battery);
+  const ts = Number(payload.ts);
+  if (!Number.isFinite(battery)) return null;
+  if (battery < 0 || battery > 100) return null;
+  const rounded = Math.round(battery);
+  if (rounded < 0 || rounded > 100) return null;
+  return {
+    battery: rounded,
+    ts: Number.isFinite(ts) ? ts : Date.now()
+  };
+}
+
 /** 清理显示名：去除控制字符并截断，防止超长/畸形文本进入广播与持久化 */
 function sanitizeName(name, fallbackUid) {
   const cleaned = String(name || '')
@@ -414,6 +432,42 @@ wss.on('connection', (ws, req) => {
         const entry = rs ? rs.members.get(to) : undefined;
         if (entry && entry.ws.readyState === WebSocket.OPEN) {
           send(entry.ws, { type: 'loc-res', from: ws.uid, name: ws.name, to, payload });
+        }
+        break;
+      }
+
+      case 'stat-req': {
+        const to = String(msg.to || '').trim();
+        if (!ws.uid || !ws.room) { send(ws, { type: 'error', code: 'not_registered' }); break; }
+        // 独立限流桶：电量请求在对端只是读一次系统电量（不触发定位），故比位置请求宽松，
+        // 也不占用位置请求的额度（loc: 桶 10/分钟）
+        if (rateLimited('stat:' + ws.room + ':' + ws.uid, 30, 60000)) {
+          send(ws, { type: 'error', code: 'rate_limited', message: '状态请求过于频繁' });
+          break;
+        }
+        if (!to) { send(ws, { type: 'error', code: 'no_target' }); break; }
+        const statRs = rooms.get(ws.room);
+        const statEntry = statRs ? statRs.members.get(to) : undefined;
+        if (!statEntry || statEntry.ws.readyState !== WebSocket.OPEN) {
+          send(ws, { type: 'error', code: 'offline', message: '目标离线' });
+          break;
+        }
+        send(statEntry.ws, { type: 'stat-req', from: ws.uid, name: ws.name, to, payload: {} });
+        break;
+      }
+
+      case 'stat-res': {
+        const to = String(msg.to || '').trim();
+        if (!ws.uid || !ws.room || !to) break;
+        const statPayload = sanitizeStatusPayload(msg.payload);
+        if (!statPayload) {
+          console.log('[' + new Date().toISOString() + '] stat-res dropped (invalid payload) from=' + ws.uid);
+          break;
+        }
+        const statRs2 = rooms.get(ws.room);
+        const statEntry2 = statRs2 ? statRs2.members.get(to) : undefined;
+        if (statEntry2 && statEntry2.ws.readyState === WebSocket.OPEN) {
+          send(statEntry2.ws, { type: 'stat-res', from: ws.uid, name: ws.name, to, payload: statPayload });
         }
         break;
       }
