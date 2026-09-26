@@ -2,8 +2,8 @@
 /**
  * App 侧修复的源码级回归断言（零依赖）。
  *
- * 这两处缺陷都是"行为静默错误"，Kotlin 编译期无法发现，故用源码断言锁定修复形态，
- * 防止后续改动把错误逻辑改回来。
+ * 这些缺陷都是"行为静默错误"或"产品决定"，Kotlin 编译期无法发现，
+ * 故用源码断言锁定修复形态，防止后续改动把逻辑或决定改回去。
  *
  * 运行：node server/family-signal/test/app-fix-assertions.test.js
  */
@@ -12,8 +12,10 @@ const path = require('path');
 
 const ROOT = path.join(__dirname, '..', '..', '..');
 const AUTO_GRANT = path.join(ROOT, 'app/src/main/java/com/example/batteryfloat/adb/AdbAutoGrant.kt');
+const AUTO_GRANT_CARD = path.join(ROOT, 'app/src/main/java/com/example/batteryfloat/ui/AdbAutoGrantCard.kt');
 const PRIV_BASELINE = path.join(ROOT, 'app/src/main/java/com/example/batteryfloat/adb/PrivBaseline.kt');
 const HOME = path.join(ROOT, 'app/src/main/java/com/example/batteryfloat/ui/HomeScreen.kt');
+const A11Y_HEALER = path.join(ROOT, 'app/src/main/java/com/example/batteryfloat/service/A11ySelfHealer.kt');
 const ADB_KEY = path.join(ROOT, 'app/src/main/java/com/example/batteryfloat/adb/AdbKey.kt');
 
 let pass = 0, fail = 0;
@@ -25,23 +27,42 @@ const read = (p) => fs.readFileSync(p, 'utf8');
 
 console.log('\n== App 侧修复源码断言 ==\n');
 
-// ---- 修复 3：撤销必须读回实际状态，失败项不得被清掉 ----
-console.log('[撤销透明化 AdbAutoGrant.kt]');
 const ag = read(AUTO_GRANT);
-ok('撤销返回失败条目列表（不再只回 Boolean）',
-  /suspend fun revokeAutoGranted\(ctx: Context\): List<AutoGrant>/.test(ag));
-ok('逐项读回复核实际状态', /if \(isGranted\(ctx, kind\)\)/.test(ag));
-ok('失败项计入 failed 列表', /failed\.add\(kind\)/.test(ag));
-ok('仅对已生效撤销项移除记录', /removeGrantLog\(ctx, kind\)/.test(ag));
-ok('不再整体清空记录（clearGrantLog 已移除）', !/clearGrantLog/.test(ag));
-ok('无障碍撤销保留异步宽限期', /ACCESSIBILITY_REVOKE_GRACE_MS/.test(ag) && /delay\(ACCESSIBILITY_REVOKE_GRACE_MS\)/.test(ag));
-ok('已引入 delay 导入', /import kotlinx\.coroutines\.delay/.test(ag));
-
-console.log('[撤销结果上报 HomeScreen.kt]');
 const hs = read(HOME);
-ok('撤销结果回传用户（Toast 提示）', /已撤销全部自动授权/.test(hs) && /撤销未生效/.test(hs));
-ok('撤销异常被收敛（不冒泡崩溃）', /撤销自动授权失败/.test(hs));
-ok('已引入 Log 导入', /import android\.util\.Log/.test(hs));
+
+// ---- 产品决定：撤销自动授权功能整体移除（2026-09） ----
+// 撤销遍历中撤到运行时权限(定位/通知)会被系统强杀进程，序列后段执行不到；进程重启后
+// 特权通道重连，自动授予流程又把已撤项原样授回。既不可靠也不可解释，故整体移除该功能，
+// 自动授权卡片转为只读展示。本组断言锁定"不被误加回来"。
+console.log('[撤销自动授权功能已移除 AdbAutoGrant.kt / AdbAutoGrantCard.kt]');
+const agc = read(AUTO_GRANT_CARD);
+ok('AdbAutoGrant 不再提供撤销入口（revokeAutoGranted 已移除）',
+  !/fun revokeAutoGranted/.test(ag));
+ok('AdbAutoGrant 不再有反向授权命令（pm revoke / appops default / whitelist -）',
+  !/pm revoke/.test(ag) && !/SYSTEM_ALERT_WINDOW default/.test(ag) && !/deviceidle whitelist -/.test(ag));
+ok('不再有撤销专用辅助函数与常量（removeGrantLog / ACCESSIBILITY_REVOKE_GRACE_MS）',
+  !/removeGrantLog/.test(ag) && !/ACCESSIBILITY_REVOKE_GRACE_MS/.test(ag));
+ok('自动授权卡片无撤销按钮/弹窗回调（只读展示）',
+  !/onRevoke/.test(agc) && !/撤销全部自动授权/.test(agc) && !/AlertDialog/.test(agc));
+ok('HomeScreen 不再持有撤销协程（无 revokeAutoGranted / rememberCoroutineScope）',
+  !/revokeAutoGranted/.test(hs) && !/rememberCoroutineScope/.test(hs));
+ok('自动授权卡片仍保留透明化展示（条目状态仍可见）',
+  /items\.forEach \{ item ->/.test(agc) && /if \(item\.granted\) "已生效" else "已失效"/.test(agc));
+
+// ---- 无障碍"用户意图"标记（2026-09 审查修复） ----
+// 实例缺失(crashed/未重连)时无法 disableSelf，旧实现只跳系统设置而不打标记：用户随后在
+// 系统设置里关掉服务，onDestroy 钩子与周期巡检判定不出用户意图，会把刚关掉的服务写回
+// （表现为"无障碍关不掉"）。修复形态：else 分支同样打标记；开启分支提前清除标记，
+// 避免"先关后开"后标记残留、自愈被一直压制。
+console.log('[无障碍用户意图标记 HomeScreen.kt]');
+ok('实例缺失分支先打「用户主动关」标记再跳系统设置',
+  /A11ySelfHealer\.markUserDisabled\(context, true\)\s*\n\s*onOpenAccessibilitySettings\(\)/.test(hs));
+ok('开启分支清除标记（先关后开不留残留）',
+  /if \(enable\) \{[\s\S]{0,400}?A11ySelfHealer\.markUserDisabled\(context, false\)/.test(hs));
+const healer = read(A11Y_HEALER);
+ok('自愈与自动授权均以该标记为门控（尊重用户意图）',
+  /if \(isUserDisabled\(ctx\)\) return@launch/.test(healer) &&
+  /if \(isUserDisabled\(ctx\)\) return false/.test(healer));
 
 // ---- 修复 2：密钥未就绪时不得置"已尝试"标记 ----
 console.log('[trust-key 时序 PrivBaseline.kt]');
@@ -223,15 +244,6 @@ ok('存在页面存活标记（remember + DisposableEffect 置 false）',
   /DisposableEffect\(Unit\) \{\s*\n\s*onDispose \{ pageActive = false \}/.test(afs));
 ok('room-check 回调先检查 pageActive 再提交（离开页面后不再 doSubmit）',
   /checkRoom\(code\) \{[\s\S]{0,400}?if \(!pageActive\) return@checkRoom/.test(afs));
-
-console.log('[P2 撤销自动授权不得在主线程执行特权命令 HomeScreen.kt]');
-// revokeAutoGranted → PrivShell.exec 底层是阻塞 socket/binder IO：
-// 走内置 ADB 通道时主线程 socket 抛 NetworkOnMainThreadException（撤销必失败且误断通道），
-// 走 Shizuku 载体时 readText() 阻塞主线程至 10s（ANR）。修复形态：withContext(Dispatchers.IO)。
-ok('撤销调用包裹在 withContext(Dispatchers.IO)',
-  /withContext\(Dispatchers\.IO\) \{\s*\n?\s*AdbAutoGrant\.revokeAutoGranted\(context\)/.test(hs));
-ok('已引入 withContext/Dispatchers 导入',
-  /import kotlinx\.coroutines\.Dispatchers/.test(hs) && /import kotlinx\.coroutines\.withContext/.test(hs));
 
 console.log('[P2 灭屏启动悬浮窗服务不得空转采样 FloatingWindowService.kt]');
 // SCREEN_OFF/ON 是边沿触发广播：服务在灭屏期间被拉起（开机恢复/无障碍恢复/FGS 重投递）时
