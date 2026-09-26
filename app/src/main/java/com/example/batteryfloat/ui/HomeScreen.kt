@@ -81,6 +81,12 @@ fun HomeScreen(
     var a11yKeepAlive by remember {
         mutableStateOf(KeepAliveAccessibilityService.isEnabledInSettings(context))
     }
+    // 「用户主动关」意图标记（用户在应用内点过关闭）。它与系统侧是否开启组合出
+    // 「关闭请求未完成」态：点了关闭却没在系统设置里真正关掉，此时保活自愈被该标记暂停，
+    // 需要显性提示与取消入口，否则表现为「保活悄悄失效」
+    var a11yUserDisabled by remember { mutableStateOf(A11ySelfHealer.isUserDisabled(context)) }
+    // 关闭请求已发出但系统侧仍开启（= 用户尚未完成关闭）：见下方提示卡片
+    val a11yPendingOff = a11yKeepAlive && a11yUserDisabled
     // ADB 高精度数据源(批次 2:通道开关与状态;批次 3 接入数据)
     var adbEnabled by remember { mutableStateOf(prefs.getBoolean(PrefsKeys.ADB_PRIV_ENABLED, false)) }
     // Shizuku 常驻服务可用性(页面恢复时刷新;生效时无线调试可关)
@@ -101,6 +107,7 @@ fun HomeScreen(
             if (event == Lifecycle.Event.ON_RESUME) {
                 isServiceRunning = FloatingWindowService.isRunning
                 a11yKeepAlive = KeepAliveAccessibilityService.isEnabledInSettings(context)
+                a11yUserDisabled = A11ySelfHealer.isUserDisabled(context)
                 adbEnabled = prefs.getBoolean(PrefsKeys.ADB_PRIV_ENABLED, false)
                 shizukuAlive = PrivShell.shizukuReady()
                 bfdAlive = BfdChannel.aliveCached()
@@ -123,10 +130,12 @@ fun HomeScreen(
         val observer = object : ContentObserver(Handler(Looper.getMainLooper())) {
             override fun onChange(selfChange: Boolean) {
                 a11yKeepAlive = KeepAliveAccessibilityService.isEnabledInSettings(context)
+                a11yUserDisabled = A11ySelfHealer.isUserDisabled(context)
             }
         }
         // 注册前同步读一次,避免错过注册前后可能发生的变更
         a11yKeepAlive = KeepAliveAccessibilityService.isEnabledInSettings(context)
+        a11yUserDisabled = A11ySelfHealer.isUserDisabled(context)
         resolver.registerContentObserver(
             Settings.Secure.getUriFor(Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES),
             false, observer
@@ -276,8 +285,11 @@ fun HomeScreen(
             },
             iconBackgroundColor = MaterialTheme.colorScheme.primaryContainer,
             title = "无障碍保活",
-            subtitle = if (a11yKeepAlive) "运行中 · 仅保活，不读取屏幕内容"
-            else "推荐：重启后悬浮窗与家人位置共享自动恢复，后台存活率大幅提升",
+            subtitle = when {
+                a11yPendingOff -> "已请求关闭——请在系统设置中完成，见下方说明"
+                a11yKeepAlive -> "运行中 · 仅保活，不读取屏幕内容"
+                else -> "推荐：重启后悬浮窗与家人位置共享自动恢复，后台存活率大幅提升"
+            },
             checked = a11yKeepAlive,
             onCheckedChange = { enable ->
                 haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
@@ -286,6 +298,7 @@ fun HomeScreen(
                     // 该标记平时由 onServiceConnected 清除,此处提前清一道,避免用户
                     // "先关后开"后标记残留、自愈被一直压制(用户并没有再走设置里那一趟)
                     A11ySelfHealer.markUserDisabled(context, false)
+                    a11yUserDisabled = false
                     // 应用无法程序化开启无障碍，跳系统设置由用户授权；
                     // Android 13+ 侧载受限时可提示用 adb install 重装解除
                     Toast.makeText(
@@ -301,17 +314,44 @@ fun HomeScreen(
                         A11ySelfHealer.markUserDisabled(context, true)
                         svc.disableSelf()
                         a11yKeepAlive = false
+                        a11yUserDisabled = true
                     } else {
                         // 实例缺失（进程被杀后未重连、被系统判 crashed 等）时无法 disableSelf，
                         // 只能跳系统设置由用户关闭。此处必须同样打标记：用户随后在设置里关掉服务时，
                         // onDestroy 钩子与周期巡检据此判定"用户主动关"，不再把刚关掉的服务写回
                         // （否则表现为"无障碍关不掉"）。标记在服务重新连接或用户在应用内再开启时清除。
+                        // 用户若没去设置里完成关闭，此处留下的标记会暂停自愈——由下方提示卡片
+                        // 显性告知并提供取消入口，不让保活被静默压制
                         A11ySelfHealer.markUserDisabled(context, true)
+                        a11yUserDisabled = true
                         onOpenAccessibilitySettings()
                     }
                 }
             }
         )
+
+        // 关闭请求未完成（应用内点过关闭，但系统设置里仍为开启）：保活自愈被该标记暂停，
+        // 此处显性说明并提供取消入口——尊重用户意图，但不让保活被静默压制
+        if (a11yPendingOff) {
+            SettingActionCard(
+                icon = {
+                    Icon(
+                        Icons.Filled.Shield,
+                        contentDescription = "取消关闭请求",
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(24.dp)
+                    )
+                },
+                iconBackgroundColor = MaterialTheme.colorScheme.primaryContainer,
+                title = "取消上次的关闭请求",
+                subtitle = "系统设置里无障碍仍为开启；取消该请求即恢复自动保活（被系统关闭时自动写回）",
+                onClick = {
+                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    A11ySelfHealer.markUserDisabled(context, false)
+                    a11yUserDisabled = false
+                }
+            )
+        }
 
         // 高精度数据源(ADB 无线调试,批次 2 通道 + 批次 3 数据接入)
         SettingSwitchCard(

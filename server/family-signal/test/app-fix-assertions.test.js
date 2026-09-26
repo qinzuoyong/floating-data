@@ -54,11 +54,17 @@ ok('自动授权卡片仍保留透明化展示（条目状态仍可见）',
 // 系统设置里关掉服务，onDestroy 钩子与周期巡检判定不出用户意图，会把刚关掉的服务写回
 // （表现为"无障碍关不掉"）。修复形态：else 分支同样打标记；开启分支提前清除标记，
 // 避免"先关后开"后标记残留、自愈被一直压制。
+// 标记的另一面是"用户点了关闭却没完成"：此时自愈被暂停而用户无从得知，故首页对
+// 「系统侧仍开启 + 标记为关」这一组合显性提示，并提供取消入口（清除标记）。
 console.log('[无障碍用户意图标记 HomeScreen.kt]');
 ok('实例缺失分支先打「用户主动关」标记再跳系统设置',
-  /A11ySelfHealer\.markUserDisabled\(context, true\)\s*\n\s*onOpenAccessibilitySettings\(\)/.test(hs));
+  /A11ySelfHealer\.markUserDisabled\(context, true\)\s*\n\s*(a11yUserDisabled = true\s*\n\s*)?onOpenAccessibilitySettings\(\)/.test(hs));
 ok('开启分支清除标记（先关后开不留残留）',
   /if \(enable\) \{[\s\S]{0,400}?A11ySelfHealer\.markUserDisabled\(context, false\)/.test(hs));
+ok('关闭请求未完成态可派生（系统侧仍开启 且 标记为关）',
+  /val a11yPendingOff = a11yKeepAlive && a11yUserDisabled/.test(hs));
+ok('该状态提供取消入口（清除标记恢复自愈）',
+  /if \(a11yPendingOff\) \{[\s\S]{0,1500}?A11ySelfHealer\.markUserDisabled\(context, false\)/.test(hs));
 const healer = read(A11Y_HEALER);
 ok('自愈与自动授权均以该标记为门控（尊重用户意图）',
   /if \(isUserDisabled\(ctx\)\) return@launch/.test(healer) &&
