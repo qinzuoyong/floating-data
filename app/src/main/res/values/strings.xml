@@ -15,7 +15,7 @@
     <string name="family_code_label">家庭码 %1$s</string>
     <string name="family_my_name_label">我的备注名：%1$s</string>
     <string name="family_unset">未设置</string>
-    <string name="family_allow_loc_req">允许家人请求我的位置</string>
+    <string name="family_allow_loc_req">允许家人请求我的位置与电量</string>
     <string name="family_bg_loc_denied_hint">未授予「始终允许」定位，应用在后台时可能无法应答家人的位置请求</string>
     <string name="family_change_hint">更换家庭：点击下方「加入新家庭」重新输入家庭码</string>
     <string name="family_join_new">加入新家庭</string>
@@ -24,6 +24,9 @@
     <string name="family_last_loc_none">上次位置：暂无</string>
     <string name="family_last_loc_prefix">上次位置：%1$s</string>
     <string name="family_accuracy_suffix">（精度 ±%1$dm）</string>
+    <string name="family_battery_value">电量 %1$d%%</string>
+    <string name="family_battery_unknown">电量未知</string>
+    <string name="family_battery_refresh_desc">刷新电量</string>
     <string name="family_map">地图</string>
     <string name="family_service_off">服务未开启</string>
     <string name="family_connected">已连接</string>
@@ -33,7 +36,7 @@
     <string name="family_pair_hint">配对方式：两台设备输入同一个 6 位家庭码，即可互相查看位置。</string>
     <string name="family_code_input_hint">家庭码（6 位数字）</string>
     <string name="family_name_input_hint">我的备注名（展示给家人）</string>
-    <string name="family_allow_loc_req_desc">关闭后不响应位置请求，只能查看家人位置</string>
+    <string name="family_allow_loc_req_desc">关闭后不响应位置与电量请求，只能查看家人</string>
     <string name="family_join_submit">加入家庭并开启共享</string>
     <string name="family_code_invalid">请输入 6 位数字家庭码</string>
     <string name="family_back">返回</string>
@@ -55,7 +58,7 @@
     <string name="family_join_reject">拒绝</string>
     <string name="family_join_pending_hint">等待创建人审核，请稍候…</string>
     <string name="family_join_rejected_hint">加入申请被拒绝，请联系创建人</string>
-    <string name="family_error_offline">对方不在线，暂时无法获取位置</string>
+    <string name="family_error_offline">对方不在线，暂时无法获取</string>
     <string name="family_error_not_connected">信令未连接，请稍后重试</string>
     <string name="family_error_no_signal_config">未配置信令服务器地址，家人位置共享不可用</string>
     <string name="family_error_generic">操作失败：%1$s</string>

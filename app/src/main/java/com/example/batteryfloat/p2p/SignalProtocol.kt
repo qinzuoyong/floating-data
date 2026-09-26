@@ -33,6 +33,10 @@ object SignalTypes {
     const val LOC_REQ = "loc-req"
     /** 位置应答（中继给请求方） */
     const val LOC_RES = "loc-res"
+    /** 请求某成员状态（当前电量，中继） */
+    const val STAT_REQ = "stat-req"
+    /** 状态应答（中继给请求方） */
+    const val STAT_RES = "stat-res"
     /** 心跳 */
     const val PING = "ping"
     const val PONG = "pong"
@@ -77,4 +81,17 @@ data class LocationPayload(
     val lng: Double,
     val ts: Long,
     val accuracy: Float = 0f
+)
+
+/**
+ * stat-res 状态载荷（payload 字段）
+ *
+ * 目前只共享"当前电量"这一项（产品范围约定）：不附带是否充电、温度等信息，
+ * 也不做周期性上报——仅在家人请求时读一次系统电量回传。
+ */
+data class StatusPayload(
+    /** 电量百分比（0-100） */
+    val battery: Int,
+    /** 取值时刻（毫秒时间戳） */
+    val ts: Long
 )

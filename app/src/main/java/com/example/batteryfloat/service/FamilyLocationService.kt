@@ -11,6 +11,7 @@ import androidx.core.content.ContextCompat
 import com.example.batteryfloat.BuildConfig
 import com.example.batteryfloat.PrefsKeys
 import com.example.batteryfloat.R
+import com.example.batteryfloat.data.BatteryLevel
 import com.example.batteryfloat.family.FamilyStore
 import com.example.batteryfloat.location.OnDemandLocationProvider
 import com.example.batteryfloat.notif.Notifs
@@ -74,6 +75,16 @@ class FamilyLocationService : Service() {
      */
     private val incomingLocReqAt = java.util.concurrent.ConcurrentHashMap<String, Long>()
 
+    /**
+     * 本机已发出的状态(电量)请求记录(uid → 发出时间戳)。
+     * 与 [requestedLocations] 同理：只接受"曾请求过状态"的成员在有效期内回传的 stat-res，
+     * 防止房间内任意成员伪造电量或注入幽灵成员。
+     */
+    private val requestedStatus = java.util.concurrent.ConcurrentHashMap<String, Long>()
+
+    /** 家人发来的状态请求去重窗口(uid → 上次受理时间戳)，防家人连点 */
+    private val incomingStatReqAt = java.util.concurrent.ConcurrentHashMap<String, Long>()
+
     override fun onCreate() {
         super.onCreate()
         isRunning = true
@@ -101,6 +112,13 @@ class FamilyLocationService : Service() {
                 // 通道未建立（如用户已停止共享后从地图页冷启动本服务）：提示已上屏（静态
                 // StateFlow，服务销毁后 UI 仍可读），随即退出——避免 isRunning=true 的僵尸
                 // 实例短路无障碍恢复路径（tryRestoreFamilyService 判 isRunning 即返回）并让 UI 状态失真
+                if (signal == null) stopSelf()
+                return START_STICKY
+            }
+            ACTION_REQUEST_STATUS -> {
+                val uid = intent.getStringExtra(EXTRA_UID) ?: ""
+                if (uid.isNotBlank()) requestMemberStatus(uid)
+                // 守卫同位置请求：通道未建立时不留僵尸实例
                 if (signal == null) stopSelf()
                 return START_STICKY
             }
@@ -141,6 +159,24 @@ class FamilyLocationService : Service() {
 
     override fun onBind(intent: Intent?): IBinder? = null
 
+    /**
+     * 请求指定成员的状态（电量）（UI 调用入口）；未连接时上屏提示，不再静默丢弃
+     *
+     * 与位置请求同一套记账：记下"已请求"用于校验回包的来源与时序。
+     */
+    fun requestMemberStatus(uid: String) {
+        val sent = signal?.sendStatReq(uid) == true
+        if (!sent) {
+            postNotice(getString(R.string.family_error_not_connected))
+            return
+        }
+        requestedStatus[uid] = System.currentTimeMillis()
+        // 顺带回收过期记录,避免长时间运行后无界增长
+        val expireBefore = System.currentTimeMillis() - LOC_REQ_TTL_MS
+        requestedStatus.entries.removeAll { it.value < expireBefore }
+        incomingStatReqAt.entries.removeAll { it.value < expireBefore }
+    }
+
     override fun onDestroy() {
         Log.i(TAG, "onDestroy")
         isRunning = false
@@ -151,6 +187,8 @@ class FamilyLocationService : Service() {
         _connection.value = SignalClient.State.Idle
         requestedLocations.clear()
         incomingLocReqAt.clear()
+        requestedStatus.clear()
+        incomingStatReqAt.clear()
         signal?.disconnect()
         provider?.close()
         workScope.cancel()
@@ -363,6 +401,59 @@ class FamilyLocationService : Service() {
                 s.updateLocation(from, loc)
             }
 
+            SignalTypes.STAT_REQ -> {
+                val from = msg.from ?: return
+                // 与位置请求共用同一个隐私开关：关闭后位置与电量都不应答
+                if (!s.allowLocReq()) {
+                    Log.i(TAG, "ignore stat-req from " + from + " (privacy off)")
+                    return
+                }
+                // 同一成员短窗口内的重复请求直接忽略（电量读取几乎无成本，仅防连点刷屏）
+                val now = System.currentTimeMillis()
+                val lastIncoming = incomingStatReqAt[from]
+                if (lastIncoming != null && now - lastIncoming < STAT_REQ_COOLDOWN_MS) {
+                    Log.i(TAG, "ignore duplicated stat-req from " + from)
+                    return
+                }
+                incomingStatReqAt[from] = now
+                // 受理后记入 requestedStatus：对该成员回传的 stat-res 在有效期内放行
+                requestedStatus[from] = now
+                val battery = BatteryLevel.currentPercent(this)
+                if (battery == null) {
+                    Log.w(TAG, "battery level unavailable, cannot answer " + from)
+                    return
+                }
+                // 现读即回：读的是系统粘性广播，无定位、无采样成本，故一次回传即可
+                signal?.sendStatRes(
+                    from,
+                    com.example.batteryfloat.p2p.StatusPayload(battery, now)
+                )
+            }
+
+            SignalTypes.STAT_RES -> {
+                val from = msg.from ?: return
+                // 只接受本机曾请求过、且在有效期内的成员应答（同 loc-res 的防伪造约束）
+                val requestedAt = requestedStatus[from]
+                if (requestedAt == null) {
+                    Log.w(TAG, "drop unsolicited stat-res from " + from)
+                    return
+                }
+                if (System.currentTimeMillis() - requestedAt > LOC_RES_TTL_MS) {
+                    Log.w(TAG, "drop expired stat-res from " + from)
+                    return
+                }
+                val status = msg.payload?.let {
+                    runCatching {
+                        gson.fromJson(it, com.example.batteryfloat.p2p.StatusPayload::class.java)
+                    }.getOrNull()
+                } ?: return
+                if (!isPlausibleStatus(status)) {
+                    Log.w(TAG, "drop invalid stat-res payload from " + from)
+                    return
+                }
+                s.updateBattery(from, status.battery, status.ts)
+            }
+
             SignalTypes.ERROR -> {
                 Log.w(TAG, "signal error: " + (msg.message ?: msg.code))
                 // 服务器回执上屏：目标离线等错误此前只打日志，按钮像"没反应"
@@ -390,6 +481,18 @@ class FamilyLocationService : Service() {
         return loc.ts <= System.currentTimeMillis() + 5 * 60_000L
     }
 
+    /**
+     * 远端状态载荷合理性校验：电量越界、时间戳非法一律拒绝。
+     *
+     * 与 [isPlausibleLocation] 同一目的——远端报文完全不可信；且 Gson 对缺失数值字段
+     * 会填 0，故电量与时间戳都必须显式校验（时间戳缺失的包按 0 拒绝，fail-closed）。
+     */
+    private fun isPlausibleStatus(status: com.example.batteryfloat.p2p.StatusPayload): Boolean {
+        if (status.battery < 0 || status.battery > 100) return false
+        if (status.ts <= 0L) return false
+        return status.ts <= System.currentTimeMillis() + 5 * 60_000L
+    }
+
     companion object {
         private const val TAG = "FamilyLocationService"
 
@@ -402,6 +505,9 @@ class FamilyLocationService : Service() {
         /** 位置应答有效期：超过该时长才到达的应答视为过期并丢弃 */
         private const val LOC_RES_TTL_MS = 5 * 60_000L
 
+        /** 同一成员重复状态（电量）请求的合并窗口：电量读取几乎无成本，仅防连点刷屏 */
+        private const val STAT_REQ_COOLDOWN_MS = 5_000L
+
         /** 服务是否在运行（UI 查询用；替代已废弃的 ActivityManager.getRunningServices） */
         @Volatile
         var isRunning = false
@@ -410,6 +516,7 @@ class FamilyLocationService : Service() {
         const val ACTION_START = "com.yongge.batteryfloat.action.FAMILY_START"
         const val ACTION_STOP = "com.yongge.batteryfloat.action.FAMILY_STOP"
         const val ACTION_REQUEST_LOCATION = "com.yongge.batteryfloat.action.FAMILY_REQ_LOC"
+        const val ACTION_REQUEST_STATUS = "com.yongge.batteryfloat.action.FAMILY_REQ_STATUS"
         const val ACTION_APPROVE_JOIN = "com.yongge.batteryfloat.action.FAMILY_APPROVE_JOIN"
         const val ACTION_REJECT_JOIN = "com.yongge.batteryfloat.action.FAMILY_REJECT_JOIN"
         const val EXTRA_UID = "uid"
@@ -499,6 +606,15 @@ class FamilyLocationService : Service() {
             context.startService(
                 Intent(context, FamilyLocationService::class.java)
                     .setAction(ACTION_REQUEST_LOCATION)
+                    .putExtra(EXTRA_UID, uid)
+            )
+        }
+
+        /** 请求指定成员的当前状态（电量）（家人页进入时自动刷新 / 成员卡手动刷新） */
+        fun requestStatus(context: Context, uid: String) {
+            context.startService(
+                Intent(context, FamilyLocationService::class.java)
+                    .setAction(ACTION_REQUEST_STATUS)
                     .putExtra(EXTRA_UID, uid)
             )
         }

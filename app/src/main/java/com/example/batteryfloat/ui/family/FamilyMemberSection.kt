@@ -15,6 +15,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Map
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -47,6 +48,7 @@ import java.util.Locale
 internal fun MemberCard(
     member: FamilyMember,
     onOpenMap: () -> Unit,
+    onRefreshStatus: () -> Unit,
     onSetNote: (String) -> Unit
 ) {
     // 备注编辑对话框状态
@@ -74,6 +76,13 @@ internal fun MemberCard(
                     fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.weight(1f)
                 )
+                IconButton(onClick = onRefreshStatus) {
+                    Icon(
+                        Icons.Filled.Refresh,
+                        contentDescription = stringResource(R.string.family_battery_refresh_desc),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
                 IconButton(onClick = {
                     // 每次打开都以已保存的备注为初值：否则上次取消编辑时残留的文本
                     // 会在下次打开时冒充内容，点确定就把被放弃的修改存了下去
@@ -90,6 +99,13 @@ internal fun MemberCard(
             Spacer(Modifier.height(DesignSystem.SpacingS))
             Text(
                 text = lastLocationText(member),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(Modifier.height(DesignSystem.SpacingXs))
+            // 电量：由家人请求时现读回传（不周期上报），附取值时刻；未取到过则显示未知
+            Text(
+                text = batteryText(member),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -147,6 +163,20 @@ private fun lastLocationText(member: FamilyMember): String {
         stringResource(R.string.family_accuracy_suffix, it.toInt())
     } ?: ""
     return stringResource(R.string.family_last_loc_prefix, formatRelativeTime(ts) + acc)
+}
+
+/**
+ * 电量文案：有记录则为「电量 62% · 3 分钟前」，无记录为「电量未知」
+ *
+ * 时间用与位置相同的相对时间格式，让用户能判断这个电量值有多新。
+ */
+@Composable
+private fun batteryText(member: FamilyMember): String {
+    val battery = member.lastBattery
+        ?: return stringResource(R.string.family_battery_unknown)
+    val base = stringResource(R.string.family_battery_value, battery)
+    val ts = member.lastBatteryTs ?: return base
+    return base + " · " + formatRelativeTime(ts)
 }
 
 /** 相对时间：<1 分钟=刚刚，<60 分钟=x 分钟前，<24h=x 小时前，否则 MM-dd HH:mm */

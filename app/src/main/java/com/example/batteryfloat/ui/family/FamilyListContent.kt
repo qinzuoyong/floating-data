@@ -12,6 +12,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -24,8 +25,12 @@ import com.example.batteryfloat.R
 import com.example.batteryfloat.family.FamilyMember
 import com.example.batteryfloat.family.FamilyStore
 import com.example.batteryfloat.p2p.SignalClient
+import com.example.batteryfloat.service.FamilyLocationService
 import com.example.batteryfloat.ui.SectionTitle
 import com.example.batteryfloat.ui.theme.DesignSystem
+
+/** 进入家人列表时自动刷新电量的节流窗口（同一成员；对方读电量零成本，仍按需请求不周期上报） */
+private const val STATUS_AUTO_REFRESH_MS = 5 * 60_000L
 
 /**
  * 家人列表主内容
@@ -52,6 +57,22 @@ internal fun FamilyListContent(
     // 加入审核：创建人视角的待审申请 + 加入者视角的审核状态
     val pendingJoins by store.pendingJoins.collectAsState()
     val joinState by store.joinState.collectAsState()
+
+    // 本次进入列表已请求过的成员（会话内节流；跨会话由"对方数据是否新鲜"兜底）
+    val statusRequestedAt = remember { mutableMapOf<String, Long>() }
+    // 进入家人列表自动同步一次电量：只对在线成员、且已有值不新鲜时才请求。
+    // 电量在对方设备上是现读系统粘性广播（无定位、无采样成本），但仍按需请求、不做周期上报
+    LaunchedEffect(familyCode, members.keys, serviceOn) {
+        if (familyCode.isBlank() || !serviceOn) return@LaunchedEffect
+        val now = System.currentTimeMillis()
+        for (member in members.values) {
+            if (!member.online) continue
+            if (now - (member.lastBatteryTs ?: 0L) < STATUS_AUTO_REFRESH_MS) continue
+            if (now - (statusRequestedAt[member.uid] ?: 0L) < STATUS_AUTO_REFRESH_MS) continue
+            statusRequestedAt[member.uid] = now
+            FamilyLocationService.requestStatus(context, member.uid)
+        }
+    }
 
     LazyColumn(
         modifier = Modifier
@@ -83,6 +104,9 @@ internal fun FamilyListContent(
                     MemberCard(
                         member = member,
                         onOpenMap = { onOpenMap(member) },
+                        onRefreshStatus = {
+                            FamilyLocationService.requestStatus(context, member.uid)
+                        },
                         onSetNote = { store.setMemberNote(member.uid, it) }
                     )
                 }

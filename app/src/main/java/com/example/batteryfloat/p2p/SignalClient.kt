@@ -153,6 +153,29 @@ class SignalClient(
             }
         )
 
+    /**
+     * 请求指定成员的当前状态（电量）
+     *
+     * @return 是否成功发出（false=未连接/发送失败，调用方可据此提示用户）
+     */
+    fun sendStatReq(to: String): Boolean =
+        sendRaw(
+            JsonObject().apply {
+                addProperty("type", SignalTypes.STAT_REQ)
+                addProperty("to", to)
+            }
+        )
+
+    /** 回复状态给请求方（电量按需现读，不缓存旧值） */
+    fun sendStatRes(to: String, status: StatusPayload): Boolean =
+        sendRaw(
+            JsonObject().apply {
+                addProperty("type", SignalTypes.STAT_RES)
+                addProperty("to", to)
+                add("payload", gson.toJsonTree(status))
+            }
+        )
+
     /** 创建人批准加入申请 */
     fun sendJoinApprove(targetUid: String) {
         sendRaw(

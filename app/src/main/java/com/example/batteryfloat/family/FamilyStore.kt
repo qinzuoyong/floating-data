@@ -13,13 +13,14 @@ import kotlinx.coroutines.flow.asStateFlow
 import java.util.UUID
 
 /**
- * 家人共享数据模型：一个成员（含本地备注与上次位置）
+ * 家人共享数据模型：一个成员（含本地备注、上次位置与上次电量）
  *
  * @property uid 设备唯一标识（远端）
  * @property name 对方注册时上报的备注名
  * @property note 本地自定义备注（显示优先级高于 name）
  * @property online 是否在线（presence 驱动）
  * @property lastLat/lastLng/lastTs/lastAccuracy 上次收到的位置（"上次位置时间"需求）
+ * @property lastBattery/lastBatteryTs 上次收到的电量百分比与取值时刻（按需请求，可为空）
  */
 data class FamilyMember(
     val uid: String,
@@ -29,7 +30,9 @@ data class FamilyMember(
     val lastLat: Double? = null,
     val lastLng: Double? = null,
     val lastTs: Long? = null,
-    val lastAccuracy: Float? = null
+    val lastAccuracy: Float? = null,
+    val lastBattery: Int? = null,
+    val lastBatteryTs: Long? = null
 ) {
     /** 显示名：本地备注优先，否则远端注册名，兜底 uid 尾 4 位 */
     val displayName: String
@@ -174,6 +177,26 @@ class FamilyStore private constructor(context: Context) {
             lastLng = loc.lng,
             lastTs = loc.ts,
             lastAccuracy = loc.accuracy
+        )
+        _members.value = _members.value + (uid to member)
+        persistMembers()
+    }
+
+    /**
+     * 收到状态应答：更新上次电量与取值时刻
+     *
+     * 与 [updateLocation] 同一约束：仅接受名册内成员，避免房间内任意成员
+     * 主动投递 stat-res 注入"幽灵成员"并落盘。
+     *
+     * @param battery 电量百分比（调用方已校验 0-100）
+     * @param ts 对方取值时刻
+     */
+    @Synchronized
+    fun updateBattery(uid: String, battery: Int, ts: Long) {
+        val current = _members.value[uid] ?: return
+        val member = current.copy(
+            lastBattery = battery,
+            lastBatteryTs = ts
         )
         _members.value = _members.value + (uid to member)
         persistMembers()
