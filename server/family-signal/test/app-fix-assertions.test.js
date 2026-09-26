@@ -76,22 +76,33 @@ ok('自愈与自动授权均以该标记为门控（尊重用户意图）',
 console.log('[家人电量共享 stat-req/stat-res]');
 const PROTOCOL = path.join(ROOT, 'app/src/main/java/com/example/batteryfloat/p2p/SignalProtocol.kt');
 const SERVICE = path.join(ROOT, 'app/src/main/java/com/example/batteryfloat/service/FamilyLocationService.kt');
+// 信令分发与应答自 2026-09 起搬移进 FamilySignalHandler.kt（纯搬移零行为变化）：
+// 下方 stat-req/stat-res 与 loc-res 断言改指向新文件，断言内容与计数一概不变
+const HANDLER = path.join(ROOT, 'app/src/main/java/com/example/batteryfloat/service/FamilySignalHandler.kt');
 const STORE = path.join(ROOT, 'app/src/main/java/com/example/batteryfloat/family/FamilyStore.kt');
 const SERVER_JS = path.join(ROOT, 'server/family-signal/server.js');
 const proto = read(PROTOCOL);
 const service = read(SERVICE);
+const handler = read(HANDLER);
 const store = read(STORE);
 const serverJs = read(SERVER_JS);
 ok('协议常量两端一致（stat-req / stat-res）',
   /STAT_REQ = "stat-req"/.test(proto) && /STAT_RES = "stat-res"/.test(proto) &&
   /case 'stat-req'/.test(serverJs) && /case 'stat-res'/.test(serverJs));
 ok('只接受曾请求成员的状态应答（防伪造 / 幽灵成员）',
-  /SignalTypes\.STAT_RES -> \{[\s\S]{0,300}?val requestedAt = requestedStatus\[from\][\s\S]{0,200}?if \(requestedAt == null\)/.test(service));
+  /SignalTypes\.STAT_RES -> \{[\s\S]{0,300}?val requestedAt = requestedStatus\[from\][\s\S]{0,200}?if \(requestedAt == null\)/.test(handler));
 ok('状态载荷校验覆盖电量越界与缺失时间戳',
-  /private fun isPlausibleStatus[\s\S]{0,300}?status\.ts <= 0L/.test(service) &&
-  /SignalTypes\.STAT_RES -> \{[\s\S]{0,900}?if \(!isPlausibleStatus\(status\)\)/.test(service));
+  /private fun isPlausibleStatus[\s\S]{0,300}?status\.ts <= 0L/.test(handler) &&
+  /SignalTypes\.STAT_RES -> \{[\s\S]{0,900}?if \(!isPlausibleStatus\(status\)\)/.test(handler));
 ok('隐私开关同时约束状态请求（关闭后位置与电量都不应答）',
-  /SignalTypes\.STAT_REQ -> \{[\s\S]{0,200}?if \(!s\.allowLocReq\(\)\)/.test(service));
+  /SignalTypes\.STAT_REQ -> \{[\s\S]{0,200}?if \(!s\.allowLocReq\(\)\)/.test(handler));
+ok('loc-res 准入校验未被放宽（曾请求 + 有效期 + 载荷合理性三层俱在）',
+  /SignalTypes\.LOC_RES -> \{[\s\S]{0,300}?val requestedAt = requestedLocations\[from\][\s\S]{0,200}?if \(requestedAt == null\)/.test(handler) &&
+  /SignalTypes\.LOC_RES -> \{[\s\S]{0,600}?LOC_RES_TTL_MS[\s\S]{0,400}?if \(!isPlausibleLocation\(loc\)\)/.test(handler));
+ok('信令分发已抽到 FamilySignalHandler（主服务仅保留委托，不再重复实现）',
+  /internal class FamilySignalHandler\(private val host: FamilyLocationService\)/.test(handler) &&
+  /it\.onMessage = signalHandler::handleSignal/.test(service) &&
+  !/SignalTypes\.STAT_RES ->/.test(service));
 ok('电量只落到名册内成员（不自动建档）',
   /fun updateBattery\(uid: String, battery: Int, ts: Long\) \{[\s\S]{0,200}?val current = _members\.value\[uid\] \?: return/.test(store));
 ok('服务端对状态载荷做白名单（电量 0-100）',
