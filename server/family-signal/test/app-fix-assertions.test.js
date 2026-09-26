@@ -70,6 +70,35 @@ ok('自愈与自动授权均以该标记为门控（尊重用户意图）',
   /if \(isUserDisabled\(ctx\)\) return@launch/.test(healer) &&
   /if \(isUserDisabled\(ctx\)\) return false/.test(healer));
 
+// ---- 家人电量共享：stat-req / stat-res（2026-09 新增能力） ----
+// 电量沿用的是与位置同一套"远端不可信"假设：服务端中继不校验来源，客户端必须自行
+// 约束"只接受曾请求成员的回包"；且载荷校验要覆盖 Gson 缺字段退化出的 0（fail-closed）。
+console.log('[家人电量共享 stat-req/stat-res]');
+const PROTOCOL = path.join(ROOT, 'app/src/main/java/com/example/batteryfloat/p2p/SignalProtocol.kt');
+const SERVICE = path.join(ROOT, 'app/src/main/java/com/example/batteryfloat/service/FamilyLocationService.kt');
+const STORE = path.join(ROOT, 'app/src/main/java/com/example/batteryfloat/family/FamilyStore.kt');
+const SERVER_JS = path.join(ROOT, 'server/family-signal/server.js');
+const proto = read(PROTOCOL);
+const service = read(SERVICE);
+const store = read(STORE);
+const serverJs = read(SERVER_JS);
+ok('协议常量两端一致（stat-req / stat-res）',
+  /STAT_REQ = "stat-req"/.test(proto) && /STAT_RES = "stat-res"/.test(proto) &&
+  /case 'stat-req'/.test(serverJs) && /case 'stat-res'/.test(serverJs));
+ok('只接受曾请求成员的状态应答（防伪造 / 幽灵成员）',
+  /SignalTypes\.STAT_RES -> \{[\s\S]{0,300}?val requestedAt = requestedStatus\[from\][\s\S]{0,200}?if \(requestedAt == null\)/.test(service));
+ok('状态载荷校验覆盖电量越界与缺失时间戳',
+  /private fun isPlausibleStatus[\s\S]{0,300}?status\.ts <= 0L/.test(service) &&
+  /SignalTypes\.STAT_RES -> \{[\s\S]{0,900}?if \(!isPlausibleStatus\(status\)\)/.test(service));
+ok('隐私开关同时约束状态请求（关闭后位置与电量都不应答）',
+  /SignalTypes\.STAT_REQ -> \{[\s\S]{0,200}?if \(!s\.allowLocReq\(\)\)/.test(service));
+ok('电量只落到名册内成员（不自动建档）',
+  /fun updateBattery\(uid: String, battery: Int, ts: Long\) \{[\s\S]{0,200}?val current = _members\.value\[uid\] \?: return/.test(store));
+ok('服务端对状态载荷做白名单（电量 0-100）',
+  /function sanitizeStatusPayload/.test(serverJs) && /battery < 0 \|\| battery > 100/.test(serverJs));
+ok('服务端状态请求用独立限流桶（不占用位置请求额度）',
+  /rateLimited\('stat:' \+ ws\.room/.test(serverJs));
+
 // ---- 修复 2：密钥未就绪时不得置"已尝试"标记 ----
 console.log('[trust-key 时序 PrivBaseline.kt]');
 const pb = read(PRIV_BASELINE);
@@ -263,14 +292,14 @@ ok('SCREEN_ON 时监控器缺失会补建（先判空再 start）',
   /Intent\.ACTION_SCREEN_ON -> \{[\s\S]{0,200}?if \(batteryMonitor == null\) startMonitoring\(\)/.test(fws));
 
 console.log('[P2 非 START 动作不得遗留僵尸家人服务 FamilyLocationService.kt]');
-// 服务未 setup 时被 REQUEST_LOCATION/APPROVE/REJECT 拉起：isRunning=true 但无信令连接，
-// 会短路无障碍恢复路径（tryRestoreFamilyService 判 isRunning 即返回）且 UI 状态失真。
-// 修复形态：这三个分支在 signal==null 时 stopSelf()。
+// 服务未 setup 时被 REQUEST_LOCATION/REQUEST_STATUS/APPROVE/REJECT 拉起：isRunning=true 但无
+// 信令连接，会短路无障碍恢复路径（tryRestoreFamilyService 判 isRunning 即返回）且 UI 状态失真。
+// 修复形态：这些分支在 signal==null 时 stopSelf()（新增请求类型必须照此加守卫）。
 const FLS = path.join(ROOT, 'app/src/main/java/com/example/batteryfloat/service/FamilyLocationService.kt');
 const fls = read(FLS);
 const cntStopSelfGuard = (fls.match(/if \(signal == null\) stopSelf\(\)/g) || []).length;
-ok('三个非 START 动作分支均有 signal==null 即 stopSelf 守卫（共 3 处）',
-  cntStopSelfGuard === 3, '实际 ' + cntStopSelfGuard + ' 处');
+ok('四个非 START 动作分支均有 signal==null 即 stopSelf 守卫（共 4 处）',
+  cntStopSelfGuard === 4, '实际 ' + cntStopSelfGuard + ' 处');
 
 console.log('[P2 特权通道并发连接竞态 AdbConnectionManager.kt]');
 // connectOnceInternal 约定"调用方持有 connectMutex"；setEnabled/onPaired/keyInit 三处曾裸调用，

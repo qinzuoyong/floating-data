@@ -128,6 +128,39 @@ async function main() {
   await sleep(300);
   ok('零值坐标未被转发', !joiner.msgs.find((m) => m.type === 'loc-res' && m.payload && m.payload.lat === 0 && m.payload.lng === 0));
 
+  // ---------- 用例 3b：状态（电量）请求与应答中继 ----------
+  console.log('[3b] 状态请求与应答中继');
+  const status = { battery: 62, ts: Date.now() };
+  joiner.send({ type: 'stat-req', to: 'u-owner' });
+  const statReq = await owner.wait((m) => m.type === 'stat-req' && m.from === 'u-join');
+  ok('stat-req 转发到目标成员', !!statReq);
+  owner.send({ type: 'stat-res', to: 'u-join', payload: status });
+  const statRes = await joiner.wait((m) => m.type === 'stat-res' && m.from === 'u-owner');
+  ok('stat-res 转发到请求方', !!statRes);
+  ok('stat-res 电量保真', !!statRes && statRes.payload.battery === 62,
+    statRes ? JSON.stringify(statRes.payload) : 'no payload');
+
+  // ---------- 用例 3c：畸形状态载荷被服务端拦下 ----------
+  console.log('[3c] 畸形状态载荷拦截');
+  owner.send({ type: 'stat-res', to: 'u-join', payload: { battery: 999, ts: Date.now() } });
+  await sleep(300);
+  ok('越界电量未被转发', !joiner.msgs.find((m) => m.type === 'stat-res' && m.payload && m.payload.battery === 999));
+  owner.send({ type: 'stat-res', to: 'u-join', payload: { battery: -5, ts: Date.now() } });
+  await sleep(300);
+  ok('负电量未被转发', !joiner.msgs.find((m) => m.type === 'stat-res' && m.payload && m.payload.battery === -5));
+  owner.send({ type: 'stat-res', to: 'u-join', payload: { battery: 'abc' } });
+  await sleep(300);
+  ok('非数值电量未被转发',
+    !joiner.msgs.find((m) => m.type === 'stat-res' && m.payload && typeof m.payload.battery !== 'number'));
+
+  // ---------- 用例 3d：未注册连接的状态请求被拒 ----------
+  console.log('[3d] 未注册状态请求被拒');
+  const anonStat = connect(); await anonStat.open();
+  anonStat.send({ type: 'stat-req', to: 'u-owner' });
+  const anonStatErr = await anonStat.wait((m) => m.type === 'error' && m.code === 'not_registered');
+  ok('未注册 stat-req 返回 not_registered', !!anonStatErr);
+  anonStat.close();
+
   // ---------- 用例 4：未注册连接不能中继 ----------
   console.log('[4] 未注册连接中继被拒');
   const anon = connect(); await anon.open();
@@ -142,6 +175,12 @@ async function main() {
   for (let i = 0; i < 11; i++) joiner.send({ type: 'loc-req', to: 'u-owner' });
   const limited = await joiner.wait((m) => m.type === 'error' && m.code === 'rate_limited', 2000);
   ok('高频 loc-req 触发 rate_limited', !!limited);
+
+  // ---------- 用例 5b：状态请求用独立限流桶（位置桶耗尽后仍可请求） ----------
+  console.log('[5b] 状态请求独立限流桶');
+  joiner.send({ type: 'stat-req', to: 'u-owner' });
+  const statAfterFlood = await owner.wait((m) => m.type === 'stat-req' && m.from === 'u-join', 1200);
+  ok('位置桶耗尽后 stat-req 仍被转发（独立桶）', !!statAfterFlood);
 
   // ---------- 用例 6：房间码校验与占用查询 ----------
   console.log('[6] 房间码校验与占用查询');
