@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- 家人位置共享：信令已迁到自有的 WSS 端点（2026-09-27），故不再放行任何信令服务器的明文；
-     以下明文放行只服务于家人地图的 WebView（百度地图 JS/瓦片与其 Referer 载体） -->
+<!-- 家人位置共享：信令主端点已迁到自有的 WSS 端点（2026-09-27），信令默认不再走明文；
+     唯一例外是下方的「信令故障兜底端点」（非本机所有，仅在主端点不可达时才会连到）；
+     其余明文放行只服务于家人地图的 WebView（百度地图 JS/瓦片与其 Referer 载体） -->
 <network-security-config>
     <base-config cleartextTrafficPermitted="false" />
     <domain-config cleartextTrafficPermitted="true">
