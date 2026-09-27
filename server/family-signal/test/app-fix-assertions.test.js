@@ -105,6 +105,17 @@ ok('信令分发已抽到 FamilySignalHandler（主服务仅保留委托，不�
   !/SignalTypes\.STAT_RES ->/.test(service));
 ok('电量只落到名册内成员（不自动建档）',
   /fun updateBattery\(uid: String, battery: Int, ts: Long\) \{[\s\S]{0,200}?val current = _members\.value\[uid\] \?: return/.test(store));
+{
+  // 备注写入原先以 `?: FamilyMember(uid = uid)` 兜底 → 等于给未知 uid 建档：
+  // 用户在「名册同步（registered 全量重建）」同一瞬间改备注就会凭空多出一个幽灵成员并落盘。
+  // 与 updateLocation / updateBattery 的"仅名册内成员"约束对齐。
+  const i = store.indexOf('fun setMemberNote');
+  const body = i < 0 ? '' : store.slice(i, store.indexOf('@Synchronized', i + 10));
+  ok('备注也只写到名册内成员（不再给未知 uid 建档）',
+    /val current = _members\.value\[uid\] \?: return/.test(body) &&
+    !/FamilyMember\(uid = uid\)/.test(body),
+    body ? body.slice(0, 140).replace(/\s+/g, ' ') : '未取到 setMemberNote 函数体');
+}
 ok('服务端对状态载荷做白名单（电量 0-100）',
   /function sanitizeStatusPayload/.test(serverJs) && /battery < 0 \|\| battery > 100/.test(serverJs));
 ok('服务端状态请求用独立限流桶（不占用位置请求额度）',

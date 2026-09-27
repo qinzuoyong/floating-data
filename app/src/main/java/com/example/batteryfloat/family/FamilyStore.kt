@@ -218,10 +218,16 @@ class FamilyStore private constructor(context: Context) {
         persistMembers()
     }
 
-    /** 本地备注名 */
+    /**
+     * 本地备注名
+     *
+     * 与 [updateLocation] / [updateBattery] 同一约束：**只改名册内成员**。
+     * 原实现用 `?: FamilyMember(uid = uid)` 兜底，等于给未知 uid 建档——用户在名册同步
+     * （registered 全量重建）的同一瞬间改备注时，会凭空多出一个"幽灵成员"并落盘。
+     */
     @Synchronized
     fun setMemberNote(uid: String, note: String) {
-        val current = _members.value[uid] ?: FamilyMember(uid = uid)
+        val current = _members.value[uid] ?: return
         _members.value = _members.value + (uid to current.copy(note = note.trim()))
         persistMembers()
     }
