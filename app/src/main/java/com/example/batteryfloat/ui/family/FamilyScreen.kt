@@ -35,6 +35,7 @@ import com.example.batteryfloat.ui.theme.DesignSystem
 private sealed interface FamilyRoute {
     data object List : FamilyRoute
     data object Add : FamilyRoute
+    data object Alerts : FamilyRoute
     data class Map(val member: FamilyMember) : FamilyRoute
 }
 
@@ -161,6 +162,11 @@ fun FamilyScreen(
                 // 权限弹窗会触发 MainActivity.onUserLeaveHint，需标记外部跳转防 finish
                 onBeforeExternalIntent = onBeforeExternalIntent
             )
+            FamilyRoute.Alerts -> FamilyAlertScreen(
+                context = context,
+                members = members.values.toList(),
+                onBack = { route = FamilyRoute.List }
+            )
             FamilyRoute.List -> FamilyListContent(
                 context = context,
                 prefs = prefs,
@@ -179,6 +185,7 @@ fun FamilyScreen(
                 },
                 onAddFamily = { route = FamilyRoute.Add },
                 onOpenMap = { route = FamilyRoute.Map(it) },
+                onOpenAlerts = { route = FamilyRoute.Alerts },
                 onLeaveFamily = {
                     FamilyLocationService.stop(context)
                     store.clearMembers()

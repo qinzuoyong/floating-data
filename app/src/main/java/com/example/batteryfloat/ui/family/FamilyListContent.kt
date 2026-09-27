@@ -24,6 +24,7 @@ import com.example.batteryfloat.PrefsKeys
 import com.example.batteryfloat.R
 import com.example.batteryfloat.family.FamilyMember
 import com.example.batteryfloat.family.FamilyStore
+import com.example.batteryfloat.family.PlaceStore
 import com.example.batteryfloat.p2p.SignalClient
 import com.example.batteryfloat.service.FamilyLocationService
 import com.example.batteryfloat.ui.SectionTitle
@@ -50,6 +51,7 @@ internal fun FamilyListContent(
     onToggleService: (Boolean) -> Unit,
     onAddFamily: () -> Unit,
     onOpenMap: (FamilyMember) -> Unit,
+    onOpenAlerts: () -> Unit,
     onLeaveFamily: () -> Unit
 ) {
     val familyCode = prefs.getString(PrefsKeys.FAMILY_CODE, "") ?: ""
@@ -57,6 +59,9 @@ internal fun FamilyListContent(
     // 加入审核：创建人视角的待审申请 + 加入者视角的审核状态
     val pendingJoins by store.pendingJoins.collectAsState()
     val joinState by store.joinState.collectAsState()
+    // 地点提醒入口的状态（总开关 + 启用地点数；从子页返回时本内容会重建，读到的必是最新值）
+    val alertPlaces by remember { PlaceStore.get(context) }.places.collectAsState()
+    val alertsEnabled = prefs.getBoolean(PrefsKeys.FAMILY_ALERT_ENABLED, false)
 
     // 本次进入列表已请求过的成员（会话内节流；跨会话由"对方数据是否新鲜"兜底）
     val statusRequestedAt = remember { mutableMapOf<String, Long>() }
@@ -114,6 +119,15 @@ internal fun FamilyListContent(
 
             // 待审核加入申请（创建人视角：批准/拒绝）
             familyPendingJoinItems(context, store, pendingJoins)
+
+            // 地点提醒入口（到达/离开提醒的列表与总开关在子页）
+            item {
+                FamilyAlertEntryCard(
+                    enabled = alertsEnabled,
+                    placeCount = alertPlaces.count { it.enabled },
+                    onClick = onOpenAlerts
+                )
+            }
 
             // 家庭码卡片（服务开关/我的信息/加入/退出家庭，沉底）
             item {
