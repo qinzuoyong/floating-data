@@ -3,6 +3,7 @@ package com.example.batteryfloat.ui.family
 import android.content.Context
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -113,7 +114,12 @@ internal fun FamilyAlertScreen(
                         style = MaterialTheme.typography.bodyMedium
                     )
                     Spacer(Modifier.height(DesignSystem.SpacingXs))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                    // 用可换行的 FlowRow：4 个频率选项在窄屏（360dp 的真机）一行放不下，
+                    // 原先固定单行会把最后一项挤出屏幕（真机实测）
+                    FlowRow(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.Center
+                    ) {
                         for (choice in INTERVAL_CHOICES) {
                             TextButton(onClick = {
                                 interval = choice
