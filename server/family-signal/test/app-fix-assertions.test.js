@@ -129,6 +129,20 @@ const fsc = read(FAMILY_SCREEN);
 ok('家人页自动启动受 FAMILY_WAS_RUNNING 门控（尊重用户主动停止）',
   /!isServiceRunning\(\) && prefs\.getBoolean\(PrefsKeys\.FAMILY_WAS_RUNNING, false\)/.test(fsc),
   '自动启动分支未发现 FAMILY_WAS_RUNNING 门控');
+// 权限回调分支同样能拉起共享（进入家人 Tab 会自动弹授权，用户点允许即触发），
+// 必须与自动恢复分支共用同一门控；且"定位是否已授予"不能只看回调结果 map——
+// RequestMultiplePermissions 的结果里只有本次被请求过的权限
+const permCallback = (() => {
+  const i = fsc.indexOf('ActivityResultContracts.RequestMultiplePermissions()');
+  const j = fsc.indexOf('LaunchedEffect(Unit) {', i);
+  return (i >= 0 && j > i) ? fsc.slice(i, j) : '';
+})();
+ok('权限回调分支受 FAMILY_WAS_RUNNING 门控（不把用户主动停止的共享静默拉起）',
+  /prefs\.getBoolean\(PrefsKeys\.FAMILY_WAS_RUNNING, false\)/.test(permCallback),
+  '权限回调分支缺少 FAMILY_WAS_RUNNING 门控');
+ok('定位授予判定复核真实权限状态（结果 map 只含本次被请求的权限）',
+  /result\[Manifest\.permission\.ACCESS_FINE_LOCATION\] == true[\s\S]{0,500}?checkSelfPermission\(/.test(permCallback),
+  '仅按结果 map 判定会在只缺通知权限时把已授予的定位误判为未授予');
 
 console.log('[信令空端点守卫 SignalClient.kt]');
 const SIGNAL_CLIENT = path.join(ROOT, 'app/src/main/java/com/example/batteryfloat/p2p/SignalClient.kt');

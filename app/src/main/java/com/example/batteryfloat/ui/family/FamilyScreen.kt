@@ -105,13 +105,23 @@ fun FamilyScreen(
     ) { result ->
         // 授权后：未加入家庭则引导加入，已加入则自动开启服务。
         // 判定必须落在"定位权限"：仅授予通知权限时视为未授权，否则会启动失败并弹出停用通知。
+        // 结果 map 只含"本次被请求的权限"，故只缺通知权限时其中根本没有定位项：
+        // 必须复核真实授权状态，否则会把已授予的定位误判为未授予而静默不恢复共享。
         val locationGranted = result[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
-            result[Manifest.permission.ACCESS_COARSE_LOCATION] == true
+            result[Manifest.permission.ACCESS_COARSE_LOCATION] == true ||
+            androidx.core.content.ContextCompat.checkSelfPermission(
+                context, Manifest.permission.ACCESS_FINE_LOCATION
+            ) == PackageManager.PERMISSION_GRANTED ||
+            androidx.core.content.ContextCompat.checkSelfPermission(
+                context, Manifest.permission.ACCESS_COARSE_LOCATION
+            ) == PackageManager.PERMISSION_GRANTED
         if (locationGranted) {
             val code = prefs.getString(PrefsKeys.FAMILY_CODE, "") ?: ""
             if (code.isBlank()) {
                 route = FamilyRoute.Add
-            } else {
+            } else if (prefs.getBoolean(PrefsKeys.FAMILY_WAS_RUNNING, false)) {
+                // 与下方 LaunchedEffect 的自动恢复共用同一门控：本回调可由"进入家人 Tab 时
+                // 自动弹出的权限请求"触发，无门控会把用户主动停止的共享又静默拉起
                 FamilyLocationService.start(context)
                 serviceOn = true
                 maybeRequestBackground()
