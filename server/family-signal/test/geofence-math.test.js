@@ -64,7 +64,8 @@ function evaluate(prev, radius, dist, acc, sampleTs, now) {
   else inside = prev ? prev.inside : false;
   if (!prev) return { kind: 'quiet', inside };
   if (prev.inside === inside) return { kind: 'quiet', inside };
-  if (now - prev.lastNotifyAt < COOLDOWN_MS) return { kind: 'quiet', inside };
+  // 去重窗口内：不提醒，且状态保持原样（不推进）——窗口过后由下一份样本补报
+  if (now - prev.lastNotifyAt < COOLDOWN_MS) return { kind: 'quiet', inside: prev.inside };
   return { kind: 'alert', inside, entered: inside };
 }
 
@@ -140,8 +141,18 @@ console.log('[判定表：进入/离开/滞回/去重/丢弃]');
     evaluate(state(false), R, 50, 10, NOW - FRESH_MS + 1, NOW).kind === 'alert');
   ok('时间戳为 0（缺字段）按不可用丢弃',
     evaluate(state(false), R, 50, 10, 0, NOW).kind === 'discarded');
-  ok('10 分钟去重：窗口内的转换只更新状态、不通知',
+  ok('10 分钟去重：窗口内的转换不通知',
     evaluate(state(false, NOW - COOLDOWN_MS + 1), R, 50, 10, NOW, NOW).kind === 'quiet');
+  ok('去重窗口内不推进状态（否则真实转换被永久吞掉：离开后 10 分钟内返回，到达永不报）',
+    evaluate(state(false, NOW - COOLDOWN_MS + 1), R, 50, 10, NOW, NOW).inside === false &&
+    evaluate(state(true, NOW - COOLDOWN_MS + 1), R, 5000, 10, NOW, NOW).inside === true);
+  ok('被抑制的转换在窗口过后由下一份样本补报（离开→返回 序列）',
+    (() => {
+      const suppressed = evaluate(state(false, NOW - COOLDOWN_MS + 1), R, 50, 10, NOW, NOW);
+      const later = evaluate(state(suppressed.inside, NOW), R, 50, 10, NOW + COOLDOWN_MS, NOW + COOLDOWN_MS);
+      return suppressed.kind === 'quiet' && suppressed.inside === false &&
+        later.kind === 'alert' && later.entered === true;
+    })());
   ok('去重窗口边界（正好 10 分钟）可通知',
     evaluate(state(false, NOW - COOLDOWN_MS), R, 50, 10, NOW, NOW).kind === 'alert');
 }
@@ -173,6 +184,20 @@ ok('半径上下限 100/5000 一致',
 ok('轮询间隔 5/10/60 分钟一致',
   constOf(ps, 'INTERVAL_MIN_MINUTES') === 5 && constOf(ps, 'INTERVAL_DEFAULT_MINUTES') === 10 &&
   constOf(ps, 'INTERVAL_MAX_MINUTES') === 60);
+
+console.log('\n[去重分支语义锁（Kotlin 源码结构，回退即变红）]');
+// 本对象（JS）是独立实现，只比常量；"窗口内不推进状态"这条语义必须再锁一次 Kotlin 源码，
+// 否则把 Kotlin 侧改回 GeofenceState(inside, previous.lastNotifyAt) 不会被上面任何断言发现。
+const cooldownBranch = (() => {
+  const i = ev.indexOf('NOTIFY_COOLDOWN_MS) {');
+  if (i < 0) return '';
+  const j = ev.indexOf('}', i);
+  return ev.slice(i, j + 1);
+})();
+ok('去重分支返回 Decision.Quiet(previous)（状态不推进）',
+  /return Decision\.Quiet\(previous\)/.test(cooldownBranch), cooldownBranch.replace(/\s+/g, ' ').slice(0, 120));
+ok('去重分支不再构造带新 inside 的状态',
+  cooldownBranch.length > 0 && !/GeofenceState\(/.test(cooldownBranch));
 
 console.log('\n== 结果: ' + pass + ' 通过 / ' + fail + ' 失败 ==');
 process.exit(fail === 0 ? 0 : 1);

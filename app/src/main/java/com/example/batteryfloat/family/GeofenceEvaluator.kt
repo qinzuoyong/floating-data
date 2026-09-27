@@ -15,7 +15,8 @@ import kotlin.math.sqrt
  *    介于两者之间时保持上次状态——否则站在边界上会来回"到达/离开"刷通知；
  * 3. 首次样本只建立基线（不通知）：否则应用刚启动就会因"当前在半径外"报一次离开;
  * 4. 状态未变不通知;
- * 5. 同一（成员 × 地点）在 [NOTIFY_COOLDOWN_MS] 内最多一条通知（去抖兜底）。
+ * 5. 同一（成员 × 地点）在 [NOTIFY_COOLDOWN_MS] 内最多一条通知（去抖兜底）：
+ *    窗口内命中的转换**不提醒也不推进状态**，窗口过后由下一份样本按当前状态补报。
  *
  * 调用方负责把 [GeofenceState] 落盘（重启后延续判定），本对象不持有任何状态。
  */
@@ -103,9 +104,12 @@ object GeofenceEvaluator {
         // 4. 状态未变
         if (previous.inside == inside) return Decision.Quiet(GeofenceState(inside, previous.lastNotifyAt))
 
-        // 5. 命中转换：去重窗口内只更新状态，不提醒
+        // 5. 命中转换但落在去重窗口内：不提醒，且**状态保持原样**（不推进）。
+        //    若这里把状态推进成 inside，这次真实转换就被永久吞掉——窗口过后同一位置再也
+        //    不构成"状态翻转"，用户永远等不到那条「到达」（真机实测：离开后 10 分钟内返回，
+        //    只在锁屏收到「离开」，「到达」再不出现）。保持原状态则窗口过后由下一份样本补报。
         if (nowMs - previous.lastNotifyAt < NOTIFY_COOLDOWN_MS) {
-            return Decision.Quiet(GeofenceState(inside, previous.lastNotifyAt))
+            return Decision.Quiet(previous)
         }
         return Decision.Alert(GeofenceState(inside, nowMs), entered = inside)
     }
