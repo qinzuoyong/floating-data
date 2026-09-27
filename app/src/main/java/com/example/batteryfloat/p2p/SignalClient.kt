@@ -69,6 +69,20 @@ class SignalClient(
     /** 连接断开回调（含主动断开；供上层感知掉线） */
     var onDisconnected: ((String) -> Unit)? = null
 
+    /**
+     * 连接事件落盘回调（上层注入，写入口见 com.example.batteryfloat.diag.DiagLog）
+     *
+     * 用途：部分机型（vivo 等）屏蔽应用 logcat，"断开重连抖动"这类时序问题事后无法回看；
+     * 落盘到应用外部 files 目录即可用 adb 直接读取。**只写事件类型、端点序号与关闭码**，
+     * 家庭码与 uid 不得出现（写入口另有定点脱敏兜底）。
+     */
+    var diagLogger: ((String) -> Unit)? = null
+
+    /** 落盘一行连接事件（诊断写入永不冒泡） */
+    private fun diag(line: String) {
+        runCatching { diagLogger?.invoke(line) }
+    }
+
     private var client: WebSocketClient? = null
     private var reconnectJob: Job? = null
     private var heartbeatJob: Job? = null
@@ -310,12 +324,14 @@ class SignalClient(
                 // 防服务器侧同 uid 挂双连接 + 僵尸心跳
                 if (stopped || client !== this) {
                     Log.i(TAG, "ws open after stopped/replaced, aborting")
+                    diag("SIGNAL open-abort stopped/replaced")
                     runCatching { closeConnection(CloseFrame.ABNORMAL_CLOSE, "replaced") }
                     return
                 }
                 handshakeDone = true
                 consecutiveFails = 0
                 Log.i(TAG, "ws open, registering room=" + room + " uid=" + uid)
+                diag("SIGNAL open endpoint=" + (endpointIndex + 1) + "/" + endpoints.size)
                 backoffMs = 2_000L
                 startHeartbeat()
                 val reg = JsonObject().apply {
@@ -367,7 +383,11 @@ class SignalClient(
                 Log.i(TAG, "ws closed: " + detail)
                 // 迟到的旧连接回调：不是当前 client 时不清理、不改状态、
                 // 不触发重连（防误伤新连接的状态与心跳、防多余 openSocket）
-                if (client !== this) return
+                if (client !== this) {
+                    diag("SIGNAL close-stale " + detail)
+                    return
+                }
+                diag("SIGNAL close " + detail)
                 if (!handshakeDone) noteEndpointFailure(this)
                 client = null
                 heartbeatJob?.cancel()
@@ -393,6 +413,7 @@ class SignalClient(
         runCatching { ws.connect() }
             .onFailure { e ->
                 Log.w(TAG, "connect() failed", e)
+                diag("SIGNAL connect-fail " + e.javaClass.simpleName)
                 client = null
                 noteEndpointFailure(ws)
                 _state.value = State.Disconnected("connect failed: " + e.message)
@@ -416,6 +437,7 @@ class SignalClient(
             activeIndex = 1
             backoffMs = 2_000L
             Log.w(TAG, "主端点连续 " + FAILS_BEFORE_SWITCH + " 次未握手成功，切换到备用端点")
+            diag("SIGNAL switch-to-backup after " + FAILS_BEFORE_SWITCH + " fails")
         }
     }
 
@@ -438,12 +460,14 @@ class SignalClient(
                 if (stopped || activeIndex == 0) continue
                 if (probeEndpoint(endpoints[0])) {
                     Log.i(TAG, "主端点回探成功，切回主端点")
+                    diag("SIGNAL probe-primary ok=true")
                     activeIndex = 0
                     backoffMs = 2_000L
                     // 断开当前（备用）连接，交由 onClose -> scheduleReconnect 重连到主端点
                     runCatching { client?.closeConnection(CloseFrame.NORMAL, "switch to primary") }
                 } else {
                     Log.i(TAG, "主端点回探失败，继续使用备用端点")
+                    diag("SIGNAL probe-primary ok=false")
                 }
             }
         }
