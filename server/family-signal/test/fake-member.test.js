@@ -127,8 +127,10 @@ async function main() {
   // ---------- 位置应答 ----------
   console.log('[位置应答 loc-req → loc-res]');
   phone.send({ type: 'loc-req', to: FAKE_UID });
-  ok('桩收到位置请求', /收到位置请求/.test(fakeOut) || (await phone.wait(() => true, 50)) !== null);
   const locRes = await phone.wait((m) => m.type === 'loc-res' && m.from === FAKE_UID, 3000);
+  // 断言必须在"应答已到达"之后再读桩日志：原写法 `|| (await phone.wait(() => true, 50)) !== null`
+  // 是恒真兜底（wait 内部 msgs.find 会立刻命中此前任何一条已收报文），桩没收到请求也会 PASS
+  ok('桩收到位置请求（桩日志出现该行）', /收到位置请求/.test(fakeOut), fakeOut);
   ok('桩回传 loc-res', !!locRes, fakeOut);
   ok('坐标与配置一致',
     !!locRes && locRes.payload.lat === FAKE_LAT && locRes.payload.lng === FAKE_LNG,

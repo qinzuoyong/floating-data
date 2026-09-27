@@ -170,7 +170,13 @@ async function main() {
   anon.send({ type: 'loc-req', to: 'u-owner' });
   const anonErr = await anon.wait((m) => m.type === 'error' && m.code === 'not_registered');
   ok('未注册 loc-req 返回 not_registered', !!anonErr);
-  ok('未注册请求未被转发给目标', !owner.msgs.find((m) => m.type === 'loc-req' && m.from === undefined));
+  // 用"转发条数增量"判定：本用例之前的用例 2/5 已让 owner 收到过合法 loc-req，
+  // 原断言 `m.from === undefined` 永远不成立（中继必带 from），属恒真假绿
+  const locReqBefore = owner.msgs.filter((m) => m.type === 'loc-req').length;
+  await sleep(300);
+  const locReqAfter = owner.msgs.filter((m) => m.type === 'loc-req').length;
+  ok('未注册请求未被转发给目标', locReqAfter === locReqBefore,
+    '前 ' + locReqBefore + ' 条 / 后 ' + locReqAfter + ' 条');
   anon.close();
 
   // ---------- 用例 5：位置请求限流（10/分钟/成员） ----------
