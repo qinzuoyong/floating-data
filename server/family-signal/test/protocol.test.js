@@ -16,6 +16,8 @@ const path = require('path');
 const SERVER = path.join(__dirname, '..', 'server.js');
 const PORT = 18234;
 const STATE = path.join(os.tmpdir(), 'family-signal-test-' + Date.now() + '.json');
+/** 名册上限：生产默认 32，测试收紧到 6 以便用少量连接覆盖上限分支 */
+const CAP_MEMBERS = 6;
 
 let pass = 0, fail = 0;
 function ok(name, cond, extra) {
@@ -76,7 +78,8 @@ async function main() {
   const child = spawn(process.execPath, [SERVER], {
     env: Object.assign({}, process.env, {
       FAMILY_SIGNAL_PORT: String(PORT),
-      FAMILY_SIGNAL_STATE_FILE: STATE
+      FAMILY_SIGNAL_STATE_FILE: STATE,
+      FAMILY_SIGNAL_MAX_MEMBERS_PER_ROOM: String(CAP_MEMBERS)
     }),
     stdio: ['ignore', 'pipe', 'pipe']
   });
@@ -249,6 +252,70 @@ async function main() {
     afterReg ? '' : '只收到: ' + JSON.stringify(afterEvil.msgs));
   evil.close();
   afterEvil.close();
+
+  // ---------- 用例 9：单连接刷名册被拒 + 名册上限（P1） ----------
+  // 名册是永久的：落盘 rooms.json，并通过 registered 回执全量下发给每个成员。
+  // 旧实现实测可在一条连接上连续注册 5 个 uid，这些 uid 会永久留在名册里（幽灵成员），
+  // 且房间因 approved>1 永不回收。故锁两条：单连接只认一个身份、名册有上限。
+  console.log('[9] 单连接刷名册与名册上限');
+  const ghost = connect();
+  await ghost.open();
+  ghost.send({ type: 'register', room: 'GHOST1', uid: 'g-1', name: 'g1' });
+  const ghostReg = await ghost.wait((m) => m.type === 'registered');
+  ok('第一身份注册成功（房间创建人）', !!ghostReg);
+  for (const uid of ['g-2', 'g-3', 'g-4']) {
+    ghost.send({ type: 'register', room: 'GHOST1', uid, name: uid });
+    await sleep(80);
+  }
+  ok('同连接换 uid 被拒（bad_register）',
+    ghost.msgs.filter((m) => m.type === 'error' && m.code === 'bad_register').length >= 3,
+    JSON.stringify(ghost.msgs));
+  const peer = connect();
+  await peer.open();
+  peer.send({ type: 'register', room: 'GHOST1', uid: 'g-peer', name: 'peer' });
+  const peerReg = await peer.wait((m) => m.type === 'registered');
+  ok('另一条连接的合法新成员仍能进房', !!peerReg, peerReg ? '' : '只收到: ' + JSON.stringify(peer.msgs));
+  ok('名册里没有注入的幽灵 uid',
+    !!peerReg && !peerReg.roster.some((p) => ['g-2', 'g-3', 'g-4'].indexOf(p.uid) >= 0),
+    peerReg ? JSON.stringify(peerReg.roster) : '');
+  ok('名册恰好只含另一个真实成员',
+    !!peerReg && peerReg.roster.length === 1 && peerReg.roster[0].uid === 'g-1',
+    peerReg ? JSON.stringify(peerReg.roster) : '');
+  await sleep(900); // saveRooms 有 500ms 去抖
+  let saved3 = null;
+  try { saved3 = JSON.parse(fs.readFileSync(STATE, 'utf8')); } catch (e) { saved3 = null; }
+  ok('落盘名册只有两个真实成员（幽灵未持久化）',
+    !!saved3 && !!saved3.GHOST1 && Object.keys(saved3.GHOST1.approved).length === 2,
+    saved3 ? JSON.stringify(saved3.GHOST1) : 'no file');
+  ghost.close();
+  peer.close();
+
+  // 名册上限：本测试用 FAMILY_SIGNAL_MAX_MEMBERS_PER_ROOM=6 收紧上限（生产默认 32），
+  // 逐个用独立连接注册 6 个成员后，第 7 个新 uid 必须被拒为 room_full
+  console.log('[9b] 名册上限拒绝新增 uid');
+  const capClients = [];
+  for (let i = 1; i <= CAP_MEMBERS; i++) {
+    const c = connect();
+    await c.open();
+    c.send({ type: 'register', room: 'CAP01', uid: 'c-' + i, name: 'c' + i });
+    const r = await c.wait((m) => m.type === 'registered');
+    ok('第 ' + i + ' 个成员进房', !!r);
+    capClients.push(c);
+  }
+  const over = connect();
+  await over.open();
+  over.send({ type: 'register', room: 'CAP01', uid: 'c-over', name: 'over' });
+  const overErr = await over.wait((m) => m.type === 'error' && m.code === 'room_full');
+  ok('超出名册上限的新 uid 被拒为 room_full', !!overErr, JSON.stringify(over.msgs));
+  // 既有成员必须仍能重连（否则真实家庭会被自己的名册锁在门外）
+  const rejoin = connect();
+  await rejoin.open();
+  rejoin.send({ type: 'register', room: 'CAP01', uid: 'c-1', name: 'c1' });
+  const rejoinReg = await rejoin.wait((m) => m.type === 'registered');
+  ok('既有成员重连不受上限影响', !!rejoinReg, rejoinReg ? '' : '只收到: ' + JSON.stringify(rejoin.msgs));
+  over.close();
+  rejoin.close();
+  for (const c of capClients) c.close();
 
   owner.close(); joiner.close(); q.close();
   child.kill();

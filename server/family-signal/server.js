@@ -24,10 +24,23 @@ const fs = require('fs');
 // 监听端口与状态文件路径允许经环境变量覆盖（仅供本机测试注入，默认值即生产值）
 const PORT = Number(process.env.FAMILY_SIGNAL_PORT || 8088);
 const STATE_FILE = process.env.FAMILY_SIGNAL_STATE_FILE || '/opt/family-signal/rooms.json';
+/** 正整数环境变量（非法/缺失即取默认值；0 或 NaN 会让上限校验失效，故显式校验） */
+function envPositiveInt(name, fallback) {
+  const n = Number(process.env[name]);
+  return Number.isInteger(n) && n > 0 ? n : fallback;
+}
 /** 房间码结构约束（4-16 位字母数字，兼容历史房间；不通过即拒绝注册/查询） */
 const ROOM_PATTERN = /^[A-Za-z0-9_-]{4,16}$/;
 /** 新建房间数量上限：防止外部批量注册把内存与状态文件刷爆 */
 const MAX_ROOMS = 5000;
+/**
+ * 单房间名册上限（approved/members 与 pending 各自计数）。
+ *
+ * 家庭用不到这么多设备，而名册是**永久**的：它落盘 rooms.json，并通过 registered 回执
+ * 全量下发给每个成员。不设上限时，一条连接连续注册任意多个 uid 就能把名册、状态文件
+ * 与所有成员的成员列表刷到无界（远端可触发，回归用 test 用例 9）。
+ */
+const MAX_MEMBERS_PER_ROOM = envPositiveInt('FAMILY_SIGNAL_MAX_MEMBERS_PER_ROOM', 32);
 /** 成员显示名长度上限（客户端 16 字限制可被绕过，服务端必须独立约束） */
 const MAX_NAME_LEN = 32;
 const wss = new WebSocket.Server({ port: PORT, host: '0.0.0.0' });
@@ -362,6 +375,13 @@ function handleMessage(ws, msg) {
         }
         const name = sanitizeName(msg.name, uid);
         if (ws.room && ws.room !== room) leave(ws);
+        // 一条连接只承载一个设备身份：同房换 uid 属异常（否则单条连接即可在名册里
+        // 刷出任意多个成员，且旧 uid 会永远留在 members 里冒充在线）。
+        // 换房（leave 已清 uid）与改备注名（uid 不变）都不受影响。
+        if (ws.room === room && ws.uid && ws.uid !== uid) {
+          send(ws, { type: 'error', code: 'bad_register', message: '同连接不可更换 uid' });
+          return;
+        }
         let rs = rooms.get(room);
         if (!rs) {
           if (rooms.size >= MAX_ROOMS) {
@@ -374,13 +394,20 @@ function handleMessage(ws, msg) {
           saveRooms();
         }
         touchRoom(room);
+        // 既在本房名册（创建人/在线成员/已批准）：重连、改名、换名刷新都放行
+        const known = rs.owner === uid || rs.members.has(uid) || rs.approved.has(uid);
+        // 名册上限只拦"新增 uid"：既有成员永远能重连，避免真实家庭被自己的名册锁在门外
+        if (!known && rs.approved.size >= MAX_MEMBERS_PER_ROOM) {
+          send(ws, { type: 'error', code: 'room_full', message: '家庭成员数已达上限' });
+          return;
+        }
         const old = rs.members.get(uid);
         if (old && old.ws !== ws) { old.ws.terminate(); }
         // 加入审核停用（2026-09）：新成员直接进房，无需创建人批准；
         // 客户端审核 UI 仅在收到 join-pending/join-request 时显示，服务器不再下发即自动隐藏。
         // 恢复审核：删除下面条件中的 APPROVAL_DISABLED || 并取消 else 分支注释
         const APPROVAL_DISABLED = true;
-        if (APPROVAL_DISABLED || rs.owner === uid || rs.members.has(uid) || rs.approved.has(uid)) {
+        if (APPROVAL_DISABLED || known) {
           // 创建人或已批准成员：进房；名字刷新进名册（创建人也入名册）
           ws.room = room;
           ws.uid = uid;
@@ -398,6 +425,11 @@ function handleMessage(ws, msg) {
           }
         } else {
           // 新成员：进 pending，等待创建人审核；审核通过前不接收 presence、不能请求位置
+          // 待审队列同样限长：审核恢复后它才是新增 uid 的真正入口（同一无界增长面）
+          if (rs.pending.size >= MAX_MEMBERS_PER_ROOM) {
+            send(ws, { type: 'error', code: 'room_full', message: '待审核申请已达上限' });
+            return;
+          }
           ws.room = room;
           ws.uid = uid;
           ws.name = name;
