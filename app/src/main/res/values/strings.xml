@@ -62,4 +62,43 @@
     <string name="family_error_not_connected">信令未连接，请稍后重试</string>
     <string name="family_error_no_signal_config">未配置信令服务器地址，家人位置共享不可用</string>
     <string name="family_error_generic">操作失败：%1$s</string>
+
+    <!-- 家人到达/离开提醒（地点提醒） -->
+    <string name="notification_family_alert_channel">家人地点提醒</string>
+    <string name="family_alert_title">地点提醒</string>
+    <string name="family_alert_entry_desc">家人到达或离开指定地点时提醒你</string>
+    <string name="family_alert_entry_on">已开启 · %1$d 个地点</string>
+    <string name="family_alert_entry_off">未开启</string>
+    <string name="family_alert_master_switch">总开关</string>
+    <string name="family_alert_master_hint">开启后会定时请求家人位置做判定，可能增加对方定位唤醒与耗电</string>
+    <string name="family_alert_interval">检查频率</string>
+    <string name="family_alert_interval_value">每 %1$d 分钟</string>
+    <string name="family_alert_places_title">地点列表</string>
+    <string name="family_alert_places_empty">还没有地点，点「新增地点」创建</string>
+    <string name="family_alert_place_radius">半径 %1$d 米</string>
+    <string name="family_alert_place_watch_all">监视全部成员</string>
+    <string name="family_alert_place_watch_count">监视 %1$d 个成员</string>
+    <string name="family_alert_place_add">新增地点</string>
+    <string name="family_alert_place_new_title">新增地点</string>
+    <string name="family_alert_place_edit_title">编辑地点</string>
+    <string name="family_alert_place_untitled">未命名地点</string>
+    <string name="family_alert_name_label">地点名称</string>
+    <string name="family_alert_lat_label">纬度</string>
+    <string name="family_alert_lng_label">经度</string>
+    <string name="family_alert_radius_label">半径（米）</string>
+    <string name="family_alert_radius_hint">范围 %1$d-%2$d 米</string>
+    <string name="family_alert_watch_label">监视成员（不选 = 全部）</string>
+    <string name="family_alert_use_member_location">取家人上次位置</string>
+    <string name="family_alert_use_member_none">暂无家人位置（先让家人上报一次）</string>
+    <string name="family_alert_error_name">请输入地点名称</string>
+    <string name="family_alert_error_coord">请输入有效的经纬度</string>
+    <string name="family_alert_error_radius">半径需在 %1$d-%2$d 米之间</string>
+    <string name="family_alert_delete">删除</string>
+    <string name="family_alert_delete_title">删除地点</string>
+    <string name="family_alert_delete_confirm">删除后该地点的提醒与判定状态一并清除。确定删除「%1$s」？</string>
+    <string name="family_alert_edit">编辑</string>
+    <string name="family_alert_privacy_hint">地点与判定状态只存在本机、不上传；被监视成员看到的仍只是「有人请求了位置」</string>
+    <string name="family_alert_arrive_title">%1$s 到达 %2$s</string>
+    <string name="family_alert_leave_title">%1$s 离开 %2$s</string>
+    <string name="family_alert_time_text">时间：%1$s</string>
 </resources>

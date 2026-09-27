@@ -1,18 +1,26 @@
 package com.example.batteryfloat.service
 
 import android.Manifest
+import android.app.AlarmManager
+import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.IBinder
+import android.os.SystemClock
 import android.util.Log
 import androidx.core.content.ContextCompat
 import com.example.batteryfloat.BuildConfig
 import com.example.batteryfloat.PrefsKeys
 import com.example.batteryfloat.R
+import com.example.batteryfloat.diag.DiagLog
+import com.example.batteryfloat.family.AlertPlace
 import com.example.batteryfloat.family.FamilyStore
+import com.example.batteryfloat.family.GeofenceEvaluator
+import com.example.batteryfloat.family.PlaceStore
 import com.example.batteryfloat.notif.Notifs
+import com.example.batteryfloat.p2p.LocationPayload
 import com.example.batteryfloat.p2p.SignalClient
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -23,6 +31,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 /**
  * 家人位置共享后台服务（纯信令中继，无 WebRTC；2026-09 起不再前台运行）
@@ -57,6 +68,14 @@ class FamilyLocationService : Service() {
     /** 信令状态收集任务:重建通道前取消,避免旧实例的 collector 在服务存活期内累积泄漏 */
     private var stateCollectJob: Job? = null
 
+    /** 地点提醒存储（地点列表/总开关/判定状态） */
+    private val placeStore: PlaceStore get() = PlaceStore.get(this)
+
+    init {
+        // 位置入库后交到达/离开判定（判定与提醒只在转换时发生，见 onMemberLocation）
+        signalHandler.onLocation = ::onMemberLocation
+    }
+
     override fun onCreate() {
         super.onCreate()
         isRunning = true
@@ -75,6 +94,8 @@ class FamilyLocationService : Service() {
                 // 用户主动停止:清除「应在运行」标记,此后开机与进程重建不再自动恢复
                 // (系统回收进程不会走 ACTION_STOP,故不会误清标记)
                 markRunning(this, false)
+                // 停止共享后提醒无从判定：撤销轮询任务，不继续唤醒请求家人位置
+                cancelAlertPoll(this)
                 stopSelf()
                 return START_NOT_STICKY
             }
@@ -104,6 +125,18 @@ class FamilyLocationService : Service() {
                 val uid = intent.getStringExtra(EXTRA_JOIN_UID) ?: ""
                 if (uid.isNotBlank()) signal?.sendJoinReject(uid)
                 if (signal == null) stopSelf()
+                return START_STICKY
+            }
+            ACTION_ALERT_POLL -> {
+                // 到达/离开提醒的定时轮询：向被监视成员发 loc-req，回包在 LOC_RES 分支喂给判定器。
+                // 守卫同其余非 START 动作：通道未建立时不留僵尸实例（轮询也就无从发出）
+                if (signal == null) {
+                    stopSelf()
+                } else {
+                    pollAlertPlaces()
+                    // 非精确一次性任务：触发后由服务续下一次（见 syncAlertPoll）
+                    syncAlertPoll(this)
+                }
                 return START_STICKY
             }
             else -> {
@@ -201,6 +234,8 @@ class FamilyLocationService : Service() {
 
         val sig = SignalClient(signalUrl, backupUrl).also {
             it.onMessage = signalHandler::handleSignal
+            // 连接事件落盘（vivo 等机型屏蔽应用 logcat 时的唯一时序来源；写入口已脱敏）
+            it.diagLogger = { line -> DiagLog.append(this, line) }
         }
         signal = sig
 
@@ -211,6 +246,93 @@ class FamilyLocationService : Service() {
         }
         sig.connect(code, s.myUid(), s.myName())
         Log.i(TAG, "signal connecting room=" + code)
+        // 通道就绪后同步地点提醒的定时轮询（总开关关闭时本调用即撤销任务）
+        syncAlertPoll(this)
+    }
+
+    // ===== 家人到达/离开提醒 =====
+
+    /**
+     * 位置入库后的判定入口（信令线程/协程回调）
+     *
+     * 逐地点判定：命中到达/离开转换才发通知（首次样本只建立基线、滞回区内不动、
+     * 去重窗口内不重复提醒——规则见 [GeofenceEvaluator]）。判定状态逐条落盘，重启延续。
+     */
+    private fun onMemberLocation(uid: String, loc: LocationPayload) {
+        if (!placeStore.alertsEnabled()) return
+        val places = placeStore.activePlaces()
+        if (places.isEmpty()) return
+        // 只对名册内成员判定，与 FamilyStore.updateLocation 的准入一致（不认幽灵成员）
+        val member = FamilyStore.get(this).members.value[uid] ?: return
+        val now = System.currentTimeMillis()
+        for (place in places) {
+            if (place.watchUids.isNotEmpty() && uid !in place.watchUids) continue
+            val previous = placeStore.stateFor(uid, place.id)
+            val distance = GeofenceEvaluator.distanceMeters(loc.lat, loc.lng, place.lat, place.lng)
+            when (val decision = GeofenceEvaluator.evaluate(
+                previous = previous,
+                radiusMeters = place.radiusMeters,
+                distanceMeters = distance,
+                accuracyMeters = loc.accuracy,
+                sampleTs = loc.ts,
+                nowMs = now
+            )) {
+                GeofenceEvaluator.Decision.Discarded ->
+                    Log.i(TAG, "地点提醒样本丢弃 place=" + place.id)
+                is GeofenceEvaluator.Decision.Quiet -> {
+                    // 状态有变化才落盘（首次基线 / 状态翻转后的去重抑制）
+                    if (previous != decision.state) placeStore.putState(uid, place.id, decision.state)
+                }
+                is GeofenceEvaluator.Decision.Alert -> {
+                    placeStore.putState(uid, place.id, decision.state)
+                    val title = getString(
+                        if (decision.entered) R.string.family_alert_arrive_title
+                        else R.string.family_alert_leave_title,
+                        member.displayName,
+                        place.name
+                    )
+                    notifyPlaceAlert(uid, place, title, now)
+                }
+            }
+        }
+    }
+
+    /** 发一条到达/离开提醒（同一「成员 × 地点」固定通知 id：同地点的后续提醒覆盖上一条） */
+    private fun notifyPlaceAlert(uid: String, place: AlertPlace, title: String, nowMs: Long) {
+        val text = getString(
+            R.string.family_alert_time_text,
+            SimpleDateFormat("MM-dd HH:mm", Locale.getDefault()).format(Date(nowMs))
+        )
+        val notifyId = Notifs.familyAlertId(uid, place.id)
+        runCatching {
+            // 渠道幂等创建：本服务不再前台常驻，渠道可能还没建过
+            Notifs.ensureChannels(this)
+            getSystemService(android.app.NotificationManager::class.java)
+                .notify(notifyId, Notifs.familyPlaceAlert(this, title, text, notifyId))
+        }.onFailure { Log.w(TAG, "地点提醒通知失败", it) }
+    }
+
+    /**
+     * 向被监视成员发出一次位置请求
+     *
+     * 目标集合 = 各启用地点 watchUids 的并集（watchUids 为空的地点视为监视全部在线成员）。
+     * 记账复用 [FamilySignalHandler.requestMemberLocation]：回包仍须通过 loc-res 准入校验。
+     */
+    private fun pollAlertPlaces() {
+        if (!placeStore.alertsEnabled()) return
+        val places = placeStore.activePlaces()
+        if (places.isEmpty()) return
+        val online = FamilyStore.get(this).members.value.values.filter { it.online }
+        if (online.isEmpty()) return
+        val targets = LinkedHashSet<String>()
+        for (place in places) {
+            if (place.watchUids.isEmpty()) {
+                online.forEach { targets += it.uid }
+            } else {
+                online.filter { it.uid in place.watchUids }.forEach { targets += it.uid }
+            }
+        }
+        for (uid in targets) signalHandler.requestMemberLocation(uid)
     }
 
     companion object {
@@ -227,8 +349,13 @@ class FamilyLocationService : Service() {
         const val ACTION_REQUEST_STATUS = "com.yongge.batteryfloat.action.FAMILY_REQ_STATUS"
         const val ACTION_APPROVE_JOIN = "com.yongge.batteryfloat.action.FAMILY_APPROVE_JOIN"
         const val ACTION_REJECT_JOIN = "com.yongge.batteryfloat.action.FAMILY_REJECT_JOIN"
+        /** 地点提醒的定时轮询（由 AlarmManager 的 PendingIntent 投递，见 [syncAlertPoll]） */
+        const val ACTION_ALERT_POLL = "com.yongge.batteryfloat.action.FAMILY_ALERT_POLL"
         const val EXTRA_UID = "uid"
         const val EXTRA_JOIN_UID = "join_uid"
+
+        /** 轮询 PendingIntent 的请求码（登记与撤销必须同一个） */
+        private const val REQ_ALERT_POLL = 4001
 
         private val _connection = MutableStateFlow<SignalClient.State>(SignalClient.State.Idle)
         /** 信令连接状态（服务内收集，UI 观察） */
@@ -344,5 +471,47 @@ class FamilyLocationService : Service() {
                     .putExtra(EXTRA_JOIN_UID, uid)
             )
         }
+
+        /**
+         * 同步地点提醒的定时轮询（幂等；总开关/地点/频率变更后由 UI 调用）
+         *
+         * 用**非精确**一次性任务 [AlarmManager.setAndAllowWhileIdle]，每次触发后由服务续下一次
+         * （见 onStartCommand → ACTION_ALERT_POLL）：不用 setRepeating 是因为后者的周期任务
+         * 在 Doze 下会被整体推迟到维护窗口，长静止期将完全停止判定；本实现不承诺精确时刻
+         * （判定本就是分钟级采样），但能穿透 Doze。总开关关闭或无启用地点时只撤销任务。
+         *
+         * @param context 任意 Context（用应用 Context 的 AlarmManager）
+         */
+        fun syncAlertPoll(context: Context) {
+            val am = context.getSystemService(AlarmManager::class.java)
+            val store = PlaceStore.get(context)
+            if (am == null || !store.alertsEnabled() || store.activePlaces().isEmpty()) {
+                cancelAlertPoll(context)
+                return
+            }
+            val pi = alertPollIntent(context)
+            am.cancel(pi) // 先撤旧：频率变更后立即按新间隔计时
+            val intervalMs = store.intervalMinutes() * 60_000L
+            am.setAndAllowWhileIdle(
+                AlarmManager.ELAPSED_REALTIME_WAKEUP,
+                SystemClock.elapsedRealtime() + intervalMs,
+                pi
+            )
+        }
+
+        /** 撤销地点提醒的定时轮询（用户停止共享 / 关闭总开关 / 无启用地点） */
+        fun cancelAlertPoll(context: Context) {
+            val am = context.getSystemService(AlarmManager::class.java) ?: return
+            am.cancel(alertPollIntent(context))
+        }
+
+        /** 轮询用的 PendingIntent（getService：直接投递本服务的 [ACTION_ALERT_POLL]） */
+        private fun alertPollIntent(context: Context): PendingIntent =
+            PendingIntent.getService(
+                context,
+                REQ_ALERT_POLL,
+                Intent(context, FamilyLocationService::class.java).setAction(ACTION_ALERT_POLL),
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
     }
 }

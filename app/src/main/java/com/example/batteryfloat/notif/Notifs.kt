@@ -24,12 +24,16 @@ object Notifs {
     const val CHANNEL_BATTERY = "battery_temp_channel_v2"
     const val CHANNEL_PAIRING = "adb_pairing"
     const val CHANNEL_FAMILY = "family_location"
+    const val CHANNEL_FAMILY_ALERT = "family_place_alert"
 
     const val ID_FLOATING = 1001
     const val ID_HEALED = 2001
     const val ID_PAIRING = 2002
     const val ID_FAMILY = 3001
     const val ID_FAMILY_NOTICE = 3002
+
+    /** 家人到达/离开提醒的通知 id 基址（同一「成员 × 地点」固定，重复提醒覆盖不堆叠） */
+    const val ID_FAMILY_ALERT_BASE = 3100
 
     /** "n 秒后自动消失"所需的绝对时间戳(setTimeoutAfter 平台语义) */
     fun autoDismissAfter(ms: Long = 4_000L): Long = System.currentTimeMillis() + ms
@@ -76,6 +80,17 @@ object Notifs {
                 lockscreenVisibility = Notification.VISIBILITY_SECRET
             }
         )
+        nm.createNotificationChannel(
+            NotificationChannel(
+                CHANNEL_FAMILY_ALERT,
+                context.getString(R.string.notification_family_alert_channel),
+                // 到达/离开是用户主动订阅的事件，必须能看见（与静默的家人位置渠道区分开）
+                NotificationManager.IMPORTANCE_DEFAULT
+            ).apply {
+                description = "家人到达或离开指定地点时的提醒"
+                setShowBadge(true)
+            }
+        )
     }
 
     /** 悬浮窗前台常驻通知(FloatingWindowService) */
@@ -116,6 +131,41 @@ object Notifs {
             .setContentIntent(pendingIntent)
             .build()
     }
+
+    /**
+     * 家人到达/离开提醒（地点提醒命中转换时发一次）
+     *
+     * 通知 id 由 [familyAlertId] 生成：同一「成员 × 地点」固定 id，
+     * 同地点后续的提醒覆盖上一条，不会在通知栏堆叠。
+     *
+     * @param title 形如「ma 到达 学校」
+     * @param text 时间说明
+     */
+    fun familyPlaceAlert(context: Context, title: String, text: String, notifyId: Int): Notification {
+        val pendingIntent = PendingIntent.getActivity(
+            context,
+            notifyId,
+            Intent(context, MainActivity::class.java),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        return NotificationCompat.Builder(context, CHANNEL_FAMILY_ALERT)
+            .setContentTitle(title)
+            .setContentText(text)
+            .setSmallIcon(R.drawable.ic_launcher_foreground)
+            .setAutoCancel(true)
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .setContentIntent(pendingIntent)
+            .build()
+    }
+
+    /**
+     * 提醒通知 id：同一（成员 uid × 地点 id）恒定
+     *
+     * 取正后落到 [ID_FAMILY_ALERT_BASE] + 0~999：不同成员/地点撞 id 至多是"互相覆盖"，
+     * 不影响判定与文案（判定状态与通知 id 无关）。
+     */
+    fun familyAlertId(uid: String, placeId: String): Int =
+        ID_FAMILY_ALERT_BASE + ((uid + "|" + placeId).hashCode() and 0x7fffffff) % 1000
 
     /** 温度/功耗显著变化时刷新通知(BatteryMonitor) */
     fun floatingUpdate(context: Context, title: String, text: String): Notification {

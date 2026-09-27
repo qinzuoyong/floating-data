@@ -5,6 +5,7 @@ import com.example.batteryfloat.R
 import com.example.batteryfloat.data.BatteryLevel
 import com.example.batteryfloat.family.FamilyStore
 import com.example.batteryfloat.location.OnDemandLocationProvider
+import com.example.batteryfloat.p2p.LocationPayload
 import com.example.batteryfloat.p2p.SignalMessage
 import com.example.batteryfloat.p2p.SignalTypes
 import com.google.gson.Gson
@@ -62,6 +63,14 @@ internal class FamilySignalHandler(private val host: FamilyLocationService) {
     fun attach(store: FamilyStore) {
         this.store = store
     }
+
+    /**
+     * 位置入库后的回调（家人到达/离开提醒的判定入口）
+     *
+     * 只在通过准入校验、真正写入 [FamilyStore] 之后触发——提醒与"家人列表里的位置"
+     * 看到的是同一份数据，不会出现"列表没更新却报了到达"。
+     */
+    var onLocation: ((String, LocationPayload) -> Unit)? = null
 
     /**
      * 创建(或重建)定位提供者
@@ -241,6 +250,7 @@ internal class FamilySignalHandler(private val host: FamilyLocationService) {
                     return
                 }
                 s.updateLocation(from, loc)
+                onLocation?.invoke(from, loc)
             }
 
             SignalTypes.STAT_REQ -> {

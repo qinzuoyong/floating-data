@@ -93,4 +93,14 @@ object PrefsKeys {
     const val FAMILY_BG_LOC_ASKED = "family_bg_loc_asked"
     /** 家人位置共享服务上次是否在运行（进程/设备重建后据此恢复，语义同 FLOATING_WAS_RUNNING） */
     const val FAMILY_WAS_RUNNING = "family_was_running"
+
+    // ===== 家人地点提醒（到达/离开） =====
+    /** 地点列表 JSON（name / lat / lng / radiusMeters / watchUids / enabled） */
+    const val FAMILY_ALERT_PLACES = "family_alert_places"
+    /** 地点提醒总开关（默认关：开启后会定时请求家人位置，增加对方定位唤醒） */
+    const val FAMILY_ALERT_ENABLED = "family_alert_enabled"
+    /** 每个（成员 × 地点）的 in/out 状态与上次提醒时刻 JSON（重启后延续判定） */
+    const val FAMILY_ALERT_STATES = "family_alert_states"
+    /** 轮询检查间隔（分钟；最小 5，默认 10） */
+    const val FAMILY_ALERT_INTERVAL_MIN = "family_alert_interval_min"
 }
