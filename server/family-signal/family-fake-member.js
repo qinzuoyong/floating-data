@@ -15,6 +15,8 @@
  *   FAMILY_FAKE_UID        成员标识（固定值，重连后仍算同一成员）
  *   FAMILY_FAKE_NAME       显示名
  *   FAMILY_FAKE_LAT/LNG    应答的固定坐标（GCJ-02，家人地图可直接渲染）
+ *   FAMILY_FAKE_ACCURACY   应答的定位精度（米，默认 10）；调大可用于验证
+ *                          "精度差于半径的样本被地点提醒丢弃"
  *   FAMILY_FAKE_BATTERY    应答的固定电量百分比（默认 66）
  */
 const WebSocket = require('ws');
@@ -24,6 +26,7 @@ const UID = (process.env.FAMILY_FAKE_UID || 'ms-azure-fake').trim();
 const NAME = (process.env.FAMILY_FAKE_NAME || '微软服务器').trim();
 const LAT = Number(process.env.FAMILY_FAKE_LAT || 39.9087);
 const LNG = Number(process.env.FAMILY_FAKE_LNG || 116.3975);
+const ACCURACY = Math.max(0, Number(process.env.FAMILY_FAKE_ACCURACY || 10));
 const BATTERY = Math.min(100, Math.max(0, Number(process.env.FAMILY_FAKE_BATTERY || 66)));
 const ENDPOINTS = (process.env.FAMILY_FAKE_ENDPOINTS || 'ws://127.0.0.1:8088')
   .split(',')
@@ -78,7 +81,7 @@ function runEndpoint(url) {
           break;
         case 'loc-req':
           // 立即回固定坐标，便于对方在地图上看到落点
-          if (send({ type: 'loc-res', to: msg.from, payload: { lat: LAT, lng: LNG, ts: Date.now(), accuracy: 10 } })) {
+          if (send({ type: 'loc-res', to: msg.from, payload: { lat: LAT, lng: LNG, ts: Date.now(), accuracy: ACCURACY } })) {
             console.log(tag + ' 收到位置请求，已应答固定坐标');
           }
           break;
@@ -111,5 +114,5 @@ function runEndpoint(url) {
 }
 
 console.log('[fake] 测试成员启动：名=' + NAME + ' 房间长度=' + ROOM.length +
-  ' 端点=' + ENDPOINTS.length + ' 个 固定坐标=' + LAT + ',' + LNG);
+  ' 端点=' + ENDPOINTS.length + ' 个 固定坐标=' + LAT + ',' + LNG + ' 精度=' + ACCURACY);
 ENDPOINTS.forEach(runEndpoint);
