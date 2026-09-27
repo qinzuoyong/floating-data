@@ -13,7 +13,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -364,7 +366,11 @@ private fun PlaceEditorDialog(
             )
         },
         text = {
-            Column {
+            // 内容高度随成员数增长（每名成员一行「取家人上次位置」+ 一行监视勾选），
+            // 而 M3 的 AlertDialog 不为 text 插槽提供滚动：矮屏或输入法弹出时下方内容
+            // 会被裁掉且**无法到达**（模拟器实测 853×480dp、4 名成员时「取家人上次位置」
+            // 与「监视成员」整块消失，在对话框内拖动无任何反应）。故显式开启纵向滚动。
+            Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it },

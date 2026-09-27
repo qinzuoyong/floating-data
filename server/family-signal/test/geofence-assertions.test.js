@@ -191,6 +191,25 @@ ok('UI 提供总开关与增删改（新增/编辑/删除回调齐备）',
   /placeStore\.remove\(/.test(read(ALERT_SCREEN)));
 ok('每次变更后同步轮询任务（开关/频率/增删改）',
   (read(ALERT_SCREEN).match(/FamilyLocationService\.syncAlertPoll\(context\)/g) || []).length >= 5);
+// 对话框正文高度随成员数增长（每名成员一行「取家人上次位置」+ 一行监视勾选），
+// 而 M3 AlertDialog 的 text 插槽不提供滚动：矮屏或输入法弹出时下方内容被裁掉且无法到达
+// （2026-09-28 模拟器实测：853×480dp + 4 名成员 → 两块内容整块消失、对话框内拖动无反应）。
+ok('地点编辑对话框正文可纵向滚动（矮屏/成员多时不会把内容裁死）',
+  /private fun PlaceEditorDialog[\s\S]*?text = \{[\s\S]{0,500}?Column\(modifier = Modifier\.verticalScroll\(rememberScrollState\(\)\)\)/.test(read(ALERT_SCREEN)) &&
+  /import androidx\.compose\.foundation\.verticalScroll/.test(read(ALERT_SCREEN)) &&
+  /import androidx\.compose\.foundation\.rememberScrollState/.test(read(ALERT_SCREEN)));
+{
+  // 按函数边界取对话框正文，断言"只有一个 Column 且带滚动"：改回 `Column {` 即变红
+  const src = read(ALERT_SCREEN);
+  const i = src.indexOf('private fun PlaceEditorDialog');
+  const j = src.indexOf('private fun formatCoord');
+  const dialog = src.slice(i, j > i ? j : src.length);
+  const cols = (dialog.match(/\bColumn\b/g) || []).length;
+  ok('对话框正文只有一个 Column（无滚动 Column 未被重新引入）',
+    cols === 1 && /Column\(modifier = Modifier\.verticalScroll\(rememberScrollState\(\)\)\)/.test(dialog) &&
+    !/\bColumn \{/.test(dialog),
+    'Column 计数=' + cols);
+}
 
 console.log('[隐私与代价：只存本机、代价写进 README]');
 ok('地点与状态只存本机、不上行（无发送地点/状态的协议调用）',
