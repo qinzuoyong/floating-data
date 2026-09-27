@@ -153,6 +153,9 @@ internal class FamilySignalHandler(private val host: FamilyLocationService) {
                     // 新协议：以服务器名册全量重建本地成员列表（家庭实际成员，含离线）
                     Log.i(TAG, "registered, roster=" + roster.size)
                     s.syncRoster(roster)
+                    // 名册即家庭成员全集：不在册成员的地点判定状态（uid|placeId）一并丢弃，
+                    // 否则会残留累积、并在该 uid 回来时按陈旧基线判定一次
+                    host.pruneAlertStates(roster.map { it.uid }.toSet())
                 } else {
                     // 兼容旧服务器：仅在线成员逐个 upsert
                     val peers = msg.peers ?: emptyList()

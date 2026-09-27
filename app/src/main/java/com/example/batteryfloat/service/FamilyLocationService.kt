@@ -255,6 +255,16 @@ class FamilyLocationService : Service() {
     // ===== 家人到达/离开提醒 =====
 
     /**
+     * 名册同步后清理已不在家庭的成员的判定状态
+     *
+     * 供 [FamilySignalHandler] 在 `registered`（全量名册）到达后调用；语义见
+     * [PlaceStore.pruneStatesNotIn]。
+     */
+    internal fun pruneAlertStates(keepUids: Set<String>) {
+        placeStore.pruneStatesNotIn(keepUids)
+    }
+
+    /**
      * 位置入库后的判定入口（信令线程/协程回调）
      *
      * 逐地点判定：命中到达/离开转换才发通知（首次样本只建立基线、滞回区内不动、

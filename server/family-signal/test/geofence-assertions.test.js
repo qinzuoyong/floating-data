@@ -99,6 +99,14 @@ ok('每个（成员 × 地点）状态落盘、重启延续',
   /loadStates\(\)/.test(ps));
 ok('删除地点时一并清除其判定状态',
   /fun remove\(id: String\)[\s\S]{0,400}?filterKeys \{ !it\.endsWith\(KEY_SEPARATOR \+ id\) \}/.test(ps));
+// 成员退出家庭/被名册移除后，其判定状态（uid|placeId）原先永久残留：既随"曾出现成员数 ×
+// 地点数"缓慢累积，也会在该 uid 回来时按陈旧基线判定一次。名册（registered 全量）即家庭
+// 成员全集，据它收敛最准。
+ok('名册同步后清理已离家庭成员的判定状态',
+  /fun pruneStatesNotIn\(keepUids: Set<String>\)/.test(ps) &&
+  /it\.substringBefore\(KEY_SEPARATOR\) in keepUids/.test(ps) &&
+  /s\.syncRoster\(roster\)[\s\S]{0,300}?host\.pruneAlertStates\(roster\.map \{ it\.uid \}\.toSet\(\)\)/.test(handler) &&
+  /internal fun pruneAlertStates\(keepUids: Set<String>\)[\s\S]{0,200}?placeStore\.pruneStatesNotIn\(keepUids\)/.test(svc));
 ok('存储键进 PrefsKeys（地点/总开关/状态/间隔）',
   /const val FAMILY_ALERT_PLACES = "family_alert_places"/.test(prefs) &&
   /const val FAMILY_ALERT_ENABLED = "family_alert_enabled"/.test(prefs) &&

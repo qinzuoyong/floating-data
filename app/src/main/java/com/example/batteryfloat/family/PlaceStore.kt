@@ -198,6 +198,23 @@ class PlaceStore private constructor(context: Context) {
         persistStates()
     }
 
+    /**
+     * 丢弃不再属于家庭的成员的判定状态（registered 全量名册同步后调用）
+     *
+     * 状态键是 `uid|placeId`，成员退出家庭或从名册移除后条目不会自行消失：
+     * 既让状态随"曾出现成员数 × 地点数"缓慢累积，也会在该 uid 回来时用**陈旧基线**
+     * 判定一次（可能吞掉或多报一条到达/离开）。名册即家庭成员全集，据它收敛最准。
+     *
+     * @param keepUids 仍属于家庭的成员 uid（名册口径，不含自己）
+     */
+    @Synchronized
+    fun pruneStatesNotIn(keepUids: Set<String>) {
+        val kept = _states.value.filterKeys { it.substringBefore(KEY_SEPARATOR) in keepUids }
+        if (kept.size == _states.value.size) return
+        _states.value = kept
+        persistStates()
+    }
+
     // ===== 内部 =====
 
     /** 半径收敛（越界不报错，直接落到边界） */
