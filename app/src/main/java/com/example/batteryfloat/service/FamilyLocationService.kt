@@ -128,14 +128,14 @@ class FamilyLocationService : Service() {
                 return START_STICKY
             }
             ACTION_ALERT_POLL -> {
-                // 到达/离开提醒的定时轮询：向被监视成员发 loc-req，回包在 LOC_RES 分支喂给判定器。
-                // 守卫同其余非 START 动作：通道未建立时不留僵尸实例（轮询也就无从发出）
+                // 通道未建立（多为进程被回收后由本告警拉起）：按用户意图重建
+                if (signal == null && shouldAutoRestore(this)) setup()
                 if (signal == null) {
+                    cancelAlertPoll(this)
                     stopSelf()
                 } else {
-                    pollAlertPlaces()
-                    // 非精确一次性任务：触发后由服务续下一次（见 syncAlertPoll）
                     syncAlertPoll(this)
+                    pollAlertPlaces()
                 }
                 return START_STICKY
             }

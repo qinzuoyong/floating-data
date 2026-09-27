@@ -310,13 +310,16 @@ const FLS = path.join(ROOT, 'app/src/main/java/com/example/batteryfloat/service/
 const fls = read(FLS);
 const cntStopSelfGuard = (fls.match(/if \(signal == null\) stopSelf\(\)/g) || []).length;
 // 2026-09 新增地点提醒轮询（ACTION_ALERT_POLL）后共 5 个非 START 动作；该分支用块式守卫
-// （要先退出分支再轮询，写成单行会把轮询也放过去），故两类写法分别锁死，总数只增不减
-const cntStopSelfGuardBlock = (fls.match(/if \(signal == null\) \{\s*\n\s*stopSelf\(\)/g) || []).length;
+// （要先退出分支再轮询，写成单行会把轮询也放过去），故两类写法分别锁死，总数只增不减。
+// 2026-09-27 起该分支在自停前先撤销轮询任务（通道建不起来还留着任务就是每 N 分钟空转唤醒），
+// 故块式匹配只锁"必须 stopSelf"，不再要求它是首句——轮询分支的重建/续期另有
+// geofence-assertions.test.js 的三条结构式断言单独锁死。
+const cntStopSelfGuardBlock = (fls.match(/if \(signal == null\) \{\s*\n[\s\S]{0,120}?stopSelf\(\)/g) || []).length;
 ok('非 START 动作全部有 signal==null 即 stopSelf 守卫（4 处单行 + 1 处块式，共 5）',
   cntStopSelfGuard === 4 && cntStopSelfGuardBlock === 1,
   '实际单行 ' + cntStopSelfGuard + ' 处 / 块式 ' + cntStopSelfGuardBlock + ' 处');
 ok('地点提醒轮询分支同时受该守卫约束（不留僵尸实例）',
-  /ACTION_ALERT_POLL -> \{[\s\S]{0,300}?if \(signal == null\) \{[\s\S]{0,60}?stopSelf\(\)/.test(fls));
+  /ACTION_ALERT_POLL -> \{[\s\S]{0,400}?if \(signal == null\) \{[\s\S]{0,120}?stopSelf\(\)/.test(fls));
 
 console.log('[P2 特权通道并发连接竞态 AdbConnectionManager.kt]');
 // connectOnceInternal 约定"调用方持有 connectMutex"；setEnabled/onPaired/keyInit 三处曾裸调用，

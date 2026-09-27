@@ -112,6 +112,22 @@ ok('轮询投递本服务的 ACTION_ALERT_POLL（触发后由服务续下一次�
   /const val ACTION_ALERT_POLL = "com\.yongge\.batteryfloat\.action\.FAMILY_ALERT_POLL"/.test(svc) &&
   /PendingIntent\.getService\([\s\S]{0,200}?setAction\(ACTION_ALERT_POLL\)/.test(svc) &&
   /ACTION_ALERT_POLL -> \{[\s\S]{0,400}?syncAlertPoll\(this\)/.test(svc));
+// 结构式断言：取出 ACTION_ALERT_POLL 分支本体（到同级右括号为止），比窗口式匹配更不易误判。
+// 这三条锁"轮询链永不断链"：进程被回收后由告警直接拉起时通道为空，
+// 旧实现只 stopSelf 不续期，地点提醒会静默停摆（真机/模拟器均已复现）。
+const pollBranch = (() => {
+  const i = svc.indexOf('ACTION_ALERT_POLL -> {');
+  if (i < 0) return '';
+  const j = svc.indexOf('\n            }', i);
+  return j > i ? svc.slice(i, j) : '';
+})();
+ok('轮询分支：通道未建立时按用户意图重建（与开机广播/无障碍恢复共用 shouldAutoRestore 门控）',
+  /if \(signal == null && shouldAutoRestore\(this\)\) setup\(\)/.test(pollBranch),
+  '告警送达时不再重建通道，轮询链会静默断掉');
+ok('轮询分支：通道建不起来时撤销轮询并退出（不留死链、不留僵尸实例）',
+  /cancelAlertPoll\(this\)/.test(pollBranch) && /stopSelf\(\)/.test(pollBranch));
+ok('轮询分支：通道可用时续下一次轮询并立即请求位置',
+  /syncAlertPoll\(this\)/.test(pollBranch) && /pollAlertPlaces\(\)/.test(pollBranch));
 ok('总开关关闭或无启用地点时撤销任务（不空转唤醒）',
   /if \(am == null \|\| !store\.alertsEnabled\(\) \|\| store\.activePlaces\(\)\.isEmpty\(\)\) \{\s*\n\s*cancelAlertPoll\(context\)/.test(svc));
 ok('停止共享即撤销轮询（不再请求家人位置）',
