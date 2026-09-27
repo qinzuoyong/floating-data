@@ -156,6 +156,27 @@ ok('渠道被幂等创建（ensureChannels 内），且提醒会先确保渠道�
 ok('同一（成员 × 地点）固定通知 id（重复提醒覆盖不堆叠）',
   /fun familyAlertId\(uid: String, placeId: String\): Int/.test(notifs) &&
   /Notifs\.familyAlertId\(uid, place\.id\)/.test(svc));
+// 锁屏可见性是设计契约的一部分：到达/离开提醒必须看得见（渠道 DEFAULT + 通知不设 SECRET），
+// 而电池/家人在线这类"常驻但不必看"的通知刻意锁屏隐藏（VISIBILITY_SECRET）。
+// 结构式取函数体/渠道块本体，避免窗口式匹配跨到别处。
+const placeAlertFn = (() => {
+  const i = notifs.indexOf('fun familyPlaceAlert(');
+  const j = notifs.indexOf('\n    }', i);
+  return (i >= 0 && j > i) ? notifs.slice(i, j) : '';
+})();
+const alertChannelBlock = (() => {
+  const i = notifs.indexOf('CHANNEL_FAMILY_ALERT,');
+  const j = notifs.indexOf('\n        )', i);
+  return (i >= 0 && j > i) ? notifs.slice(i, j) : '';
+})();
+ok('提醒通知不设锁屏隐藏、且自动消失（可见性由渠道 DEFAULT 决定）',
+  !!placeAlertFn && /setAutoCancel\(true\)/.test(placeAlertFn) && !/VISIBILITY_SECRET/.test(placeAlertFn),
+  placeAlertFn ? '' : '未取到 familyPlaceAlert 函数体');
+ok('提醒渠道不设锁屏隐藏（与「到达/离开必须能看见」一致）',
+  !!alertChannelBlock && !/lockscreenVisibility/.test(alertChannelBlock),
+  alertChannelBlock ? '' : '未取到 CHANNEL_FAMILY_ALERT 渠道块');
+ok('对照：悬浮窗/电池通知仍锁屏隐藏（两条渠道刻意区分，不是漏配）',
+  /fun floatingForeground\([\s\S]{0,900}?VISIBILITY_SECRET/.test(notifs));
 
 console.log('[UI 入口]');
 ok('家人列表有地点提醒入口卡片',
