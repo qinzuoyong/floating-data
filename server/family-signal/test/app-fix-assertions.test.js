@@ -324,16 +324,35 @@ const FLS = path.join(ROOT, 'app/src/main/java/com/example/batteryfloat/service/
 const fls = read(FLS);
 const cntStopSelfGuard = (fls.match(/if \(signal == null\) stopSelf\(\)/g) || []).length;
 // 2026-09 新增地点提醒轮询（ACTION_ALERT_POLL）后共 5 个非 START 动作；该分支用块式守卫
-// （要先退出分支再轮询，写成单行会把轮询也放过去），故两类写法分别锁死，总数只增不减。
+// （要先退出分支再轮询，写成单行会把轮询也放过去）。
 // 2026-09-27 起该分支在自停前先撤销轮询任务（通道建不起来还留着任务就是每 N 分钟空转唤醒），
-// 故块式匹配只锁"必须 stopSelf"，不再要求它是首句——轮询分支的重建/续期另有
-// geofence-assertions.test.js 的三条结构式断言单独锁死。
-const cntStopSelfGuardBlock = (fls.match(/if \(signal == null\) \{\s*\n[\s\S]{0,120}?stopSelf\(\)/g) || []).length;
+// 故块式不再要求 stopSelf 是首句——但"块内必须出现 stopSelf"与"全文件恰好 1 处块式守卫"
+// 依旧锁死，且不再用字符窗口（窗口只锁前缀长度，分支一变长就得放宽窗口，等于悄悄放宽锁）。
+// 改为结构式计数：扫描每个 `if (signal == null) {` 的括号块，检查块内是否含 stopSelf()。
+const cntStopSelfGuardBlock = (() => {
+  let count = 0, idx = 0;
+  const OPEN = 'if (signal == null) {';
+  const CLOSE = '\n                }';   // 块右括号（when 分支内块体缩进 20 → 右括号 16）
+  while ((idx = fls.indexOf(OPEN, idx)) >= 0) {
+    const end = fls.indexOf(CLOSE, idx);
+    if (end > idx && fls.slice(idx, end).includes('stopSelf()')) count++;
+    idx = end > idx ? end : idx + OPEN.length;
+  }
+  return count;
+})();
 ok('非 START 动作全部有 signal==null 即 stopSelf 守卫（4 处单行 + 1 处块式，共 5）',
   cntStopSelfGuard === 4 && cntStopSelfGuardBlock === 1,
   '实际单行 ' + cntStopSelfGuard + ' 处 / 块式 ' + cntStopSelfGuardBlock + ' 处');
-ok('地点提醒轮询分支同时受该守卫约束（不留僵尸实例）',
-  /ACTION_ALERT_POLL -> \{[\s\S]{0,400}?if \(signal == null\) \{[\s\S]{0,120}?stopSelf\(\)/.test(fls));
+// 轮询分支单独取分支体后断言（不再依赖窗口长度）
+const pollBranchFls = (() => {
+  const i = fls.indexOf('ACTION_ALERT_POLL -> {');
+  if (i < 0) return '';
+  const j = fls.indexOf('\n            }', i);
+  return j > i ? fls.slice(i, j) : '';
+})();
+ok('地点提醒轮询分支同时受该守卫约束（块内含 stopSelf，不留僵尸实例）',
+  /if \(signal == null\) \{[\s\S]*?stopSelf\(\)/.test(pollBranchFls),
+  pollBranchFls ? '' : '未取到 ACTION_ALERT_POLL 分支体');
 
 console.log('[P2 特权通道并发连接竞态 AdbConnectionManager.kt]');
 // connectOnceInternal 约定"调用方持有 connectMutex"；setEnabled/onPaired/keyInit 三处曾裸调用，
