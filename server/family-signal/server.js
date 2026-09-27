@@ -56,15 +56,40 @@ function rateLimited(key, limit, windowMs) {
 }
 
 /**
+ * 安全取文本：只接受字符串与有限数值，其余类型（对象/数组/布尔/null）一律视为空串。
+ *
+ * 为什么不能直接 String(v)：远端字段完全不可信，`String({toString:null})` 与
+ * `String(Object.create(null))` 会抛 TypeError；本服务的报文处理若抛出未捕获异常，
+ * 整个进程会退出（所有家庭同时掉线），故任何字段访问都不得依赖隐式类型转换。
+ */
+function asText(value) {
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number' && Number.isFinite(value)) return String(value);
+  return '';
+}
+
+/**
+ * 安全取数值：只接受数值与可解析的数字字符串，其余一律 NaN（由调用方按"非法"拒绝）。
+ *
+ * 同理，`Number({valueOf:null,toString:null})` 会抛 TypeError；布尔 true 也会被
+ * `Number()` 转成 1 从而通过区间校验，故显式限定取值范围更窄的入参类型。
+ */
+function asNumber(value) {
+  if (typeof value === 'number') return value;
+  if (typeof value === 'string' && value.trim() !== '') return Number(value);
+  return NaN;
+}
+
+/**
  * 位置载荷白名单校验（服务端侧第二道防线）：
  * 客户端已做校验，但中继前的规范化可避免畸形 payload 被转发给其他成员的 App。
  */
 function sanitizeLocationPayload(payload) {
   if (!payload || typeof payload !== 'object') return null;
-  const lat = Number(payload.lat);
-  const lng = Number(payload.lng);
-  const ts = Number(payload.ts);
-  const accuracy = Number(payload.accuracy);
+  const lat = asNumber(payload.lat);
+  const lng = asNumber(payload.lng);
+  const ts = asNumber(payload.ts);
+  const accuracy = asNumber(payload.accuracy);
   if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
   if (lat < -90 || lat > 90 || lng < -180 || lng > 180) return null;
   if (lat === 0 && lng === 0) return null;
@@ -82,8 +107,8 @@ function sanitizeLocationPayload(payload) {
  */
 function sanitizeStatusPayload(payload) {
   if (!payload || typeof payload !== 'object') return null;
-  const battery = Number(payload.battery);
-  const ts = Number(payload.ts);
+  const battery = asNumber(payload.battery);
+  const ts = asNumber(payload.ts);
   if (!Number.isFinite(battery)) return null;
   if (battery < 0 || battery > 100) return null;
   const rounded = Math.round(battery);
@@ -96,7 +121,7 @@ function sanitizeStatusPayload(payload) {
 
 /** 清理显示名：去除控制字符并截断，防止超长/畸形文本进入广播与持久化 */
 function sanitizeName(name, fallbackUid) {
-  const cleaned = String(name || '')
+  const cleaned = asText(name || '')
     .replace(/[\u0000-\u001f\u007f]/g, '')
     .trim()
     .slice(0, MAX_NAME_LEN);
@@ -287,7 +312,23 @@ wss.on('connection', (ws, req) => {
     let msg;
     try { msg = JSON.parse(data.toString('utf8')); } catch { return; }
     if (!msg || typeof msg.type !== 'string') return;
+    handleMessage(ws, msg);
+  });
 
+  ws.on('close', () => leave(ws));
+  ws.on('error', () => { /* ignore */ });
+});
+
+/**
+ * 报文处理（自 connection 回调抽出为独立函数，行为不变）
+ *
+ * 整段包在 try/catch 内：远端报文完全不可信，任何字段异常都必须收敛为
+ * "丢弃本条 + 留痕"。异常若冒泡，会沿 ws 的 socket 数据路径成为未捕获异常，
+ * 使 Node 进程直接退出——所有家庭同时掉线，且可被任意未认证连接远程触发
+ * （实测：{"type":"room-check","room":{"toString":null}} 即可复现）。
+ */
+function handleMessage(ws, msg) {
+  try {
     switch (msg.type) {
       case 'room-check': {
         // 限流：家庭码空间有限，不限制即可被逐个枚举出全部在用房间
@@ -295,7 +336,7 @@ wss.on('connection', (ws, req) => {
           send(ws, { type: 'error', code: 'rate_limited', message: '查询过于频繁' });
           break;
         }
-        const room = String(msg.room || '').trim();
+        const room = asText(msg.room || '').trim();
         if (!ROOM_PATTERN.test(room)) {
           send(ws, { type: 'room-check-res', room, exists: false, ownerName: '' });
           break;
@@ -313,8 +354,8 @@ wss.on('connection', (ws, req) => {
           send(ws, { type: 'error', code: 'rate_limited', message: '注册过于频繁' });
           return;
         }
-        const room = String(msg.room || '').trim();
-        const uid = String(msg.uid || '').trim();
+        const room = asText(msg.room || '').trim();
+        const uid = asText(msg.uid || '').trim();
         if (!ROOM_PATTERN.test(room) || !uid || uid.length > 64) {
           send(ws, { type: 'error', code: 'bad_register', message: 'room/uid 非法' });
           return;
@@ -369,7 +410,7 @@ wss.on('connection', (ws, req) => {
       }
 
       case 'join-approve': {
-        const uid = String(msg.uid || '').trim();
+        const uid = asText(msg.uid || '').trim();
         const rs = ws.room ? rooms.get(ws.room) : undefined;
         if (!rs || rs.owner !== ws.uid) { send(ws, { type: 'error', code: 'not_owner' }); break; }
         const p = rs.pending.get(uid);
@@ -386,7 +427,7 @@ wss.on('connection', (ws, req) => {
       }
 
       case 'join-reject': {
-        const uid = String(msg.uid || '').trim();
+        const uid = asText(msg.uid || '').trim();
         const rs = ws.room ? rooms.get(ws.room) : undefined;
         if (!rs || rs.owner !== ws.uid) { send(ws, { type: 'error', code: 'not_owner' }); break; }
         const p = rs.pending.get(uid);
@@ -398,7 +439,7 @@ wss.on('connection', (ws, req) => {
 
       case 'signal':
       case 'loc-req': {
-        const to = String(msg.to || '').trim();
+        const to = asText(msg.to || '').trim();
         if (!ws.uid || !ws.room) { send(ws, { type: 'error', code: 'not_registered' }); break; }
         // 限流：单成员高频请求会让对端 GNSS 持续采集（耗电），也属可被滥用的探测手段
         if (rateLimited('loc:' + ws.room + ':' + ws.uid, 10, 60000)) {
@@ -420,7 +461,7 @@ wss.on('connection', (ws, req) => {
       }
 
       case 'loc-res': {
-        const to = String(msg.to || '').trim();
+        const to = asText(msg.to || '').trim();
         if (!ws.uid || !ws.room || !to) break;
         // 中继前规范化载荷：畸形/越界数据在服务端即被拦下，不再转发给其他成员的 App
         const payload = sanitizeLocationPayload(msg.payload);
@@ -437,7 +478,7 @@ wss.on('connection', (ws, req) => {
       }
 
       case 'stat-req': {
-        const to = String(msg.to || '').trim();
+        const to = asText(msg.to || '').trim();
         if (!ws.uid || !ws.room) { send(ws, { type: 'error', code: 'not_registered' }); break; }
         // 独立限流桶：电量请求在对端只是读一次系统电量（不触发定位），故比位置请求宽松，
         // 也不占用位置请求的额度（loc: 桶 10/分钟）
@@ -457,7 +498,7 @@ wss.on('connection', (ws, req) => {
       }
 
       case 'stat-res': {
-        const to = String(msg.to || '').trim();
+        const to = asText(msg.to || '').trim();
         if (!ws.uid || !ws.room || !to) break;
         const statPayload = sanitizeStatusPayload(msg.payload);
         if (!statPayload) {
@@ -480,11 +521,10 @@ wss.on('connection', (ws, req) => {
       default:
         send(ws, { type: 'error', code: 'unknown_type', message: msg.type });
     }
-  });
-
-  ws.on('close', () => leave(ws));
-  ws.on('error', () => { /* ignore */ });
-});
+  } catch (e) {
+    console.warn('family-signal drop message type=' + msg.type + ': ' + (e && e.message ? e.message : e));
+  }
+}
 
 // 心跳：30s ping，60s 内无 pong 判死（members 与 pending 都清理）
 const heartbeat = setInterval(() => {

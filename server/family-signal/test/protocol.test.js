@@ -201,6 +201,55 @@ async function main() {
   ok('创建人记录为 owner', !!saved && saved.TEST01 && saved.TEST01.owner === 'u-owner');
   ok('新成员已入 approved 名册', !!saved && saved.TEST01 && !!saved.TEST01.approved['u-join']);
 
+  // ---------- 用例 8：恶意报文不得让服务进程退出（P0） ----------
+  // 远端报文完全不可信：用对象冒充 room/uid/to/name 与 payload 数值字段时，
+  // 旧实现里的 String()/Number() 会抛 TypeError，沿 ws 的 socket 数据路径冒泡成
+  // 未捕获异常 → 整个 Node 进程退出（所有家庭同时掉线），且无需认证即可触发。
+  // 首条 room-check 在旧实现上即可复现，故本用例"改回去就变红"。
+  console.log('[8] 恶意报文不使服务退出');
+  const evil = connect();
+  await evil.open();
+  const hostile = [
+    { type: 'room-check', room: { toString: null } },
+    { type: 'room-check', room: { valueOf: null, toString: null } },
+    { type: 'register', room: 'EVIL01', uid: { toString: null }, name: 'x' },
+    { type: 'register', room: { toString: null }, uid: 'u-evil', name: { toString: null } },
+    { type: 'register', room: 'EVIL01', uid: 'u-evil', name: { valueOf: null, toString: null } },
+    { type: 'loc-req', to: { toString: null } },
+    { type: 'loc-res', to: { toString: null }, payload: { lat: { valueOf: null, toString: null }, lng: 1, ts: 1, accuracy: 1 } },
+    { type: 'stat-req', to: { toString: null } },
+    { type: 'stat-res', to: 'u-owner', payload: { battery: { valueOf: null, toString: null }, ts: 1 } },
+    { type: 'loc-res', to: 'u-owner', payload: [1, 2, 3] },
+    { type: 'stat-res', to: 'u-owner', payload: 'not-an-object' }
+  ];
+  for (const m of hostile) { evil.send(m); await sleep(40); }
+  await sleep(500);
+  ok('服务进程仍存活（未因恶意报文退出）', child.exitCode === null,
+    'exitCode=' + child.exitCode);
+  // 对象冒充 room/uid 必须被拒为 bad_register（两条用例各一次），不得建出畸形房间
+  ok('对象型 room/uid 被拒为 bad_register',
+    evil.msgs.filter((m) => m.type === 'error' && m.code === 'bad_register').length >= 2,
+    JSON.stringify(evil.msgs));
+  // 第三条 register 的 room/uid 合法，只有 name 是对象：应被规范化为 uid 兜底而非崩溃或落畸形名
+  await sleep(900); // saveRooms 有 500ms 去抖
+  let saved2 = null;
+  try { saved2 = JSON.parse(fs.readFileSync(STATE, 'utf8')); } catch (e) { saved2 = null; }
+  ok('对象型 name 被规范化为 uid 兜底（未把畸形名写进名册）',
+    !!saved2 && !!saved2.EVIL01 && saved2.EVIL01.approved['u-evil'] === 'u-evil',
+    saved2 ? JSON.stringify(saved2.EVIL01) : 'no file');
+  // 崩溃后再连也拿不到回执，故"同连接仍被应答 + 新连接仍能注册"两条一起锁住可用性
+  evil.send({ type: 'room-check', room: 'TEST01' });
+  const aliveRes = await evil.wait((m) => m.type === 'room-check-res');
+  ok('恶意报文之后同连接仍被应答', !!aliveRes);
+  const afterEvil = connect();
+  await afterEvil.open();
+  afterEvil.send({ type: 'register', room: 'TEST01', uid: 'u-after', name: '崩溃后' });
+  const afterReg = await afterEvil.wait((m) => m.type === 'registered');
+  ok('恶意报文之后新成员仍能注册进房', !!afterReg,
+    afterReg ? '' : '只收到: ' + JSON.stringify(afterEvil.msgs));
+  evil.close();
+  afterEvil.close();
+
   owner.close(); joiner.close(); q.close();
   child.kill();
   await sleep(200);
