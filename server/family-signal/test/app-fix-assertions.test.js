@@ -377,5 +377,32 @@ ok('startViaAdb 有 AtomicBoolean 防重入守卫',
   /AtomicBoolean\(false\)/.test(bfd) && /if \(!starting\.compareAndSet\(false, true\)\)/.test(bfd));
 ok('守卫在 finally 中复位', /finally \{[\s\S]{0,40}?starting\.set\(false\)/.test(bfd));
 
+console.log('\n[敏感值零输出：家庭码 / 设备 uid 不进 logcat]');
+// 2026-09-28 定向再审查发现三处直连 logcat 的明文输出：主服务打
+// "signal connecting room=<家庭码>"、SignalClient 打 "ws open, registering room=<家庭码> uid=<uid>"、
+// SignalClient 把无法解析的报文原文整条打出（远端报文可能含成员 uid）。
+// logcat 虽仅本应用与 adb 可读（READ_LOGS 为 signature|privileged），仍与 AGENTS.md
+// 「家庭码 / uid 零输出」相悖——DiagLog 已定点脱敏，这几处却绕过了它。
+// 断言锁定修复形态，防止后续改动把敏感值加回日志。
+const SIG = path.join(ROOT, 'app/src/main/java/com/example/batteryfloat/p2p/SignalClient.kt');
+const sigSrc = read(SIG);
+ok('主服务不再把家庭码打进 logcat',
+  !/signal connecting room=/.test(service) && /Log\.i\(TAG, "signal connecting"\)/.test(service));
+ok('主服务仍用家庭码建连（不是把参数删掉了事）',
+  /sig\.connect\(code, s\.myUid\(\), s\.myName\(\)\)/.test(service));
+ok('SignalClient 注册日志不再拼入 room / uid',
+  !/registering room=/.test(sigSrc) && /Log\.i\(TAG, "ws open, registering"\)/.test(sigSrc));
+ok('SignalClient 仍按 room/uid 注册（注册报文未受影响）',
+  /addProperty\("room", room\)/.test(sigSrc) && /addProperty\("uid", uid\)/.test(sigSrc));
+ok('SignalClient 未解析报文经 DiagLog.mask 脱敏后再打',
+  /Log\.w\(TAG, "bad message: " \+ DiagLog\.mask\(raw\)\)/.test(sigSrc) &&
+  /import com\.example\.batteryfloat\.diag\.DiagLog/.test(sigSrc));
+{
+  // 通用兜底：family / 信令源码里任何 Log 行都不得把 "room=" / "uid=" 直接拼上变量
+  const logLines = [service, sigSrc].flatMap((s) => s.split('\n').filter((l) => /Log\.[iwed]\(/.test(l)));
+  const offenders = logLines.filter((l) => /(room|uid)\s*=\s*"\s*\+/.test(l));
+  ok('两文件的所有 Log 行都不拼接 room=/uid= 变量', offenders.length === 0, offenders.join(' | '));
+}
+
 console.log('\n== 结果: ' + pass + ' 通过 / ' + fail + ' 失败 ==');
 process.exit(fail === 0 ? 0 : 1);

@@ -245,7 +245,9 @@ class FamilyLocationService : Service() {
             sig.state.collect { _connection.value = it }
         }
         sig.connect(code, s.myUid(), s.myName())
-        Log.i(TAG, "signal connecting room=" + code)
+        // 不把家庭码拼进日志：logcat 明文可被 adb 读到，与「敏感值零输出」约定冲突；
+        // 连接时序另有 DiagLog 落盘（写入口已按家庭码/uid 定点脱敏）
+        Log.i(TAG, "signal connecting")
         // 通道就绪后同步地点提醒的定时轮询（总开关关闭时本调用即撤销任务）
         syncAlertPoll(this)
     }

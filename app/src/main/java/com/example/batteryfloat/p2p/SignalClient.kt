@@ -1,6 +1,7 @@
 package com.example.batteryfloat.p2p
 
 import android.util.Log
+import com.example.batteryfloat.diag.DiagLog
 import com.google.gson.Gson
 import com.google.gson.JsonObject
 import kotlinx.coroutines.CompletableDeferred
@@ -330,7 +331,8 @@ class SignalClient(
                 }
                 handshakeDone = true
                 consecutiveFails = 0
-                Log.i(TAG, "ws open, registering room=" + room + " uid=" + uid)
+                // 不把家庭码/uid 拼进日志（logcat 明文可被 adb 读到）：连接时序见 DiagLog 落盘
+                Log.i(TAG, "ws open, registering")
                 diag("SIGNAL open endpoint=" + (endpointIndex + 1) + "/" + endpoints.size)
                 backoffMs = 2_000L
                 startHeartbeat()
@@ -348,7 +350,9 @@ class SignalClient(
                 val msg = try {
                     gson.fromJson(raw, SignalMessage::class.java)
                 } catch (e: Exception) {
-                    Log.w(TAG, "bad message: " + raw)
+                    // 报文原文不可信（可能含成员 uid），经 DiagLog 脱敏并截断后再打：
+                    // 保留"解析失败 + 报文形态"的诊断价值，又不把敏感值写进 logcat
+                    Log.w(TAG, "bad message: " + DiagLog.mask(raw))
                     return
                 }
                 when (msg.type) {
