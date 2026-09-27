@@ -309,8 +309,14 @@ console.log('[P2 非 START 动作不得遗留僵尸家人服务 FamilyLocationSe
 const FLS = path.join(ROOT, 'app/src/main/java/com/example/batteryfloat/service/FamilyLocationService.kt');
 const fls = read(FLS);
 const cntStopSelfGuard = (fls.match(/if \(signal == null\) stopSelf\(\)/g) || []).length;
-ok('四个非 START 动作分支均有 signal==null 即 stopSelf 守卫（共 4 处）',
-  cntStopSelfGuard === 4, '实际 ' + cntStopSelfGuard + ' 处');
+// 2026-09 新增地点提醒轮询（ACTION_ALERT_POLL）后共 5 个非 START 动作；该分支用块式守卫
+// （要先退出分支再轮询，写成单行会把轮询也放过去），故两类写法分别锁死，总数只增不减
+const cntStopSelfGuardBlock = (fls.match(/if \(signal == null\) \{\s*\n\s*stopSelf\(\)/g) || []).length;
+ok('非 START 动作全部有 signal==null 即 stopSelf 守卫（4 处单行 + 1 处块式，共 5）',
+  cntStopSelfGuard === 4 && cntStopSelfGuardBlock === 1,
+  '实际单行 ' + cntStopSelfGuard + ' 处 / 块式 ' + cntStopSelfGuardBlock + ' 处');
+ok('地点提醒轮询分支同时受该守卫约束（不留僵尸实例）',
+  /ACTION_ALERT_POLL -> \{[\s\S]{0,300}?if \(signal == null\) \{[\s\S]{0,60}?stopSelf\(\)/.test(fls));
 
 console.log('[P2 特权通道并发连接竞态 AdbConnectionManager.kt]');
 // connectOnceInternal 约定"调用方持有 connectMutex"；setEnabled/onPaired/keyInit 三处曾裸调用，
