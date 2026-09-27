@@ -257,7 +257,9 @@ class SignalClient(
                     val exists = msg.exists == true
                     scope.launch {
                         onResult(exists, msg.ownerName)
-                        runCatching { close() }
+                        // 与主连接同一收尾方式：close() 对"握手中的连接"无效（握手照常完成后变僵尸），
+                        // 故统一用 closeConnection 强断
+                        runCatching { closeConnection(CloseFrame.ABNORMAL_CLOSE, "room-check done") }
                     }
                 }
             }
@@ -275,7 +277,7 @@ class SignalClient(
         scope.launch {
             delay(ROOM_CHECK_TIMEOUT_MS)
             if (answered.compareAndSet(false, true)) {
-                runCatching { checker.close() }
+                runCatching { checker.closeConnection(CloseFrame.ABNORMAL_CLOSE, "room-check timeout") }
                 onResult(true, null)
             }
         }

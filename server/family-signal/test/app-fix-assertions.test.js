@@ -415,5 +415,18 @@ ok('SignalClient 未解析报文经 DiagLog.mask 脱敏后再打',
   ok('两文件的所有 Log 行都不拼接 room=/uid= 变量', offenders.length === 0, offenders.join(' | '));
 }
 
+{
+  // 家庭码占用查询（checkRoom）的临时连接原用 close() 收尾：close() 对"握手中的连接"无效
+  // （握手照常完成后变僵尸），主连接与连通性探测都已改用 closeConnection 强断，此处对齐。
+  const i = sigSrc.indexOf('fun checkRoom');
+  const body = i < 0 ? '' : sigSrc.slice(i, sigSrc.indexOf('// ===== 内部 =====', i));
+  // 只测代码行：注释里出现 close() 是解释性文字，不算实现
+  const code = body.split('\n').filter((l) => !/^\s*(\/\/|\*|\/\*)/.test(l)).join('\n');
+  ok('家庭码查询的临时连接改用 closeConnection 收尾（不再用 close()）',
+    code.length > 0 && !/[^a-zA-Z]close\(\)/.test(code) &&
+    (code.match(/closeConnection\(CloseFrame\.ABNORMAL_CLOSE/g) || []).length === 2,
+    'closeConnection 次数=' + (code.match(/closeConnection\(/g) || []).length);
+}
+
 console.log('\n== 结果: ' + pass + ' 通过 / ' + fail + ' 失败 ==');
 process.exit(fail === 0 ? 0 : 1);
