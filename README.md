@@ -67,21 +67,6 @@ https://github.com/qinzuoyong/floating-data/releases
 构建说明
 ────────────────────────────────────────
 
-环境要求:
-  - Android Studio / JDK 17+ / Android SDK 36+
-  # 仓库内 gradle.properties 写死了作者本机的 JDK 路径(org.gradle.java.home)，
-  # 换机器构建时请在用户级 ~/.gradle/gradle.properties 覆盖为你的 JDK 17+ 路径
-
-构建命令:
-  ./gradlew.bat assembleRelease --no-configuration-cache
-  # 模拟器(雷电 x86_64)联调时追加 -PdevEmulatorAbi（产物含 x86_64，仅联调用，不发布）
-
-APK 说明:
-  - 正式包仅含 arm64-v8a（Android 14+ 真机全覆盖）
-  - 构建产物统一输出到 _build/，保持项目根整洁:
-      _build/app/outputs/apk/release/yongge.apk       （正式版 APK，已签名）
-      _build/app/outputs/mapping/release/mapping.txt  （R8 混淆映射，线上崩溃还原用）
-
 技术栈:
   Kotlin         2.2.10
   AGP            9.2.1
