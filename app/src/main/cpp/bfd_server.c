@@ -31,6 +31,7 @@
 #include <string.h>
 #include <sys/prctl.h>
 #include <sys/socket.h>
+#include <sys/time.h>
 #include <sys/wait.h>
 #include <time.h>
 #include <unistd.h>
@@ -41,6 +42,11 @@
 #define MAX_CMD_LEN (32 * 1024)
 #define MAX_OUT_LEN (256 * 1024)
 #define CMD_TIMEOUT_SEC 15
+/* 连接级读写超时(秒)。守护进程是单线程 accept 循环,任何一次阻塞读没有
+ * 超时都会把整个 daemon 卡死:连上却不发数据的客户端(应用进程被杀留下的
+ * 半开连接、本机端口扫描、其他应用的探测)会让 read_full 永久阻塞,此后
+ * 所有 exec 都只能等到 15 秒超时,特权通道整体失效,只有重启手机才能恢复。 */
+#define CONN_TIMEOUT_SEC 5
 #define ADB_KEYS_PATH "/data/misc/adb/adb_keys"
 
 static char g_token[MAX_TOKEN_LEN];
@@ -206,6 +212,14 @@ static void handle_trust_key(int conn, const char *arg) {
 }
 
 static void handle_connection(int conn) {
+    /* 先给连接装读写超时,再做任何阻塞读。缺了这一步,一个只连接不发数据的
+     * 客户端就能让单线程的 accept 循环永久卡在本函数内(见 CONN_TIMEOUT_SEC)。 */
+    struct timeval tv;
+    tv.tv_sec = CONN_TIMEOUT_SEC;
+    tv.tv_usec = 0;
+    setsockopt(conn, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+    setsockopt(conn, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
+
     /* 令牌认证 */
     unsigned int len = 0;
     if (read_full(conn, &len, sizeof(len)) != 0 || len == 0 || len > MAX_TOKEN_LEN) {
