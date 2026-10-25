@@ -61,14 +61,20 @@ android {
     compileSdk = 36
     ndkVersion = "29.0.14206865"
 
+    // 只保留中文资源：本应用界面文案全为硬编码中文 + 8 条中文 string 资源，
+    // 依赖库（AndroidX/Compose）自带 84 个语种的翻译共 1,008 条，全部用不到。
+    // AGP 9.x 已移除 resConfigs，改用 androidResources.localeFilters（已在 AGP 9.2.1
+    // 的 ApplicationAndroidResources DSL 中确认存在，无需 initscript）。
+    androidResources {
+        localeFilters += listOf("zh-rCN")
+    }
+
     defaultConfig {
         applicationId = "com.yongge.batteryfloat"
         minSdk = 34
         targetSdk = 34
         versionCode = 58
         versionName = "1.94"
-
-        // 只保留中文资源，剪掉多语言（AGP 9.x 移除 resConfigs，改用 androidResources.localeFilters 但需 initscript）
 
         // ABI 精简：正式包仅 arm64-v8a（Android 14+ 真机全覆盖），
         // 模拟器联调时加 -PdevEmulatorAbi 临时带上 x86_64（雷电）
@@ -119,6 +125,19 @@ android {
         // 内置特权服务(libbfd.so)需被真实解压到 nativeLibraryDir 且保持可执行位
         // (经 shell 域拉起,Shizuku starter 同机制),必须关闭免解压打包
         jniLibs.useLegacyPackaging = true
+
+        resources {
+            // R8 只删类、不删依赖 jar 内的资源文件，AGP 会把这些 .properties 原量打进 APK。
+            // bcpkix 在本项目只用于 AdbKey 签发自签证书（X509v3CertificateBuilder +
+            // JcaContentSignerBuilder），不碰任何证书路径校验/审查逻辑，故以下两组纯死重：
+            //  1) pqc：后量子算法（含 Picnic 预计算矩阵），R8 已把 bouncycastle.pqc 类全部剥除
+            //     （mapping.txt 中 0 条），资源却仍在 —— 三份 lowmcL*.bin.properties 共 1,192 KB
+            //  2) CertPathReviewerMessages：证书路径审查器的提示文案，该类未被保留（mapping 0 条）
+            excludes += setOf(
+                "org/bouncycastle/pqc/**",
+                "**/CertPathReviewerMessages*.properties"
+            )
+        }
     }
 
     externalNativeBuild {
