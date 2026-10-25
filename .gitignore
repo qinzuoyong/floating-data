@@ -40,3 +40,6 @@ app/.cxx/
 
 # Node 依赖（family-signal 测试用 ws，仅本机安装）
 node_modules/
+
+# 本机 Android 工具产物（模拟器/Studio 运行期）
+.android/
