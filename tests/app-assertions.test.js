@@ -178,6 +178,42 @@ ok('startViaAdb 有 AtomicBoolean 防重入守卫',
   /AtomicBoolean\(false\)/.test(bfd) && /if \(!starting\.compareAndSet\(false, true\)\)/.test(bfd));
 ok('守卫在 finally 中复位', /finally \{[\s\S]{0,40}?starting\.set\(false\)/.test(bfd));
 
+console.log('[P0 内置守护进程连接读超时 bfd_server.c]');
+// bfd_server 是单线程 accept 循环：任何一次无超时的阻塞读都会把整个 daemon 卡死。
+// 实测（模拟器 A/B，同一份二进制仅差超时设置）：一条"只连接不发数据"的连接建立后，
+// 旧版连续 4 次 ping 全部超时、对端进程仍存活但永不响应（只能重启手机恢复）；
+// 新版最多牺牲首轮请求，随后自动恢复服务。
+// 故 handle_connection 必须在任何 read_full 之前装好 SO_RCVTIMEO/SO_SNDTIMEO。
+const BFDC = read(path.join(ROOT, 'app/src/main/cpp/bfd_server.c'));
+const idxHandler = BFDC.indexOf('static void handle_connection(int conn) {');
+const idxFirstRead = BFDC.indexOf('read_full(conn', idxHandler);
+const idxRcvOpt = BFDC.indexOf('SO_RCVTIMEO', idxHandler);
+ok('bfd_server.c 定义连接读超时常量', /#define CONN_TIMEOUT_SEC\s+\d+/.test(BFDC));
+ok('handle_connection 设置 SO_RCVTIMEO', idxRcvOpt > 0);
+ok('handle_connection 设置 SO_SNDTIMEO', /SO_SNDTIMEO/.test(BFDC));
+ok('超时设置位于任何 read_full 之前（顺序契约）',
+  idxRcvOpt > 0 && idxFirstRead > idxRcvOpt && idxHandler > 0,
+  `handler=${idxHandler} rcvOpt=${idxRcvOpt} firstRead=${idxFirstRead}`);
+ok('超时值合理（1..30 秒）', (() => {
+  const m = BFDC.match(/#define CONN_TIMEOUT_SEC\s+(\d+)/);
+  return !!m && Number(m[1]) >= 1 && Number(m[1]) <= 30;
+})());
+
+console.log('[P0 APK 体积：剔除 BouncyCastle 死资源 app/build.gradle.kts]');
+// R8 只删类不删依赖 jar 内的资源：pqc 的三份 lowmcL*.bin.properties 共 1,192 KB
+// 会被原量打进 APK（实测基线 3.44 MiB 中占 1.21 MB），而 bouncycastle.pqc 在
+// mapping.txt 里 0 条 —— 代码从未引用。锁定 excludes 防止被误删。
+const GRADLE = read(path.join(ROOT, 'app/build.gradle.kts'));
+ok('packaging.resources.excludes 排除 bouncycastle.pqc',
+  /excludes \+= setOf\([\s\S]{0,300}?org\/bouncycastle\/pqc\/\*\*/.test(GRADLE));
+ok('排除 CertPathReviewerMessages（审查器类未被保留）',
+  /CertPathReviewerMessages\*\.properties/.test(GRADLE));
+ok('保留 jniLibs.useLegacyPackaging（libbfd.so 需可执行位）',
+  /jniLibs\.useLegacyPackaging = true/.test(GRADLE));
+
+console.log('[中文资源收窄 androidResources.localeFilters]');
+ok('localeFilters 限定 zh-rCN', /localeFilters \+= listOf\("zh-rCN"\)/.test(GRADLE));
+
 // ---- 家人功能拆分后的结构契约（2026-10） ----
 // 拆分后本应用只承载悬浮窗：底部导航 3 Tab、无家人入口、无信令/位置代码。
 // 断言锁定这个边界，防止家人代码被误加回来（那会让两个应用再次分叉）。
