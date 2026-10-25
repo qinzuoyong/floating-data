@@ -45,7 +45,6 @@ class KeepAliveAccessibilityService : AccessibilityService() {
         Log.i(TAG, "无障碍保活已连接")
         addAliveOverlay()
         tryRestoreFloatingWindow()
-        tryRestoreFamilyService()
         // 无障碍在位 → 停用周期兜底（15 分钟心跳闹钟 + 看门狗 Job），零周期唤醒省电
         FloatingWindowService.upgradeKeepAlive(this)
     }
@@ -96,39 +95,12 @@ class KeepAliveAccessibilityService : AccessibilityService() {
         // 本进程正被系统绑定，通常不受后台 startForegroundService 限制
         // （同 GKD StatusService.autoStart 的启动条件）；个别 ROM 仍拦截时
         // startForegroundService 会抛异常，必须在此兜底——onServiceConnected 冒泡
-        // 异常会令无障碍被判 crashed 停止绑定（降级策略与 tryRestoreFamilyService 一致）
+        // 异常会令无障碍被判 crashed 停止绑定
         try {
             FloatingWindowService.start(this)
             Log.i(TAG, "无障碍通道恢复悬浮窗服务")
         } catch (e: Exception) {
             Log.w(TAG, "无障碍通道恢复悬浮窗服务失败: ${e.message}")
-        }
-    }
-
-    /**
-     * 恢复家人位置共享服务（免广播通道，与悬浮窗通道相互独立）
-     *
-     * 门控见 [FamilyLocationService.shouldAutoRestore]（开机自启开 + 上次在运行 +
-     * 已加入家庭 + 已授定位权限），与悬浮窗门控分开判断：用户只想共享位置、
-     * 不想开悬浮窗时，此通道仍能独立恢复家人服务。
-     *
-     * 本进程正被 system_server 绑定（procstate 为 BOUND_FOREGROUND_SERVICE /
-     * IMPORTANT_FOREGROUND，不属后台进程类），系统不会停掉其中的后台服务；
-     * 若个别 ROM 仍拦截后台启服务，此处静默降级——进程重建时 START_STICKY 与
-     * 开机广播仍会恢复，不会因一次失败丢失保活能力。
-     */
-    private fun tryRestoreFamilyService() {
-        if (FamilyLocationService.isRunning) return
-        if (!FamilyLocationService.shouldAutoRestore(this)) {
-            // 静默会让"为何没恢复"无从查起（部分 ROM 屏蔽应用日志，现场只能靠这行）
-            Log.i(TAG, "家人位置共享无需恢复（未开启或前置条件不足）")
-            return
-        }
-        try {
-            FamilyLocationService.start(this)
-            Log.i(TAG, "无障碍通道恢复家人位置共享服务")
-        } catch (e: Exception) {
-            Log.w(TAG, "恢复家人位置共享服务失败: ${e.message}")
         }
     }
 
@@ -206,3 +178,4 @@ class KeepAliveAccessibilityService : AccessibilityService() {
         }
     }
 }
+

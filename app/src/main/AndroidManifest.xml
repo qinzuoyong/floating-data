@@ -12,20 +12,13 @@
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
-    <!-- 家人位置共享：定位权限（按需前台定位 + 后台常驻连接） -->
-    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
-    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
-    <!-- 后台定位：前台服务被系统重启拉起(app 不在前台)时仍能定位应答家人请求 -->
-    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
     <!-- signature 级权限,安装后默认拒绝;由内置 ADB 通道执行 pm grant 自授(无障碍自愈用),见 A11ySelfHealer -->
     <uses-permission
         android:name="android.permission.WRITE_SECURE_SETTINGS"
         tools:ignore="ProtectedPermissions" />
     <!-- Shizuku 桥接:声明 API 权限并挂 provider 接收 server 的 binder(方案一) -->
     <uses-permission android:name="moe.shizuku.manager.permission.API_V23" />
-    <!-- allowBackup=false：floating_prefs 含家庭码、成员备注与上次位置经纬度，
-         不应进入云备份 / adb backup（安全优先，代价是换机需重新配置） -->
+    <!-- allowBackup=false：本应用配置含 ADB 载体选择与自动授权记录，不应进入云备份 -->
     <application
         android:name=".App"
         android:allowBackup="false"
@@ -34,12 +27,7 @@
         android:label="@string/app_name"
         android:supportsRtl="true"
         android:theme="@style/Theme.BatteryFloating"
-        android:appCategory="productivity"
-        android:networkSecurityConfig="@xml/network_security_config">
-        <!-- 高德定位SDK必需的后台定位服务(官方文档要求手动声明,AAR 不自动合并) -->
-        <service android:name="com.amap.api.location.APSService" />
-        <!-- 高德定位SDK密钥(11.x 只从 meta-data 读取,setApiKey 无效);值经 manifestPlaceholders 注入 -->
-        <meta-data android:name="com.amap.api.v2.apikey" android:value="${amapKey}" />
+        android:appCategory="productivity">
 
         <activity
             android:name=".MainActivity"
@@ -69,12 +57,7 @@
                 android:value="floating_window_battery_monitor" />
         </service>
 
-        <!-- 家人位置共享服务(普通后台服务,非前台)：保持信令连接 + 按需响应定位请求;
-             后台常驻由同进程悬浮窗前台服务保活,故不再声明 foregroundServiceType -->
-        <service
-            android:name=".service.FamilyLocationService"
-            android:exported="false"
-            android:stopWithTask="false" />
+        <!-- 家人位置共享服务已拆分至独立应用 FamilyLocation，本应用不再包含 -->
 
         <service
             android:name=".service.KeepAliveJobService"

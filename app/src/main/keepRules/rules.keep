@@ -7,28 +7,10 @@
 
 # 电池监控器保持回调接口
 -keep class com.example.batteryfloat.monitor.BatteryMonitor$* { *; }
+
 # ADB 无线调试(批次 2):JNI RegisterNatives 按类名绑定,不可混淆/改名
 -keep class com.example.batteryfloat.adb.AdbPairingClient { *; }
 -keep class com.example.batteryfloat.adb.PairingContext { *; }
-# Gson 反射序列化
--keep class com.google.gson.reflect.TypeToken { *; }
--keep class * extends com.google.gson.reflect.TypeToken
--keepattributes Signature
--keepattributes *Annotation*
-# 信令协议数据类（Gson 反序列化目标）
-# 信令/存储/定位数据类（Gson 反序列化目标）
--keep class com.example.batteryfloat.p2p.** { *; }
--keep class com.example.batteryfloat.family.** { *; }
--keep class com.example.batteryfloat.location.** { *; }
-# 地图数据类(MapData/MapPoint)是 WebView 跨 JS 边界的 Gson 契约,字段名不可混淆
--keep class com.example.batteryfloat.map.** { *; }
-# 百度地图 SDK
--keep class com.baidu.** { *; }
--dontwarn com.baidu.**
-# 高德定位SDK(室内WiFi指纹定位源,见 OnDemandLocationProvider)
--keep class com.amap.api.** { *; }
--dontwarn com.amap.ams.gnss.**
--dontwarn net.jafama.**
 
 # 发布版剥离调试日志：Log.d 会打印完整 ADB 报文与 shell 命令内容（AdbMessage.toStringShort），
 # 既无必要也构成信息外泄面；assumenosideeffects 同时移除日志调用与其参数拼接。

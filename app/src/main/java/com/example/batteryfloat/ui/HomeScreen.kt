@@ -288,7 +288,7 @@ fun HomeScreen(
             subtitle = when {
                 a11yPendingOff -> "已请求关闭——请在系统设置中完成，见下方说明"
                 a11yKeepAlive -> "运行中 · 仅保活，不读取屏幕内容"
-                else -> "推荐：重启后悬浮窗与家人位置共享自动恢复，后台存活率大幅提升"
+                else -> "推荐：重启后悬浮窗自动恢复，后台存活率大幅提升"
             },
             checked = a11yKeepAlive,
             onCheckedChange = { enable ->
@@ -475,3 +475,4 @@ fun HomeScreen(
         )
     }
 }
+

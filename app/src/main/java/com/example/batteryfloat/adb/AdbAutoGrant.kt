@@ -22,9 +22,10 @@ import kotlinx.coroutines.launch
  * 2. 无障碍保活:复用 A11ySelfHealer 的主路径(持权直写)/辅路径(shell 写回);
  *    用户在应用内主动关闭过则跳过,尊重用户意图
  * 3. 悬浮窗权限:appops set 放行 SYSTEM_ALERT_WINDOW,免手动跳设置授权
- * 4. 定位权限:ACCESS_FINE/COARSE/BACKGROUND_LOCATION + POST_NOTIFICATIONS
- *    (家人位置共享的后台持续定位所需)
+ * 4. 通知权限:POST_NOTIFICATIONS
  * 5. 电池优化白名单:dumpsys deviceidle 加白,免系统弹窗手动确认
+ *
+ * 注:定位权限项已随家人位置共享功能拆分移出本项目（见 FamilyLocation）。
  *
  * 每步执行后读回验证,失败只记日志不改状态:雷电等 ROM 的 TLS 通道 shell 流
  * 对 pm grant/appops 会静默失败(假成功),读回验证可如实暴露。
@@ -47,7 +48,6 @@ object AdbAutoGrant {
         SECURE_SETTINGS("安全设置写入（WRITE_SECURE_SETTINGS）"),
         ACCESSIBILITY("无障碍保活写回"),
         OVERLAY("悬浮窗权限（appops）"),
-        LOCATION("定位权限（精确 / 后台）"),
         NOTIFICATIONS("通知权限"),
         BATTERY_WHITELIST("电池优化白名单")
     }
@@ -66,7 +66,7 @@ object AdbAutoGrant {
         grantSecureSettings(ctx)
         ensureAccessibility(ctx)
         grantOverlay(ctx)
-        grantLocation(ctx)
+        grantNotifications(ctx)
         grantBatteryWhitelist(ctx)
     }
 
@@ -110,17 +110,16 @@ object AdbAutoGrant {
         }
     }
 
-    /** 步骤 4:家人位置共享所需权限(含后台定位与通知) */
-    private suspend fun grantLocation(ctx: Context) {
-        for (perm in AUTO_PERMISSIONS) {
-            if (hasPermission(ctx, perm)) continue
-            val out = PrivShell.exec("pm grant ${ctx.packageName} $perm")
-            if (hasPermission(ctx, perm)) {
-                Log.i(TAG, "已授予 $perm")
-                recordGrant(ctx, kindOf(perm))
-            } else {
-                Log.w(TAG, "pm grant $perm 未生效(输出=${out?.take(80)})")
-            }
+    /** 步骤 4:通知权限 */
+    private suspend fun grantNotifications(ctx: Context) {
+        val perm = "android.permission.POST_NOTIFICATIONS"
+        if (hasPermission(ctx, perm)) return
+        val out = PrivShell.exec("pm grant ${ctx.packageName} $perm")
+        if (hasPermission(ctx, perm)) {
+            Log.i(TAG, "已授予 $perm")
+            recordGrant(ctx, AutoGrant.NOTIFICATIONS)
+        } else {
+            Log.w(TAG, "pm grant $perm 未生效(输出=${out?.take(80)})")
         }
     }
 
@@ -151,16 +150,10 @@ object AdbAutoGrant {
         AutoGrant.SECURE_SETTINGS -> hasPermission(ctx, "android.permission.WRITE_SECURE_SETTINGS")
         AutoGrant.ACCESSIBILITY -> KeepAliveAccessibilityService.isEnabledInSettings(ctx)
         AutoGrant.OVERLAY -> Settings.canDrawOverlays(ctx)
-        AutoGrant.LOCATION -> hasPermission(ctx, "android.permission.ACCESS_FINE_LOCATION") ||
-            hasPermission(ctx, "android.permission.ACCESS_COARSE_LOCATION")
         AutoGrant.NOTIFICATIONS -> hasPermission(ctx, "android.permission.POST_NOTIFICATIONS")
         AutoGrant.BATTERY_WHITELIST -> (ctx.getSystemService(Context.POWER_SERVICE) as? PowerManager)
             ?.isIgnoringBatteryOptimizations(ctx.packageName) == true
     }
-
-    private fun kindOf(perm: String): AutoGrant =
-        if (perm == "android.permission.POST_NOTIFICATIONS") AutoGrant.NOTIFICATIONS
-        else AutoGrant.LOCATION
 
     private fun recordGrant(ctx: Context, kind: AutoGrant) {
         val prefs = ctx.getSharedPreferences(PrefsKeys.PREFS_NAME, Context.MODE_PRIVATE)
@@ -179,12 +172,4 @@ object AdbAutoGrant {
     private fun hasPermission(ctx: Context, perm: String) = ContextCompat.checkSelfPermission(
         ctx, perm
     ) == PackageManager.PERMISSION_GRANTED
-
-    /** 由 pm grant 自动补齐的权限集合（定位三项 + 通知） */
-    private val AUTO_PERMISSIONS = arrayOf(
-        "android.permission.ACCESS_FINE_LOCATION",
-        "android.permission.ACCESS_COARSE_LOCATION",
-        "android.permission.ACCESS_BACKGROUND_LOCATION",
-        "android.permission.POST_NOTIFICATIONS"
-    )
 }

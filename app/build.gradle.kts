@@ -65,50 +65,12 @@ android {
         applicationId = "com.yongge.batteryfloat"
         minSdk = 34
         targetSdk = 34
-        versionCode = 57
-        versionName = "1.93"
-
-        // 家人位置共享 A 方案：凭据从 local.properties 注入（gitignore，不进 Git）
-        val lpFile = rootProject.file("local.properties")
-        val lp = Properties().apply {
-            if (lpFile.exists()) lpFile.inputStream().use { load(it) }
-        }
-        val baiduAk = lp.getProperty("BAIDU_MAP_AK", "")
-        val amapKey = lp.getProperty("AMAP_KEY", "")
-        // 信令地址必须显式配置：不再提供硬编码默认值。
-        // 旧默认值内嵌明文 ws:// 且带固定 IP，配置缺失时会静默连到未加密服务器（位置数据裸奔）；
-        // 缺失时注入空串，由运行时给出明确提示（FamilyLocationService.setup）。
-        val signalUrl = lp.getProperty("SIGNAL_URL", "")
-        // 备用信令地址（可选）：主地址连续握手失败时自动切换，主恢复后自动切回。
-        // 未配置/非法时注入空串 → SignalClient 退化为单端点，行为与改造前完全一致。
-        val signalUrlBackup = lp.getProperty("SIGNAL_URL_BACKUP", "")
-
-        buildConfigField("String", "BAIDU_MAP_AK", "\"${baiduAk}\"")
-        buildConfigField("String", "AMAP_KEY", "\"${amapKey}\"")
-        manifestPlaceholders["amapKey"] = amapKey
-        buildConfigField("String", "SIGNAL_URL", "\"${signalUrl}\"")
-        buildConfigField("String", "SIGNAL_URL_BACKUP", "\"${signalUrlBackup}\"")
-
-        if (signalUrl.isBlank()) {
-            logger.warn(
-                "⚠️ local.properties 未配置 SIGNAL_URL：家人位置共享将不可用（不再有硬编码兜底地址）"
-            )
-        } else if (signalUrl.startsWith("ws://")) {
-            logger.warn(
-                "⚠️ SIGNAL_URL 为明文 ws://：位置数据未加密传输，建议迁移到 wss:// 后从 " +
-                    "network_security_config 移除明文放行"
-            )
-        }
-        if (signalUrlBackup.isNotBlank() &&
-            !signalUrlBackup.startsWith("ws://") && !signalUrlBackup.startsWith("wss://")
-        ) {
-            logger.warn("⚠️ SIGNAL_URL_BACKUP 非法（须以 ws:// 或 wss:// 开头）：运行时按未配置处理")
-        }
+        versionCode = 58
+        versionName = "1.94"
 
         // 只保留中文资源，剪掉多语言（AGP 9.x 移除 resConfigs，改用 androidResources.localeFilters 但需 initscript）
 
         // ABI 精简：正式包仅 arm64-v8a（Android 14+ 真机全覆盖），
-        // 避免 webrtc/百度 SDK 多 ABI 打包超 Gitee Release 附件 100MB 限制；
         // 模拟器联调时加 -PdevEmulatorAbi 临时带上 x86_64（雷电）
         ndk {
             abiFilters += listOf("arm64-v8a")
@@ -174,7 +136,6 @@ afterEvaluate {
 }
 
 dependencies {
-    implementation(libs.amap.location)
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.compose.material3)
@@ -192,10 +153,6 @@ dependencies {
     implementation(libs.lsposed.hiddenapibypass)      // 隐藏 API 豁免(Conscrypt TLS exporter)
     implementation(libs.ndk.boringssl)                // prefab: 配对库加密后端
     implementation(libs.ndk.libcxx)                   // prefab: native STL
-
-    // 家人位置共享（纯信令中继 + WebView 地图，无 WebRTC/百度原生 SDK）
-    implementation(libs.gson)                     // 信令/位置 JSON 编解码
-    implementation(libs.java.websocket)           // WebSocket 信令客户端
 
     // Shizuku 桥接:复用其常驻 server 进程,无线调试关闭后特权能力仍存活
     implementation(libs.shizuku.api)
