@@ -1,0 +1,9 @@
+{
+  "name": "batteryfloating-tests",
+  "version": "1.0.0",
+  "private": true,
+  "description": "BatteryFloating 悬浮窗项目的源码级回归断言（零依赖，直接 node 运行）",
+  "scripts": {
+    "test": "node tests/app-assertions.test.js && node tests/download-allowlist.test.js && node tests/download-redirect.e2e.js"
+  }
+}
