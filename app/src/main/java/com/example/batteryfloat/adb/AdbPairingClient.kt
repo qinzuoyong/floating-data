@@ -54,7 +54,15 @@ private class PeerInfo(
 
     enum class Type(val value: Byte) {
         ADB_RSA_PUB_KEY(0.toByte()),
-        ADB_DEVICE_GUID(0.toByte()),
+
+        /**
+         * 设备 GUID 的 peer-info 类型。
+         * 取值须与 AOSP 一致（adb/pairing_auth/include/adb/pairing_connection.h：
+         * `enum class Type : uint8_t { kRsaPublicKey = 0, kDeviceGuid = 1 }`）——
+         * 曾误写为 0 与 ADB_RSA_PUB_KEY 同值；当前流程只用 RSA 公钥故未暴露，
+         * 但一旦按类型分派就会把 GUID 误判成公钥。
+         */
+        ADB_DEVICE_GUID(1.toByte()),
     }
 
     fun writeTo(buffer: ByteBuffer) {

@@ -274,49 +274,19 @@ class FloatingWindowService : Service() {
     }
 
     /**
-     * 当用户从最近任务中划掉应用时回调
-     * 通过 AlarmManager 延迟 1 秒重启 Service
-     * v1.65: 增加异常捕获，兼容 Android 12+ 前台服务启动限制
+     * 当用户从最近任务中划掉应用时回调。
+     *
+     * 本方法只在服务**仍然存活**时被回调：划掉任务不会杀死前台服务，Android 也不会
+     * 在这种情形下回调 onTaskRemoved 再让服务自行重启。故原实现里
+     * `if (isRunning) { ...; return }` 恒成立，其后的 AlarmManager 重启分支是
+     * 永远执行不到的死代码（30 行），已删除——留着会让后来维护者误判保活机制。
+     *
+     * 真正的重建能力来自两条独立路径，与本方法无关：
+     * - `START_REDELIVER_INTENT`：进程被系统杀死后由系统重投递 intent 重建
+     * - 心跳闹钟 + 看门狗 Job：在 onStartCommand 中排定，一次触发后重排
      */
     override fun onTaskRemoved(rootIntent: Intent?) {
-        // 服务仍存活时（如按 Home 键触发 finishAndRemoveTask）无需重启，避免无谓的服务重建
-        if (isRunning) {
-            Log.d(TAG, "onTaskRemoved: 服务仍在运行，跳过重启")
-            super.onTaskRemoved(rootIntent)
-            return
-        }
-        Log.i(TAG, "onTaskRemoved: 应用被划掉，延迟重启")
-        val restartIntent = Intent(applicationContext, FloatingWindowService::class.java)
-        val pendingIntent = PendingIntent.getForegroundService(
-            applicationContext,
-            0,
-            restartIntent,
-            PendingIntent.FLAG_ONE_SHOT or PendingIntent.FLAG_IMMUTABLE
-        )
-        val alarmManager = getSystemService(ALARM_SERVICE) as AlarmManager
-        // 与心跳一致使用 setExactAndAllowWhileIdle 突破 Doze，确保划掉后准时重启
-        // USE_EXACT_ALARM 为 normal 权限，侧载安装自动授予；权限缺失时降级为 set，避免崩溃
-        try {
-            alarmManager.setExactAndAllowWhileIdle(
-                AlarmManager.RTC_WAKEUP,
-                System.currentTimeMillis() + 1000,
-                pendingIntent
-            )
-            Log.d(TAG, "已调度 onTaskRemoved 精确重启")
-        } catch (e: SecurityException) {
-            Log.w(TAG, "精确重启调度失败（权限不足），降级为普通闹钟: ${e.message}")
-            try {
-                alarmManager.set(
-                    AlarmManager.RTC_WAKEUP,
-                    System.currentTimeMillis() + 1000,
-                    pendingIntent
-                )
-            } catch (e2: Exception) {
-                Log.e(TAG, "降级重启调度也失败", e2)
-            }
-        } catch (e: Exception) {
-            Log.w(TAG, "onTaskRemoved 重启调度失败: ${e.message}", e)
-        }
+        Log.i(TAG, "onTaskRemoved: 任务已移除，前台服务仍在运行，保活链保持不变")
         super.onTaskRemoved(rootIntent)
     }
 

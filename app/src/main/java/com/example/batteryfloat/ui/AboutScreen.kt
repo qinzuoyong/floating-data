@@ -157,13 +157,21 @@ fun AboutScreen(
             updateVersion, downloadState,
             onStartDownload = {
                 if (updateApkUrl.isNotBlank()) {
-                    scope.launch { ApkDownloader.download(context, updateApkUrl) }
+                    // ApkDownloader.download 在协程被取消时会复位状态后重新抛出
+                    // CancellationException。宿主作用域（rememberCoroutineScope）销毁时
+                    // 该异常属正常取消信号，这里不吞掉就无法维持取消语义，只能静默放过
+                    scope.launch {
+                        try {
+                            ApkDownloader.download(context, updateApkUrl)
+                        } catch (_: kotlinx.coroutines.CancellationException) {
+                            // 正常取消：状态已由 download 复位为 Idle
+                        }
+                    }
                 }
             },
             onInstall = { 
                 (downloadState as? DownloadState.Completed)?.let { onInstallApk(it.file) } 
-            },
-            onDismiss = {
+            },            onDismiss = {
                 showUpdateDialog = false
                 // 已完成：保留已校验的安装包（按钮文案是"稍后安装"，删掉文件会让用户白下次下载）；
                 // 失败：清掉可能残留的半截文件并复位状态

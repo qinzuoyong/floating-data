@@ -151,7 +151,17 @@ class MainActivity : ComponentActivity() {
                     },
                     onInstallApk = { file ->
                         isLaunchingExternal = true
-                        ApkDownloader.install(this, file)
+                        // install 返回 false 有两种原因：未授予「安装未知应用」权限（此路径已自动
+                        // 跳授权页）、或安装器启动异常。都要给出提示，否则表现为"点了没反应"
+                        if (!ApkDownloader.install(this, file)) {
+                            android.widget.Toast.makeText(
+                                this,
+                                if (!ApkDownloader.canInstallUnknownApps(this))
+                                    "请先允许本应用安装未知来源应用，授权后再次点击安装"
+                                else "无法启动安装器，请稍后重试",
+                                android.widget.Toast.LENGTH_LONG
+                            ).show()
+                        }
                     }
                 )
 
@@ -176,10 +186,31 @@ class MainActivity : ComponentActivity() {
                     UpdateDownloadDialog(
                         updateVersion, downloadState,
                         onStartDownload = {
-                            if (updateApkUrl.isNotBlank()) lifecycleScope.launch { ApkDownloader.download(this@MainActivity, updateApkUrl) }
+                            if (updateApkUrl.isNotBlank()) {
+                                // 同 AboutScreen：取消时 download 复位状态后重抛
+                                // CancellationException，属正常取消信号，静默放过
+                                lifecycleScope.launch {
+                                    try {
+                                        ApkDownloader.download(this@MainActivity, updateApkUrl)
+                                    } catch (_: kotlinx.coroutines.CancellationException) {
+                                        // 正常取消：状态已由 download 复位为 Idle
+                                    }
+                                }
+                            }
                         },
                         onInstall = {
-                            (downloadState as? DownloadState.Completed)?.let { ApkDownloader.install(this@MainActivity, it.file) }
+                            (downloadState as? DownloadState.Completed)?.let {
+                                isLaunchingExternal = true
+                                if (!ApkDownloader.install(this@MainActivity, it.file)) {
+                                    android.widget.Toast.makeText(
+                                        this@MainActivity,
+                                        if (!ApkDownloader.canInstallUnknownApps(this@MainActivity))
+                                            "请先允许本应用安装未知来源应用，授权后再次点击安装"
+                                        else "无法启动安装器，请稍后重试",
+                                        android.widget.Toast.LENGTH_LONG
+                                    ).show()
+                                }
+                            }
                         },
                         onDismiss = {
                             showUpdateDialog = false

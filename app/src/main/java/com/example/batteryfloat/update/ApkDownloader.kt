@@ -4,8 +4,10 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
+import android.provider.Settings
 import android.util.Log
 import androidx.core.content.FileProvider
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -235,6 +237,19 @@ object ApkDownloader {
 
                 Log.i(TAG, "下载完成: ${totalBytesRead} bytes")
                 _downloadState.value = DownloadState.Completed(targetFile)
+            } catch (e: CancellationException) {
+                // 协程被取消（MainActivity 用 lifecycleScope，Activity 销毁即取消；
+                // AboutScreen 用 rememberCoroutineScope，离开组合即取消）。
+                // CancellationException 是 Exception 的子类，若被下面的通用分支吞掉，
+                // 状态会永久停在 Downloading —— 而 UpdateDownloadDialog 在下载态下
+                // 禁用关闭（连"以后再说"都不渲染），用户下次只能杀进程。
+                // 这里复位为 Idle（可重试），再把取消继续向上抛，保持协程取消语义。
+                Log.i(TAG, "下载已取消（宿主作用域销毁）")
+                // 清掉半截文件：finally 只关流不删文件，残留会一直占缓存目录，
+                // 且下次进入 Completed 前的校验会读到上一次的残缺包
+                runCatching { apkFile(context).takeIf { it.exists() }?.delete() }
+                _downloadState.value = DownloadState.Idle
+                throw e
             } catch (e: Exception) {
                 Log.e(TAG, "下载失败: ${e.message}", e)
                 _downloadState.value =
@@ -335,12 +350,45 @@ object ApkDownloader {
     }
 
     /**
+     * 是否已允许本应用安装未知来源应用（Android 8+ 的按应用授权）。
+     * 未授权时 [install] 会直接失败且用户看不到任何提示，故调用方须先查这一项。
+     */
+    fun canInstallUnknownApps(context: Context): Boolean =
+        context.packageManager.canRequestPackageInstalls()
+
+    /**
+     * 引导用户开启「安装未知应用」权限。
+     *
+     * 该权限无法用运行时权限申请，只能跳到本应用的授权页由用户手动打开。
+     * @return true 表示已成功拉起设置页
+     */
+    fun openInstallPermissionSettings(context: Context): Boolean = try {
+        context.startActivity(
+            Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES).apply {
+                data = Uri.parse("package:${context.packageName}")
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+        )
+        true
+    } catch (e: Exception) {
+        Log.e(TAG, "打开安装权限设置失败: ${e.message}", e)
+        false
+    }
+
+    /**
      * 启动系统安装器安装下载的 APK
      * @param context 上下文（Activity context）
      * @param file 下载完成的 APK 文件
      * @return true 表示安装 Intent 已发出
      */
     fun install(context: Context, file: File): Boolean {
+        // 未授予「安装未知应用」时直接 startActivity 会被系统静默拒绝（部分 ROM 抛异常），
+        // 用户只看到"点了没反应"。此处提前判定并引导到授权页，避免误报为"安装失败"
+        if (!canInstallUnknownApps(context)) {
+            Log.w(TAG, "未授予安装未知应用权限，引导用户前往授权")
+            openInstallPermissionSettings(context)
+            return false
+        }
         return try {
             val apkUri: Uri = FileProvider.getUriForFile(
                 context,
