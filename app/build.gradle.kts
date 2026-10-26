@@ -73,8 +73,8 @@ android {
         applicationId = "com.yongge.batteryfloat"
         minSdk = 34
         targetSdk = 34
-        versionCode = 59
-        versionName = "2.0"
+        versionCode = 60
+        versionName = "2.01"
 
         // ABI 精简：正式包仅 arm64-v8a（Android 14+ 真机全覆盖），
         // 模拟器联调时加 -PdevEmulatorAbi 临时带上 x86_64（雷电）
