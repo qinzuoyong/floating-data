@@ -277,6 +277,8 @@ ok('PrivShell.init 从 prefs 读取 ADB_PRIV_ENABLED（进程启动即同步）'
   /getBoolean\(PrefsKeys\.ADB_PRIV_ENABLED, false\)/.test(PRIV));
 ok('canExec() 开关关闭时恒 false（特权采样的第一道闸）',
   /suspend fun canExec\(\)[\s\S]{0,200}?if \(!enabled\) return false/.test(PRIV));
+ok('exec() 内部同样闸门（11 处调用点只有 1 处先查 canExec，必须在此统一拦）',
+  /suspend fun exec\(command: String\): String\? \{[\s\S]{0,200}?if \(!enabled\) return null/.test(PRIV));
 ok('PrivShell.setEnabled 存在且关闭时作废存活缓存',
   /fun setEnabled\(value: Boolean\)[\s\S]{0,200}?if \(!value\) BfdChannel\.invalidateAlive\(\)/.test(PRIV));
 ok('AdbConnectionManager.setEnabled 同步开关到 PrivShell',

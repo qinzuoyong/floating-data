@@ -109,8 +109,14 @@ object PrivShell {
     /**
      * 执行特权 shell 命令并收集 stdout
      * @return 输出文本;无可用通道或执行失败返回 null
+     *
+     * 开关关闭时一律返回 null（与"无可用通道"同义），让所有消费方按既有降级路径回落。
+     * 这道闸必须放在 exec 内部而非各调用点：全项目有 11 处 exec 调用，只有
+     * PrivBatteryProvider 一处先查了 canExec；A11ySelfHealer 的写回/重绑、
+     * AdbAutoGrant 的授权、PrivBaseline 的 trust-key 都是直接调用。
      */
     suspend fun exec(command: String): String? {
+        if (!enabled) return null
         // 1) 所选载体的常驻服务
         when (mode) {
             CarrierMode.BUILTIN -> if (BfdChannel.alive()) {
