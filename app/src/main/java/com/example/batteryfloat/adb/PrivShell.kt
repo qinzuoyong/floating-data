@@ -37,7 +37,18 @@ object PrivShell {
     var lastChannel: String = "none"
         private set
 
-    /** 进程内初始化(AdbConnectionManager.setup 调用):读取持久化载体模式 */
+    /**
+     * 高精度数据源开关(对应 UI「高精度数据源 (ADB)」)。
+     *
+     * 门控语义：它是用户对"是否使用特权通道"的唯一表达。关闭时必须在这里拦住，
+     * 而不能只依赖 [AdbConnectionManager.isReady]——内置载体(libbfd.so)一旦拉起就
+     * 脱离 adbd 常驻，`setEnabled(false)` 不会杀它，令牌也没有清除入口，于是仅凭
+     * "载体存活"判断会让特权采样在用户以为已关闭后继续每 2 秒 fork 一次 shell。
+     */
+    @Volatile
+    private var enabled = false
+
+    /** 进程内初始化(AdbConnectionManager.setup 调用):读取持久化载体模式与开关 */
     fun init(context: Context) {
         val prefs = context.applicationContext
             .getSharedPreferences(PrefsKeys.PREFS_NAME, Context.MODE_PRIVATE)
@@ -46,7 +57,20 @@ object PrivShell {
         } else {
             CarrierMode.BUILTIN
         }
+        enabled = prefs.getBoolean(PrefsKeys.ADB_PRIV_ENABLED, false)
     }
+
+    /**
+     * 同步开关状态(AdbConnectionManager.setEnabled / onPaired 调用)。
+     * 关闭时立即作废内置载体的存活缓存，避免 [canExec] 在 TTL 内仍报可用。
+     */
+    fun setEnabled(value: Boolean) {
+        enabled = value
+        if (!value) BfdChannel.invalidateAlive()
+    }
+
+    /** 高精度数据源开关是否开启(UI 与消费方共用的唯一判据) */
+    fun isEnabled(): Boolean = enabled
 
     fun carrierMode(): CarrierMode = mode
 
@@ -71,10 +95,15 @@ object PrivShell {
     /**
      * 是否存在任一可执行通道(供门控判断,不发命令)。
      * suspend:BUILTIN 模式下需要探测 daemon 存活(网络 IO),不能在主线程直接调用。
+     *
+     * 开关关闭时恒为 false：这是"用户关掉高精度数据源后不再走特权 shell"的第一道闸。
      */
-    suspend fun canExec(): Boolean = when (mode) {
-        CarrierMode.BUILTIN -> BfdChannel.alive() || AdbConnectionManager.isReady
-        CarrierMode.SHIZUKU -> shizukuReady() || AdbConnectionManager.isReady
+    suspend fun canExec(): Boolean {
+        if (!enabled) return false
+        return when (mode) {
+            CarrierMode.BUILTIN -> BfdChannel.alive() || AdbConnectionManager.isReady
+            CarrierMode.SHIZUKU -> shizukuReady() || AdbConnectionManager.isReady
+        }
     }
 
     /**

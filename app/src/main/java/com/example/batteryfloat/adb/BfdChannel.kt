@@ -38,6 +38,8 @@ object BfdChannel {
     private const val CONNECT_BUDGET_MS = 3_000L
     /** 命令响应读超时:socket 层生效,保证阻塞读不会永久挂起 */
     private const val RESPONSE_TIMEOUT_MS = 8_000
+    /** shutdown 命令的超时:daemon 收到即 close+exit,正常在毫秒级返回 */
+    private const val SHUTDOWN_TIMEOUT_MS = 3_000L
 
     /** 当前 daemon 的认证令牌(仅进程内持有,重启进程后由下次拉起重置) */
     @Volatile
@@ -82,6 +84,40 @@ object BfdChannel {
 
     fun invalidateAlive() {
         aliveCache = null
+    }
+
+    /**
+     * 让 daemon 自行退出并释放监听端口(用户关闭"高精度数据源"时调用)。
+     *
+     * daemon 收到 shutdown 会先 close(conn) 再 exit(0)，所以本端读响应会拿到
+     * EOF(EOFException) —— 这是预期结果，不是失败，故不走 [exec] 的成功判定。
+     * 不作为失败记录：退出后 [alive] 自然转 false。
+     */
+    suspend fun shutdown() {
+        val t = token ?: return
+        withContext(Dispatchers.IO) {
+            runCatching {
+                withTimeoutOrNull(SHUTDOWN_TIMEOUT_MS) {
+                    val sock = connectDaemon()
+                    try {
+                        val out = DataOutputStream(sock.outputStream)
+                        val tk = t.toByteArray(Charsets.UTF_8)
+                        out.writeLeInt(tk.size)
+                        out.write(tk)
+                        val payload = "shutdown".toByteArray(Charsets.UTF_8)
+                        out.writeLeInt(payload.size)
+                        out.write(payload)
+                        out.flush()
+                        // 对端 shutdown 时会直接关闭连接，读到 EOF 即视为已送达
+                        runCatching { sock.inputStream.read() }
+                    } finally {
+                        runCatching { sock.close() }
+                    }
+                }
+            }
+            token = null
+            invalidateAlive()
+        }
     }
 
     /**

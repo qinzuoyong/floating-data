@@ -164,6 +164,10 @@ object AdbConnectionManager {
     fun setEnabled(context: Context, value: Boolean) {
         setup(context)
         enabled = value
+        // 同步开关到 PrivShell:它是"是否允许走特权 shell"的唯一门控。
+        // 必须在这里做——内置载体 libbfd.so 一经拉起就常驻且令牌无清除入口，
+        // 只关 AdbClient 不足以阻止特权采样继续跑（见 PrivShell.enabled 注释）
+        PrivShell.setEnabled(value)
         context.getSharedPreferences(PrefsKeys.PREFS_NAME, Context.MODE_PRIVATE)
             .edit().putBoolean(PrefsKeys.ADB_PRIV_ENABLED, value).apply()
         if (value && key != null) {
@@ -177,6 +181,10 @@ object AdbConnectionManager {
             reconnectJob = null
             closeClientQuietly()
             _state.value = if (key != null) AdbState.DISCONNECTED else AdbState.NOT_PAIRED
+            // 回收内置守护进程：用户关掉开关后不该再留一个 shell 域常驻进程占着端口与内存。
+            // 走 daemon 自身 shutdown 命令（非 kill），让它自行退出并释放 41900 端口；
+            // 失败也无妨——PrivShell.enabled 已拦住所有经它发出的命令
+            scope.launch { BfdChannel.shutdown() }
         }
     }
 
@@ -200,6 +208,7 @@ object AdbConnectionManager {
     fun onPaired(context: Context) {
         setup(context)
         enabled = true
+        PrivShell.setEnabled(true)
         setPaired(true)
         appContext!!.getSharedPreferences(PrefsKeys.PREFS_NAME, Context.MODE_PRIVATE)
             .edit().putBoolean(PrefsKeys.ADB_PRIV_ENABLED, true).apply()

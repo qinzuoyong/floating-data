@@ -154,11 +154,16 @@ object A11ySelfHealer {
 
     /**
      * 供 ADB 连接成功自动授权引导(AdbAutoGrant)复用:确保无障碍保活处于启用状态(幂等)。
-     * 已启用直接返回 true;用户在应用内主动关闭过则尊重意图不动,返回 false;
-     * 否则走 writeBack 的主/辅路径写回,写后即查系统设置判定生效(防假成功)。
+     * 用户在应用内主动关闭过则尊重意图不动,返回 false;
+     * 否则按"已启用但被解绑 → 强制重绑 / 未启用 → 写回"处理,写后即查系统设置判定生效(防假成功)。
+     *
+     * 门控顺序(勿调换)：**必须先判用户意图**。曾经先判 isEnabledInSettings 再判 isUserDisabled，
+     * 导致「系统设置里还留着启用记录 + 用户在应用内点过关闭」这一常见组合直接走 forceRebind 分支，
+     * 把用户刚关掉的服务强行绑回来 —— 与 [maybeHeal] 的门控顺序也不一致。
      */
     suspend fun ensureEnabled(context: Context): Boolean {
         val ctx = context.applicationContext
+        if (isUserDisabled(ctx)) return false
         if (KeepAliveAccessibilityService.isEnabledInSettings(ctx)) {
             // 已启用但被系统解绑(crashed 态)同样要强制重绑,否则返回 true 会掩盖问题
             if (isBound()) return true
@@ -166,7 +171,6 @@ object A11ySelfHealer {
             delay(BIND_SETTLE_MS)
             return isBound()
         }
-        if (isUserDisabled(ctx)) return false
         if (!writeBack(ctx)) return false
         return KeepAliveAccessibilityService.isEnabledInSettings(ctx)
     }
