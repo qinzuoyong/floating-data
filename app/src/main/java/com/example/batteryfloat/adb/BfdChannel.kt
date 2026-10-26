@@ -26,16 +26,13 @@ import java.security.SecureRandom
 object BfdChannel {
 
     private const val TAG = "BfdChannel"
-    private const val BASE_PORT = 41900
-    /** daemon 端口顺延范围(与 bfd_server.c 的 bind 重试次数一致) */
-    private const val PORT_SPAN = 10
+    /** daemon 启动时打印的端口行,格式 `PORT=<n>` */
+    private val PORT_LINE = Regex("""(?:^|\n)\s*PORT=(\d+)""")
     private const val EXEC_TIMEOUT_MS = 15_000L
     private const val PING_TIMEOUT_MS = 2_000L
     private const val ALIVE_CACHE_MS = 5_000L
-    /** 单端口连接超时(环回连接是毫秒级,给短超时避免端口遍历拖太久) */
+    /** 单端口连接超时(环回连接是毫秒级) */
     private const val CONNECT_TIMEOUT_MS = 300
-    /** 端口遍历总预算(daemon 只会在 BASE_PORT..BASE_PORT+9 内监听) */
-    private const val CONNECT_BUDGET_MS = 3_000L
     /** 命令响应读超时:socket 层生效,保证阻塞读不会永久挂起 */
     private const val RESPONSE_TIMEOUT_MS = 8_000
     /** shutdown 命令的超时:daemon 收到即 close+exit,正常在毫秒级返回 */
@@ -44,6 +41,17 @@ object BfdChannel {
     /** 当前 daemon 的认证令牌(仅进程内持有,重启进程后由下次拉起重置) */
     @Volatile
     private var token: String? = null
+
+    /**
+     * 当前 daemon 的监听端口。
+     *
+     * daemon 用 port=0 让内核随机分配,再把 `PORT=<n>` 打印到 starter 的 stdout,
+     * 由 [doStartViaAdb] 解析后写入这里。**不再遍历 41900..41909**——旧实现从固定
+     * 端口递增探测且"连上即发令牌",本机任意应用抢 bind 41900 即可在探测第一站
+     * 截获令牌(见 bfd_server.c 文件头)。随机端口下探测无从下手。
+     */
+    @Volatile
+    private var daemonPort: Int = 0
 
     /** 存活探测缓存(TTL 内不重复连 socket;高频采样时避免每拍都探测) */
     @Volatile
@@ -55,7 +63,7 @@ object BfdChannel {
      * 同步/UI 场景请改用 [aliveCached]。
      */
     suspend fun alive(): Boolean {
-        if (token == null) return false
+        if (token == null || daemonPort <= 0) return false
         aliveCache?.let { (at, v) ->
             if (System.currentTimeMillis() - at < ALIVE_CACHE_MS) return v
         }
@@ -78,7 +86,7 @@ object BfdChannel {
      * 供 UI 做"未知/可用/不可用"三态展示——避免把"还没探测过"误报成"不可用"。
      */
     fun aliveCached(): Boolean? {
-        if (token == null) return false
+        if (token == null || daemonPort <= 0) return false
         return aliveCache?.second
     }
 
@@ -116,6 +124,9 @@ object BfdChannel {
                 }
             }
             token = null
+            // 端口一并作废:daemon 已退出,该端口随时可能被其他进程复用,
+            // 留着会让后续 alive()/exec() 连到非本 daemon 的监听者
+            daemonPort = 0
             invalidateAlive()
         }
     }
@@ -168,28 +179,26 @@ object BfdChannel {
     }
 
     /**
-     * 连接 daemon：daemon 启动时若默认端口被占用会向上顺延监听
-     * (bfd_server.c 内 BASE_PORT..BASE_PORT+PORT_SPAN-1)，客户端同范围逐个尝试。
+     * 连接 daemon。
      *
-     * 带总预算 + 短连接超时 + 读超时：协程的 withTimeout 无法打断阻塞 connect/read，
-     * 超时必须由 socket 层兜住，否则 daemon 异常时会把调用线程长期占住。
+     * 端口来自 daemon 启动时打印的 `PORT=<n>`(随机分配),**不再做端口遍历**:
+     * 遍历会让"连上即发令牌"落到抢先占用固定端口的恶意应用手里。
+     * 端口未知时直接失败,由上层重新拉起 daemon 获取新端口。
      */
     private fun connectDaemon(): Socket {
-        var last: Exception? = null
-        val deadline = System.currentTimeMillis() + CONNECT_BUDGET_MS
-        for (p in BASE_PORT until BASE_PORT + PORT_SPAN) {
-            if (System.currentTimeMillis() >= deadline) break
-            val s = Socket()
-            try {
-                s.connect(InetSocketAddress("127.0.0.1", p), CONNECT_TIMEOUT_MS)
-                s.soTimeout = RESPONSE_TIMEOUT_MS
-                return s
-            } catch (e: Exception) {
-                last = e
-                runCatching { s.close() }
-            }
+        val port = daemonPort
+        if (port <= 0) {
+            throw java.net.ConnectException("daemon 端口未知(尚未拉起或未解析到 PORT=)")
         }
-        throw last ?: java.net.ConnectException("daemon 端口 ${BASE_PORT}-${BASE_PORT + PORT_SPAN - 1} 无监听")
+        val s = Socket()
+        try {
+            s.connect(InetSocketAddress("127.0.0.1", port), CONNECT_TIMEOUT_MS)
+            s.soTimeout = RESPONSE_TIMEOUT_MS
+            return s
+        } catch (e: Exception) {
+            runCatching { s.close() }
+            throw e
+        }
     }
 
     private fun DataInputStream.readLeInt(): Int {
@@ -230,28 +239,42 @@ object BfdChannel {
             return false
         }
         // 每次拉起生成新令牌;旧 daemon 会被 starter 按进程名清掉
-        token = newToken()
+        val newToken = newToken()
+        // 端口必须随令牌一起重置:旧端口属于旧 daemon,新 daemon 会重新随机分配
+        token = newToken
+        daemonPort = 0
+        invalidateAlive()
         var dispatched = false
         for (n in 1..3) {
             val out = AdbConnectionManager.exec(
-                "${starter.absolutePath} --token=$token"
+                "${starter.absolutePath} --token=$newToken"
             )
-            AdbConnectionManager.logDiag(ctx, "bfd: starter 尝试$n 输出=${out?.take(120) ?: "null"}")
+            AdbConnectionManager.logDiag(ctx, "bfd: starter 尝试$n 输出=${out?.take(200) ?: "null"}")
             if (out != null) {
-                dispatched = true
-                break
+                // daemon 在 fork 前把 `PORT=<n>` 打到 stdout,starter 的整段输出经 shell 回传。
+                // 解析不到端口就不能用——宁可按失败处理让上层重试,也不回退到固定端口遍历
+                // (那正是令牌被截获的原因)。
+                val port = parsePort(out)
+                if (port > 0) {
+                    daemonPort = port
+                    dispatched = true
+                    break
+                }
+                Log.w(TAG, "starter 输出未包含 PORT=,重试")
             }
             kotlinx.coroutines.delay(2_000)
         }
         if (!dispatched) {
-            Log.w(TAG, "starter 执行失败(通道不可用)")
+            Log.w(TAG, "starter 执行失败或未取到端口(通道不可用)")
             return false
         }
         repeat(10) {
             invalidateAlive()
             if (alive()) {
-                Log.i(TAG, "内置特权服务已就绪(第 ${it + 1} 秒)")
-                AdbConnectionManager.logDiag(ctx, "bfd: 内置特权服务就绪(第 ${it + 1} 秒)")
+                Log.i(TAG, "内置特权服务已就绪(第 ${it + 1} 秒,端口 $daemonPort)")
+                AdbConnectionManager.logDiag(
+                    ctx, "bfd: 内置特权服务就绪(第 ${it + 1} 秒,端口 $daemonPort)"
+                )
                 return true
             }
             kotlinx.coroutines.delay(1_000)
@@ -260,6 +283,11 @@ object BfdChannel {
         AdbConnectionManager.logDiag(ctx, "bfd: 拉起后 ping 未就绪")
         return false
     }
+
+    /** 从 starter 输出里取 `PORT=<n>`;取不到返回 0 */
+    private fun parsePort(output: String): Int =
+        PORT_LINE.find(output)?.groupValues?.getOrNull(1)?.toIntOrNull()
+            ?.takeIf { it in 1..65535 } ?: 0
 
     private fun newToken(): String {
         val bytes = ByteArray(16)

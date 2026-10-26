@@ -62,10 +62,18 @@ object ApkDownloader {
      * Gitee 附件 CDN foruda.gitee.com（实测跳转链末跳）、GitHub Asset CDN
      * objects.githubusercontent.com 等均在列；同时 evil-gitee.com、
      * gitee.com.evil.com 这类前后缀伪造不会命中。
+     *
+     * GitHub 侧有两个 CDN 域，缺一不可：
+     * - release-assets.githubusercontent.com —— **当前** Release 资产的 302 目标
+     *   （2026-10 实测 github.com/.../releases/download/<tag>/<file> 跳这里）
+     * - objects.githubusercontent.com —— 旧版资产 CDN，保留以兼容历史链接
+     * 曾漏掉前者，导致 Gitee 源失败切换到 GitHub 源后，第 2 跳即被判为
+     * "跳转目标不在允许的发布域"，GitHub 回退链 100% 不可用。
      */
     private val ALLOWED_DOWNLOAD_HOSTS = setOf(
         "gitee.com",
         "github.com",
+        "release-assets.githubusercontent.com",
         "objects.githubusercontent.com"
     )
 
@@ -149,116 +157,143 @@ object ApkDownloader {
 
         _downloadState.value = DownloadState.Downloading(0)
 
-        withContext(Dispatchers.IO) {
-            var inputStream: java.io.InputStream? = null
-            var outputStream: FileOutputStream? = null
-            var conn: HttpURLConnection? = null
-            try {
-                conn = openValidatedConnection(apkUrl)
+        // 取消处理必须包住 withContext 本身，不能只写在它内部的 try 里：
+        // 若协程在进入 withContext 之前/进入瞬间已被取消，withContext 会在**调用点**
+        // 抛 CancellationException，内部那个 catch 根本执行不到 → 状态永久停在
+        // Downloading(0)，而 UpdateDownloadDialog 在下载态禁用关闭，只能杀进程。
+        // 另外块内是纯阻塞 read/write（无挂起点），下载途中被取消时协程取消并不会
+        // 中断下载，真正能观察到取消的只有这个外层位置，故清理逻辑放这里才有效。
+        try {
+            withContext(Dispatchers.IO) {
+                var inputStream: java.io.InputStream? = null
+                var outputStream: FileOutputStream? = null
+                var conn: HttpURLConnection? = null
+                try {
+                    conn = openValidatedConnection(apkUrl)
 
-                // 检查 HTTP 响应码，非 2xx 视为失败（防止下载错误页面当 APK）
-                val responseCode = conn.responseCode
-                if (responseCode !in 200..299) {
-                    Log.e(TAG, "服务器返回错误码: $responseCode")
-                    _downloadState.value = DownloadState.Error(
-                        "下载失败，服务器返回错误码: $responseCode"
-                    )
-                    return@withContext
-                }
+                    // 检查 HTTP 响应码，非 2xx 视为失败（防止下载错误页面当 APK）
+                    val responseCode = conn.responseCode
+                    if (responseCode !in 200..299) {
+                        Log.e(TAG, "服务器返回错误码: $responseCode")
+                        _downloadState.value = DownloadState.Error(
+                            "下载失败，服务器返回错误码: $responseCode"
+                        )
+                        return@withContext
+                    }
 
-                val contentLength = conn.contentLength
-                inputStream = conn.inputStream
+                    val contentLength = conn.contentLength
+                    inputStream = conn.inputStream
 
-                // 删除旧文件
-                val targetFile = apkFile(context)
-                if (targetFile.exists()) targetFile.delete()
-                outputStream = FileOutputStream(targetFile)
+                    // 删除旧文件
+                    val targetFile = apkFile(context)
+                    if (targetFile.exists()) targetFile.delete()
+                    outputStream = FileOutputStream(targetFile)
 
-                val buffer = ByteArray(8192)
-                var bytesRead: Int
-                var totalBytesRead = 0L
-                var lastProgress = -1
+                    val buffer = ByteArray(8192)
+                    var bytesRead: Int
+                    var totalBytesRead = 0L
+                    var lastProgress = -1
 
-                while (inputStream.read(buffer).also { bytesRead = it } != -1) {
-                    outputStream.write(buffer, 0, bytesRead)
-                    totalBytesRead += bytesRead
+                    while (inputStream.read(buffer).also { bytesRead = it } != -1) {
+                        outputStream.write(buffer, 0, bytesRead)
+                        totalBytesRead += bytesRead
 
-                    // 计算并通知进度
-                    if (contentLength > 0) {
-                        val progress = ((totalBytesRead * 100) / contentLength).toInt()
-                        if (progress != lastProgress) {
-                            lastProgress = progress
-                            _downloadState.value =
-                                DownloadState.Downloading(progress.coerceIn(0, 100))
-                        }
-                    } else {
-                        // 服务器未返回 Content-Length（chunked 编码）时按已下载字节滚动进度，
-                        // 每 50KB 进 1%，封顶 99%，避免全程卡 0%；完成由 Completed 状态接管
-                        val pseudoProgress = (1 + (totalBytesRead / (50 * 1024L)).toInt()).coerceIn(1, 99)
-                        if (pseudoProgress != lastProgress) {
-                            lastProgress = pseudoProgress
-                            _downloadState.value = DownloadState.Downloading(pseudoProgress)
+                        // 计算并通知进度
+                        if (contentLength > 0) {
+                            val progress = ((totalBytesRead * 100) / contentLength).toInt()
+                            if (progress != lastProgress) {
+                                lastProgress = progress
+                                _downloadState.value =
+                                    DownloadState.Downloading(progress.coerceIn(0, 100))
+                            }
+                        } else {
+                            // 服务器未返回 Content-Length（chunked 编码）时按已下载字节滚动进度，
+                            // 每 50KB 进 1%，封顶 99%，避免全程卡 0%；完成由 Completed 状态接管
+                            val pseudoProgress =
+                                (1 + (totalBytesRead / (50 * 1024L)).toInt()).coerceIn(1, 99)
+                            if (pseudoProgress != lastProgress) {
+                                lastProgress = pseudoProgress
+                                _downloadState.value = DownloadState.Downloading(pseudoProgress)
+                            }
                         }
                     }
-                }
 
-                outputStream.flush()
-                outputStream.close()
-                outputStream = null
-                inputStream.close()
-                inputStream = null
-                conn.disconnect()
-                conn = null
+                    outputStream.flush()
+                    outputStream.close()
+                    outputStream = null
+                    inputStream.close()
+                    inputStream = null
+                    conn.disconnect()
+                    conn = null
 
-                // ① 校验下载文件是否为有效的 APK（ZIP 格式，magic bytes = PK）
-                if (!isValidApkFile(targetFile)) {
-                    Log.e(TAG, "下载的文件不是有效的 APK: ${targetFile.length()} bytes")
-                    // 读取文件头诊断
-                    val headerBuf = ByteArray(64)
-                    targetFile.inputStream().use { it.read(headerBuf) }
-                    val headerStr = String(headerBuf, Charsets.UTF_8).take(64)
-                    Log.e(TAG, "文件头: $headerStr")
-                    targetFile.delete()
+                    // 截断检测：Content-Length 已知却少收字节，说明连接提前 EOF（read 返回 -1
+                    // 不抛异常）。不查这一条会让残缺包走到签名校验，被误报成"可能被篡改"——
+                    // 网络问题伪装成安全事件，用户与排查都被误导。
+                    if (contentLength > 0 && totalBytesRead != contentLength.toLong()) {
+                        Log.e(
+                            TAG,
+                            "下载不完整: 收到 $totalBytesRead 字节，期望 $contentLength 字节"
+                        )
+                        targetFile.delete()
+                        _downloadState.value = DownloadState.Error(
+                            "下载不完整（网络中断），请重试"
+                        )
+                        return@withContext
+                    }
+
+                    // ① 校验下载文件是否为有效的 APK（ZIP 格式，magic bytes = PK）
+                    if (!isValidApkFile(targetFile)) {
+                        Log.e(TAG, "下载的文件不是有效的 APK: ${targetFile.length()} bytes")
+                        // 读取文件头诊断
+                        val headerBuf = ByteArray(64)
+                        targetFile.inputStream().use { it.read(headerBuf) }
+                        val headerStr = String(headerBuf, Charsets.UTF_8).take(64)
+                        Log.e(TAG, "文件头: $headerStr")
+                        targetFile.delete()
+                        _downloadState.value =
+                            DownloadState.Error("下载的文件不是有效的 APK 安装包，请检查网络后重试")
+                        return@withContext
+                    }
+
+                    // ② 校验签名证书与已安装版本一致：防中间人/供应链替换
+                    //    （仅比签名集合，不依赖远端元数据，可离线判定）
+                    if (!hasSameSignatureAsInstalled(context, targetFile)) {
+                        Log.e(TAG, "签名校验失败：下载包签名与已安装版本不一致，已拒绝")
+                        targetFile.delete()
+                        _downloadState.value = DownloadState.Error(
+                            "安装包签名校验失败，已阻止安装（可能被篡改）"
+                        )
+                        return@withContext
+                    }
+
+                    Log.i(TAG, "下载完成: ${totalBytesRead} bytes")
+                    _downloadState.value = DownloadState.Completed(targetFile)
+                } catch (e: Exception) {
+                    Log.e(TAG, "下载失败: ${e.message}", e)
+                    // 通用失败同样要清半截文件：只置 Error 不删的话，残包会一直占着
+                    // cache/apk/（FileProvider 正暴露该目录），且下次 Completed 前的校验
+                    // 会读到上一次的残缺包。注意这里不吞 CancellationException——
+                    // 它由外层统一处理（见 download() 末尾）。
+                    if (e is CancellationException) throw e
+                    runCatching { apkFile(context).takeIf { it.exists() }?.delete() }
                     _downloadState.value =
-                        DownloadState.Error("下载的文件不是有效的 APK 安装包，请检查网络后重试")
-                    return@withContext
+                        DownloadState.Error(e.message ?: "下载失败，请检查网络连接")
+                } finally {
+                    outputStream?.tryClose()
+                    inputStream?.tryClose()
+                    conn?.disconnect()
                 }
-
-                // ② 校验签名证书与已安装版本一致：防中间人/供应链替换
-                //    （仅比签名集合，不依赖远端元数据，可离线判定）
-                if (!hasSameSignatureAsInstalled(context, targetFile)) {
-                    Log.e(TAG, "签名校验失败：下载包签名与已安装版本不一致，已拒绝")
-                    targetFile.delete()
-                    _downloadState.value = DownloadState.Error(
-                        "安装包签名校验失败，已阻止安装（可能被篡改）"
-                    )
-                    return@withContext
-                }
-
-                Log.i(TAG, "下载完成: ${totalBytesRead} bytes")
-                _downloadState.value = DownloadState.Completed(targetFile)
-            } catch (e: CancellationException) {
-                // 协程被取消（MainActivity 用 lifecycleScope，Activity 销毁即取消；
-                // AboutScreen 用 rememberCoroutineScope，离开组合即取消）。
-                // CancellationException 是 Exception 的子类，若被下面的通用分支吞掉，
-                // 状态会永久停在 Downloading —— 而 UpdateDownloadDialog 在下载态下
-                // 禁用关闭（连"以后再说"都不渲染），用户下次只能杀进程。
-                // 这里复位为 Idle（可重试），再把取消继续向上抛，保持协程取消语义。
-                Log.i(TAG, "下载已取消（宿主作用域销毁）")
-                // 清掉半截文件：finally 只关流不删文件，残留会一直占缓存目录，
-                // 且下次进入 Completed 前的校验会读到上一次的残缺包
-                runCatching { apkFile(context).takeIf { it.exists() }?.delete() }
-                _downloadState.value = DownloadState.Idle
-                throw e
-            } catch (e: Exception) {
-                Log.e(TAG, "下载失败: ${e.message}", e)
-                _downloadState.value =
-                    DownloadState.Error(e.message ?: "下载失败，请检查网络连接")
-            } finally {
-                outputStream?.tryClose()
-                inputStream?.tryClose()
-                conn?.disconnect()
             }
+        } catch (e: CancellationException) {
+            // 协程被取消（MainActivity 用 lifecycleScope，Activity 销毁即取消；
+            // AboutScreen 用 rememberCoroutineScope，离开组合即取消）。
+            // 这里复位为 Idle（可重试），再把取消继续向上抛，保持协程取消语义。
+            // 位置必须在 withContext 之外：withContext 在进入前检查 Job 状态，
+            // 已取消时会在调用点直接抛出，内部 catch 收不到。
+            Log.i(TAG, "下载已取消（宿主作用域销毁）")
+            runCatching { apkFile(context).takeIf { it.exists() }?.delete() }
+            _downloadState.value = DownloadState.Idle
+            throw e
         }
     }
 

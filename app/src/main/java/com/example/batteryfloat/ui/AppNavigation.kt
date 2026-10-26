@@ -51,7 +51,9 @@ fun AppNavigation(
     onOpenBatterySettings: () -> Unit,
     onOpenAutoStartSettings: () -> Unit,
     onOpenExternalLink: (String, String) -> Unit = { _, _ -> },
-    onInstallApk: (File) -> Unit = {}
+    onInstallApk: (File) -> Unit = {},
+    /** 跳转外部 Activity 前的通知（宿主据此跳过 finishAndRemoveTask） */
+    onBeforeExternalLaunch: () -> Unit = {}
 ) {
     // rememberSaveable：Activity 因配置变更（旋转/深色模式切换等）重建后仍停在原 Tab，
     // 用 remember 会被重置回首页
@@ -122,7 +124,8 @@ fun AppNavigation(
                         onOpenBatterySettings = onOpenBatterySettings,
                         onOpenAutoStartSettings = onOpenAutoStartSettings,
                         onOpenExternalLink = onOpenExternalLink,
-                        onInstallApk = onInstallApk
+                        onInstallApk = onInstallApk,
+                        onBeforeExternalLaunch = onBeforeExternalLaunch
                     )
                 }
             }

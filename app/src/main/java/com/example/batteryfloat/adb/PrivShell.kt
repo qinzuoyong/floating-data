@@ -137,7 +137,17 @@ object PrivShell {
         return AdbConnectionManager.exec(command)?.also { lastChannel = "adb" }
     }
 
-    /** 经 Shizuku 服务执行;Shizuku.newProcess 自 13.1 起私有,走 IShizukuService 官方接口 */
+    /**
+     * 经 Shizuku 服务执行;Shizuku.newProcess 自 13.1 起私有,走 IShizukuService 官方接口。
+     *
+     * 资源纪律(2026-10 修复):`AutoCloseInputStream` 必须 use 关闭。旧实现
+     * `AutoCloseInputStream(p.inputStream).bufferedReader().readText()` 读完只丢引用，
+     * 流与底层 ParcelFileDescriptor 都不关闭；`p.destroy()` 只杀远端进程、不回收本端 FD。
+     * 高精度采样每 2 秒一条命令 → 每小时约 1800 个 FD 泄漏，最终 Too many open files。
+     *
+     * 另注:`withTimeoutOrNull` 对阻塞的 readText()/waitFor() 无效(无挂起点)，
+     * 真正兜底的是超时后的 destroy()；因此这里不依赖协程超时来"打断"读。
+     */
     private suspend fun runViaShizuku(command: String): String =
         withTimeoutOrNull(EXEC_TIMEOUT_MS) {
             val service = IShizukuService.Stub.asInterface(
@@ -145,9 +155,11 @@ object PrivShell {
             )
             val p = service.newProcess(arrayOf("sh", "-c", command), null, null)
             try {
-                ParcelFileDescriptor.AutoCloseInputStream(p.inputStream)
-                    .bufferedReader().readText()
-                    .also { lastChannel = "shizuku" }
+                ParcelFileDescriptor.AutoCloseInputStream(p.inputStream).use { input ->
+                    input.bufferedReader().use { reader ->
+                        reader.readText()
+                    }
+                }.also { lastChannel = "shizuku" }
                     .also { p.waitFor() }
             } finally {
                 runCatching { p.destroy() }
@@ -185,13 +197,18 @@ object PrivShell {
         val prefs = context.getSharedPreferences(PrefsKeys.PREFS_NAME, Context.MODE_PRIVATE)
         if (prefs.getBoolean(PrefsKeys.SHIZUKU_PERM_REQUESTED, false)) return
         if (!requesting.compareAndSet(false, true)) return
-        prefs.edit().putBoolean(PrefsKeys.SHIZUKU_PERM_REQUESTED, true).apply()
         try {
             Shizuku.addRequestPermissionResultListener(permResultListener)
             Shizuku.requestPermission(0)
+            // 标记在请求**成功发起之后**才落盘:旧实现先落盘再请求,一旦
+            // requestPermission 抛异常,标记已为 true → 之后一律 return,永不弹授权框。
+            prefs.edit().putBoolean(PrefsKeys.SHIZUKU_PERM_REQUESTED, true).apply()
             Log.i(TAG, "已发起 Shizuku 授权请求")
         } catch (e: Throwable) {
             requesting.set(false)
+            // 请求没发出去就把监听器撤掉,否则它会永久挂在 Shizuku 静态监听表里
+            // (只有收到结果时才在回调里移除)
+            runCatching { Shizuku.removeRequestPermissionResultListener(permResultListener) }
             Log.w(TAG, "发起 Shizuku 授权请求失败: ${e.message}")
         }
     }

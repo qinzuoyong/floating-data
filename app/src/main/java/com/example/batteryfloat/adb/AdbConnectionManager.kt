@@ -247,8 +247,13 @@ object AdbConnectionManager {
                 }
             }
         } catch (e: TimeoutCancellationException) {
-            Log.w(TAG, "exec 超时")
-            onDisconnected()
+            // 注意:这里**不能**调 onDisconnected()。
+            // 4s 的 exec 预算覆盖"建连+执行",而环回建连自身就要 3s connect + 5s read，
+            // 完全可能建连成功、client 已赋值之后才超时。此时 onDisconnected() 会
+            // closeClientQuietly() 把**刚建好的**连接关掉，下一轮 exec 又得重连——
+            // 表现为通道反复抖动、重连退避被不断重置。
+            // 超时只代表"本次命令没拿到结果"，连接本身未必坏，交给后续 exec/心跳判定。
+            Log.w(TAG, "exec 超时(连接保留)")
             null
         } catch (e: Throwable) {
             Log.w(TAG, "exec 异常: ${e.message}")

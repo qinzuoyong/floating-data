@@ -11,8 +11,17 @@
  *
  * 安全边界:
  * - 仅绑定 127.0.0.1,局域网不可达
- * - 令牌认证:拉起时经 --token=<hex> 传入随机令牌,每个连接首包必须携带;
- *   Android hidepid=2 下其他应用无法读取本进程 cmdline,令牌不泄露
+ * - 令牌保密:拉起时经 --token=<hex> 传入随机令牌;Android hidepid=2 下其他应用
+ *   读不到本进程 cmdline,故令牌本身不外泄
+ * - **端口保密(2026-10 加固)**:端口由内核随机分配(port=0),绑定后立即把
+ *   `PORT=<n>` 打印到 starter 的 stdout,客户端据此直连。旧实现固定 41900 起、
+ *   被占则顺延,而客户端从 41900 递增探测且"连上即发令牌"——本机任意应用只要
+ *   抢在 daemon 前 bind 41900,就能在探测第一站拿到令牌,再持令牌连真实端口
+ *   以 uid=2000 执行任意命令。改为随机端口 + 精确直连后,恶意应用既猜不到端口,
+ *   也不会被客户端误连,令牌不再外流。
+ *   (残留风险:若 daemon 已死且恶意应用恰好占住同一随机端口,仍可能收到令牌。
+ *    彻底解决需挑战-应答,但那要求 HMAC-SHA256,与本文件"纯 C 不链加密库"的
+ *    体积约束冲突,故此处只做端口保密。)
  * - 单连接单命令,长度上限约束
  *
  * 协议(每连接):4字节小端令牌长 + 令牌 + 4字节小端命令长 + 命令 →
@@ -37,7 +46,10 @@
 #include <unistd.h>
 
 #define SERVER_NAME "bfd_server"
-#define DEFAULT_PORT 41900
+/* 默认端口 0 = 由内核随机分配。**不要改回固定端口**:客户端按 PORT= 精确直连,
+ * 固定端口会让"连上即发令牌"落到抢先占用该端口的本机应用手里(见文件头安全边界)。
+ * 需要固定端口的调试场景用 --port=<n> 显式指定。 */
+#define DEFAULT_PORT 0
 #define MAX_TOKEN_LEN 128
 #define MAX_CMD_LEN (32 * 1024)
 #define MAX_OUT_LEN (256 * 1024)
@@ -305,11 +317,45 @@ int main(int argc, char *argv[]) {
     }
 
     kill_old_instances();
+
+    /* 先绑定再守护化。两个理由:
+     * 1) 端口必须由父进程打印给调用方(fork 后 stdout 已被重定向到 /dev/null);
+     * 2) 客户端靠这行 PORT= 得知端口,不再遍历猜测——遍历会让"连上即发令牌"
+     *    落到抢占端口的恶意应用手里(见文件头安全边界说明)。 */
+    int sfd = socket(AF_INET, SOCK_STREAM, 0);
+    if (sfd < 0) return 5;
+    int reuse = 1;
+    setsockopt(sfd, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse));
+    struct sockaddr_in addr;
+    memset(&addr, 0, sizeof(addr));
+    addr.sin_family = AF_INET;
+    addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK); /* 仅本机可达 */
+    addr.sin_port = htons((unsigned short) port);   /* port=0 时由内核随机分配 */
+    if (bind(sfd, (struct sockaddr *) &addr, sizeof(addr)) != 0) {
+        fprintf(stderr, "fatal: bind failed errno=%d\n", errno);
+        close(sfd);
+        return 6;
+    }
+    socklen_t addrLen = sizeof(addr);
+    if (getsockname(sfd, (struct sockaddr *) &addr, &addrLen) != 0) {
+        fprintf(stderr, "fatal: getsockname failed errno=%d\n", errno);
+        close(sfd);
+        return 6;
+    }
+    port = ntohs(addr.sin_port);
+    /* 客户端唯一可靠的端口来源,不可删除。 */
+    printf("PORT=%d\n", port);
+    fflush(stdout);
+
     if (daemonize) {
         pid_t pid = fork();
-        if (pid < 0) return 4;
+        if (pid < 0) {
+            close(sfd);
+            return 4;
+        }
         if (pid > 0) {
             printf("info: bfd_server pid is %d\n", pid);
+            fflush(stdout);
             return 0;
         }
         setsid();
@@ -325,25 +371,10 @@ int main(int argc, char *argv[]) {
     prctl(PR_SET_NAME, SERVER_NAME, 0, 0, 0);
     signal(SIGPIPE, SIG_IGN);
 
-    int sfd = socket(AF_INET, SOCK_STREAM, 0);
-    if (sfd < 0) return 5;
-    int reuse = 1;
-    setsockopt(sfd, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse));
-    struct sockaddr_in addr;
-    memset(&addr, 0, sizeof(addr));
-    addr.sin_family = AF_INET;
-    addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK); /* 仅本机可达 */
-    /* 端口被占用时向上顺延,最多 10 个 */
-    int bound = 0;
-    for (int p = port; p < port + 10; p++) {
-        addr.sin_port = htons((unsigned short) p);
-        if (bind(sfd, (struct sockaddr *) &addr, sizeof(addr)) == 0) {
-            port = p;
-            bound = 1;
-            break;
-        }
+    if (listen(sfd, 4) != 0) {
+        close(sfd);
+        return 6;
     }
-    if (!bound || listen(sfd, 4) != 0) return 6;
 
     for (;;) {
         int conn = accept(sfd, NULL, NULL);

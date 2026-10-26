@@ -57,7 +57,17 @@ fun AboutScreen(
     onOpenBatterySettings: () -> Unit,
     onOpenAutoStartSettings: () -> Unit,
     onOpenExternalLink: (String, String) -> Unit = { _, _ -> },
-    onInstallApk: (File) -> Unit = {}
+    onInstallApk: (File) -> Unit = {},
+    /**
+     * 跳转到外部 Activity 前的通知回调。
+     *
+     * MainActivity 的「隐藏后台」逻辑靠 `isLaunchingExternal` 区分"用户按 Home"与
+     * "我们自己拉起外部页面"：前者要 finishAndRemoveTask() 抹掉任务卡，后者必须放过。
+     * 本页「解除权限限制 → 去设置」曾经直接 context.startActivity 而不通知宿主，
+     * 于是 onUserLeaveHint 判定为用户按 Home → 应用被从最近任务里移除，
+     * 用户从系统设置返回时找不到应用。所有离开本应用的入口都必须先调这个回调。
+     */
+    onBeforeExternalLaunch: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -138,6 +148,8 @@ fun AboutScreen(
         RestrictedSettingsDialog(
             onDismiss = { showRestrictedGuide = false },
             onOpenAppInfo = {
+                // 必须先通知宿主，否则 onUserLeaveHint 会把本应用 finishAndRemoveTask
+                onBeforeExternalLaunch()
                 try {
                     android.content.Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
                         data = android.net.Uri.parse("package:${context.packageName}")

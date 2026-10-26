@@ -25,7 +25,14 @@ const PARSED_HOSTS = (() => {
 })();
 // 期望集合：发布渠道的官方域（后缀规则自动覆盖官方子域）。新增渠道必须同步改这里，
 // 否则下面第一条断言即失败——这正是"白名单不许悄悄放宽"的把关点。
-const EXPECTED_HOSTS = ['gitee.com', 'github.com', 'objects.githubusercontent.com'];
+// release-assets.githubusercontent.com 是 GitHub 当前 Release 资产的 302 目标（2026-10 实测）；
+// objects.githubusercontent.com 为旧版 CDN，保留兼容。缺前者会让 GitHub 回退链第二跳即失败。
+const EXPECTED_HOSTS = [
+  'gitee.com',
+  'github.com',
+  'release-assets.githubusercontent.com',
+  'objects.githubusercontent.com'
+];
 // 与 Kotlin 侧同构的逻辑（最后一条断言同时校验 Kotlin 源码里确实存在这段实现）
 const ALLOWED_DOWNLOAD_HOSTS = PARSED_HOSTS || [];
 function isAllowedDownloadUrl(u) {
@@ -62,7 +69,8 @@ const allow = [
   ['Gitee 附件中间跳', 'https://gitee.com/qinzuoyong/floating-data/attach_files/3180781/download/yongge.apk'],
   ['Gitee 附件 CDN 末跳（子域规则覆盖）', 'https://foruda.gitee.com/attach_file/1789046144511812450/yongge.apk?token=x&ts=1&attname=yongge.apk'],
   ['GitHub Release', 'https://github.com/qinzuoyong/floating-data/releases/download/v1.83/yongge.apk'],
-  ['GitHub 资产 CDN', 'https://objects.githubusercontent.com/github-production-release-asset/x/yongge.apk'],
+  ['GitHub 资产 CDN（当前，2026-10 实测 302 目标）', 'https://release-assets.githubusercontent.com/github-production-release-asset/1271234244/8f191115-017e-4cf8-bfe6-b3a5ff514c6d?sp=r&sig=x'],
+  ['GitHub 资产 CDN（旧版，兼容保留）', 'https://objects.githubusercontent.com/github-production-release-asset/x/yongge.apk'],
   ['Gitee 官方子域（泛匹配）', 'https://files.gitee.com/yongge.apk']
 ];
 for (const [name, u] of allow) ok('放行 ' + name, isAllowedDownloadUrl(u), u);

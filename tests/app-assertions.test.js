@@ -288,7 +288,7 @@ ok('配对成功（onPaired）同样同步开关为 true',
 ok('关闭开关时回收 daemon（BfdChannel.shutdown）',
   /BfdChannel\.shutdown\(\)/.test(ACM_SRC) && /suspend fun shutdown\(\)/.test(BFD_SRC));
 ok('shutdown 结束时清空 token 并作废存活缓存',
-  /suspend fun shutdown\(\)[\s\S]{0,1400}?token = null[\s\S]{0,120}?invalidateAlive\(\)/.test(BFD_SRC));
+  /suspend fun shutdown\(\)[\s\S]{0,1600}?token = null[\s\S]{0,400}?invalidateAlive\(\)/.test(BFD_SRC));
 
 console.log('[修复 S2：ensureEnabled 必须尊重用户主动关闭]');
 // 缺陷成因：先判 isEnabledInSettings 再判 isUserDisabled，导致「系统里还留着启用记录 +
@@ -374,6 +374,100 @@ ok('旧的 5 套模板 PNG 已删除（minSdk 34 恒解析 anydpi-v26）', (() =
 ok('通知小图标使用独立的紧凑 drawable（不复用自适应前景）',
   /R\.drawable\.ic_notification/.test(read(path.join(ROOT, PKG, 'notif/Notifs.kt'))) &&
   fs.existsSync(path.join(ROOT, 'app/src/main/res/drawable/ic_notification.xml')));
+
+// ============================================================
+// 2026-10 第二轮全量审查（B 方案 9 项修复）回归断言
+// ============================================================
+const PRIV_SRC = read(path.join(ROOT, PKG, 'adb/PrivShell.kt'));
+const ABOUT = path.join(ROOT, PKG, 'ui/AboutScreen.kt');
+const APKDL = path.join(ROOT, PKG, 'update/ApkDownloader.kt');
+const BFD_C = path.join(ROOT, 'app/src/main/cpp/bfd_server.c');
+const PAIRING_CPP = path.join(ROOT, 'app/src/main/cpp/adb_pairing.cpp');
+
+console.log('\n[P0 安全：bfd 端口保密（令牌不再被抢占端口的应用截获）]');
+ok('daemon 不再从固定端口顺延（旧实现是令牌可被截获的前提）',
+  !/for \(int p = port; p < port \+ 10; p\+\+\)/.test(read(BFD_C)));
+ok('daemon 用内核分配的端口并打印 PORT= 给 starter',
+  /printf\("PORT=%d\\n", port\)/.test(read(BFD_C)));
+ok('客户端不再遍历端口探测，只连 daemon 告知的端口',
+  (() => {
+    const s = read(BFD);
+    return /private var daemonPort: Int = 0/.test(s) &&
+      !/for \(p in BASE_PORT until BASE_PORT \+ PORT_SPAN\)/.test(s);
+  })());
+ok('客户端从 starter 输出解析 PORT=',
+  /PORT_LINE/.test(read(BFD)) && /parsePort/.test(read(BFD)));
+ok('shutdown 后端口一并作废（防连到复用该端口的其他进程）',
+  /daemonPort = 0/.test(read(BFD)));
+
+console.log('\n[更新 P1-1：GitHub 回退链白名单含 release-assets]');
+ok('白名单含 release-assets.githubusercontent.com',
+  /release-assets\.githubusercontent\.com/.test(read(APKDL)));
+
+console.log('\n[更新 P1-2：取消清理必须包住 withContext]');
+ok('withContext 位于 try 之内（取消才能在调用点被接住）',
+  (() => {
+    const s = read(APKDL);
+    const i = s.indexOf('suspend fun download(');
+    const seg = s.slice(i, i + 1500);
+    return /try \{\s*\n[\s\S]{0,900}?withContext\(Dispatchers\.IO\)/.test(seg);
+  })());
+ok('外层 catch 复位 Idle 并重抛取消',
+  /catch \(e: CancellationException\)[\s\S]{0,600}?_downloadState\.value = DownloadState\.Idle[\s\S]{0,120}?throw e/.test(read(APKDL)));
+ok('通用失败分支也清半截文件',
+  /if \(e is CancellationException\) throw e[\s\S]{0,260}?apkFile\(context\)/.test(read(APKDL)));
+
+console.log('\n[并发 P1-1：Shizuku 通道流必须 use 关闭（FD 泄漏）]');
+ok('AutoCloseInputStream 与 reader 均用 use 包裹',
+  /AutoCloseInputStream\(p\.inputStream\)\.use \{ input ->/.test(PRIV_SRC) &&
+  /input\.bufferedReader\(\)\.use \{ reader ->/.test(PRIV_SRC));
+
+console.log('\n[并发 P1-2：无障碍强制重绑必须串行（读-改-写不可并发）]');
+ok('存在 rebindMutex 且 forceRebind 持锁',
+  (() => {
+    const s = read(HEALER);
+    return /private val rebindMutex = Mutex\(\)/.test(s) &&
+      /forceRebind\(ctx: Context\): Boolean = rebindMutex\.withLock/.test(s);
+  })());
+ok('ensureEnabled 仍不走 healing 门（否则同步语义丢失）',
+  !/suspend fun ensureEnabled[\s\S]{0,500}?healing\.compareAndSet/.test(read(HEALER)));
+
+console.log('\n[ADB P1-4：trust-key 标记必须在拿到回执之后]');
+ok('PRIV_BASELINE_KEY_TRIED 的写入位于 exec 之后且有 resp 判空',
+  (() => {
+    const s = read(PB);
+    const iExec = s.indexOf('PrivShell.exec("trust-key');
+    const iFlag = s.indexOf('putBoolean(PrefsKeys.PRIV_BASELINE_KEY_TRIED, true)');
+    return iExec > 0 && iFlag > iExec && /if \(resp != null\)/.test(s);
+  })());
+
+console.log('\n[ADB P1-5：exec 超时不得关掉刚建好的连接]');
+ok('TimeoutCancellationException 分支不再调 onDisconnected（忽略注释里的说明文字）',
+  (() => {
+    const s = read(ACM);
+    const m = /catch \(e: TimeoutCancellationException\) \{([\s\S]{0,700}?)\n        \}/.exec(s);
+    if (!m) return false;
+    // 去掉 // 注释后再判定，避免"注释里解释为什么不能调"被误判成调用
+    const code = m[1].split('\n').map(l => l.replace(/\/\/.*$/, '')).join('\n');
+    return !/onDisconnected\(\)/.test(code);
+  })());
+
+console.log('\n[ADB P1-6：JNI 返回值必须检查]');
+ok('malloc 失败有判空（防空指针写入 SIGSEGV）',
+  /malloc\(sizeof\(PairingContextNative\)\);[\s\S]{0,300}?if \(ctx == nullptr\)/.test(read(PAIRING_CPP)));
+ok('NewByteArray 三处均有判空',
+  (read(PAIRING_CPP).match(/if \((our_msg|jOut) == nullptr\)/g) || []).length === 3);
+ok('RegisterNatives 返回值被检查',
+  /RegisterNatives\(pairingContextClass[\s\S]{0,220}?!= JNI_OK/.test(read(PAIRING_CPP)));
+
+console.log('\n[AboutScreen：所有离开应用的入口都要通知宿主]');
+ok('AboutScreen 暴露 onBeforeExternalLaunch 回调',
+  /onBeforeExternalLaunch: \(\) -> Unit = \{\}/.test(read(ABOUT)));
+ok('去设置前先调该回调（否则 onUserLeaveHint 会 finishAndRemoveTask）',
+  /onOpenAppInfo = \{[\s\S]{0,240}?onBeforeExternalLaunch\(\)/.test(read(ABOUT)));
+ok('AppNavigation 透传该回调', /onBeforeExternalLaunch = onBeforeExternalLaunch/.test(read(NAV)));
+ok('MainActivity 接上该回调并置位 isLaunchingExternal',
+  /onBeforeExternalLaunch = \{ isLaunchingExternal = true \}/.test(read(MAIN)));
 
 console.log('\n== 结果: ' + pass + ' 通过 / ' + fail + ' 失败 ==');
 process.exit(fail === 0 ? 0 : 1);

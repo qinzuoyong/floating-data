@@ -12,6 +12,8 @@ import com.example.batteryfloat.PrefsKeys
 import com.example.batteryfloat.adb.PrivShell
 import com.example.batteryfloat.notif.Notifs
 import kotlinx.coroutines.*
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
@@ -68,6 +70,20 @@ object A11ySelfHealer {
 
     /** 一轮自愈进行中(写回→复查)时拒绝重入 */
     private val healing = AtomicBoolean(false)
+
+    /**
+     * 强制重绑串行锁。
+     *
+     * [forceRebind] 是「读列表 → 摘掉本服务 → 等 1 秒 → 写回原值」的读-改-写，
+     * 两次并发交错会丢条目：A 读 X:cn 写 X → B 读 X → A 写回 X:cn → B 写回它读到的 X，
+     * 最终列表里没有 cn，无障碍被系统解绑；特权通道不可用时 writeBack 也补不回来，
+     * 第二层保活永久丢失。
+     *
+     * [maybeHeal] 有 [healing] 门，但 [ensureEnabled]（AdbAutoGrant 每次通道连通都调）
+     * 刻意不走那道门（它需要同步返回结果，不能因为别的自愈在跑就直接判失败），
+     * 故此处用独立互斥锁，只保护这一段不可并发的读-改-写。
+     */
+    private val rebindMutex = Mutex()
 
     /** 连续失败次数(退避档位索引) */
     @Volatile
@@ -243,10 +259,10 @@ object A11ySelfHealer {
      * 只写回同值不会触发变更(设置未变 → 不重绑),必须先移除再写回;
      * 其余服务条目原样保留(同一字符串读改写,不会丢别人的无障碍服务)。
      */
-    private suspend fun forceRebind(ctx: Context): Boolean {
-        if (hasSecureWritePermission(ctx)) return rebindDirect(ctx)
+    private suspend fun forceRebind(ctx: Context): Boolean = rebindMutex.withLock {
+        if (hasSecureWritePermission(ctx)) return@withLock rebindDirect(ctx)
         Log.i(TAG, "无 WRITE_SECURE_SETTINGS,退化 shell 强制重绑")
-        return PrivShell.exec(buildShellRebindCmd(ctx)) != null
+        return@withLock PrivShell.exec(buildShellRebindCmd(ctx)) != null
     }
 
     private suspend fun rebindDirect(ctx: Context): Boolean {

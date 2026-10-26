@@ -83,6 +83,12 @@ static jlong PairingContext_Constructor(JNIEnv *env, jclass clazz, jboolean isCl
     env->ReleaseByteArrayElements(jPassword, pswd, 0);
 
     auto ctx = (PairingContextNative *) malloc(sizeof(PairingContextNative));
+    if (ctx == nullptr) {
+        // malloc 失败时直接 memset(ctx,...) 会空指针写入并 SIGSEGV（进程直接死）
+        LOGE("Unable to allocate PairingContextNative.");
+        SPAKE2_CTX_free(spake2_ctx);
+        return 0;
+    }
     memset(ctx, 0, sizeof(PairingContextNative));
     ctx->spake2_ctx = spake2_ctx;
     memcpy(ctx->key, key, SPAKE2_MAX_MSG_SIZE);
@@ -93,6 +99,10 @@ static jlong PairingContext_Constructor(JNIEnv *env, jclass clazz, jboolean isCl
 static jbyteArray PairingContext_Msg(JNIEnv *env, jobject obj, jlong ptr) {
     auto ctx = (PairingContextNative *) ptr;
     jbyteArray our_msg = env->NewByteArray(ctx->key_size);
+    if (our_msg == nullptr) {
+        LOGE("Unable to allocate our_msg.");
+        return nullptr;
+    }
     env->SetByteArrayRegion(our_msg, 0, ctx->key_size, (jbyte *) ctx->key);
     return our_msg;
 }
@@ -171,6 +181,10 @@ static jbyteArray PairingContext_Encrypt(JNIEnv *env, jobject obj, jlong ptr, jb
     ++ctx->enc_sequence;
 
     jbyteArray jOut = env->NewByteArray(written_sz);
+    if (jOut == nullptr) {
+        LOGE("Unable to allocate jOut (encrypt, size=%" PRIuPTR ").", written_sz);
+        return nullptr;
+    }
     env->SetByteArrayRegion(jOut, 0, written_sz, (jbyte *) out);
     return jOut;
 }
@@ -202,6 +216,10 @@ static jbyteArray PairingContext_Decrypt(JNIEnv *env, jobject obj, jlong ptr, jb
     ++ctx->dec_sequence;
 
     jbyteArray jOut = env->NewByteArray(written_sz);
+    if (jOut == nullptr) {
+        LOGE("Unable to allocate jOut (decrypt, size=%" PRIuPTR ").", written_sz);
+        return nullptr;
+    }
     env->SetByteArrayRegion(jOut, 0, written_sz, (jbyte *) out);
     return jOut;
 }
@@ -230,8 +248,19 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *vm, void *reserved) {
             {"nativeDestroy",     "(J)V",    (void *) PairingContext_Destroy},
     };
 
-    env->RegisterNatives(env->FindClass("com/example/batteryfloat/adb/PairingContext"), methods_PairingContext,
-                         sizeof(methods_PairingContext) / sizeof(JNINativeMethod));
+    jclass pairingContextClass = env->FindClass("com/example/batteryfloat/adb/PairingContext");
+    if (pairingContextClass == nullptr) {
+        // 类找不到通常是 R8 把 PairingContext 混淆/裁掉了(rules.keep 应保住它)。
+        // 不检查会继续 RegisterNatives 并静默失败,首次调用时才抛 UnsatisfiedLinkError,
+        // 用户只看到"未知错误",排查不到根因。
+        LOGE("Unable to find PairingContext class (check rules.keep).");
+        return -1;
+    }
+    if (env->RegisterNatives(pairingContextClass, methods_PairingContext,
+                             sizeof(methods_PairingContext) / sizeof(JNINativeMethod)) != JNI_OK) {
+        LOGE("Unable to register PairingContext natives.");
+        return -1;
+    }
 
     return JNI_VERSION_1_6;
 }

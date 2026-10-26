@@ -63,7 +63,6 @@ object PrivBaseline {
             if (key == null) {
                 Log.w(TAG, "ADB 密钥尚未就绪,trust-key 留待下次连接重试")
             } else {
-                prefs.edit().putBoolean(PrefsKeys.PRIV_BASELINE_KEY_TRIED, true).apply()
                 // adb_keys 的每行格式为「<base64 公钥> <name>」,而 adbPublicKey 已是该格式
                 // (见 AdbKey.adbEncoded),必须原样写入——再整体 Base64 一次会写成非法公钥行。
                 // 不要用单引号包裹:能执行 trust-key 的只有内置 daemon,它把 "trust-key " 之后的
@@ -75,6 +74,14 @@ object PrivBaseline {
                 val resp = PrivShell.exec("trust-key $pubKeyLine")?.trim()
                 Log.i(TAG, "trust-key 结果: $resp")
                 AdbConnectionManager.logDiag(ctx, "基座:trust-key 写入结果=$resp")
+                // 只有拿到回执才置"已尝试"。旧实现在 exec **之前**落盘:首次连通瞬间
+                // daemon 往往还没就绪/通道闪断,exec 返回 null,标记却已为 true →
+                // trust-key 永远不再尝试,环回自愈基座静默失效。
+                if (resp != null) {
+                    prefs.edit().putBoolean(PrefsKeys.PRIV_BASELINE_KEY_TRIED, true).apply()
+                } else {
+                    Log.w(TAG, "trust-key 无回执(通道未就绪),留待下次连接重试")
+                }
             }
         }
 

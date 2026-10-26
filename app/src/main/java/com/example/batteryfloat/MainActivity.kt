@@ -162,7 +162,10 @@ class MainActivity : ComponentActivity() {
                                 android.widget.Toast.LENGTH_LONG
                             ).show()
                         }
-                    }
+                    },
+                    // AboutScreen 内部的「去设置」等入口经此通知宿主，避免被
+                    // onUserLeaveHint 误判为用户按 Home 而 finishAndRemoveTask
+                    onBeforeExternalLaunch = { isLaunchingExternal = true }
                 )
 
                 // Android 14+ 受限设置引导对话框
