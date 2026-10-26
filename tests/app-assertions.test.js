@@ -258,5 +258,120 @@ ok('依赖不再含 Gson / Java-WebSocket / 高德定位 SDK',
       !/gson/.test(lv) && !/javaWebsocket/i.test(lv) && !/amapLocation/.test(lv);
   })());
 
+// ---- 2026-10 全量审查修复的形态锁定 ----
+// 这些缺陷都属"静默错误"：编译通过、模拟器也未必暴露，只有读源码才能确认，
+// 故逐条锁定修复形态，防止后续改动把逻辑改回去。
+const PRIV = read(path.join(ROOT, PKG, 'adb/PrivShell.kt'));
+const DOWN = read(path.join(ROOT, PKG, 'update/ApkDownloader.kt'));
+const PAIR = read(path.join(ROOT, PKG, 'adb/AdbPairingClient.kt'));
+const MAIN_SRC = read(MAIN);
+const ACM_SRC = read(ACM);
+const BFD_SRC = read(BFD);
+
+console.log('[修复 S1：关闭高精度数据源后特权读取必须真的停]');
+// 缺陷成因：开关只关 AdbClient，内置载体 libbfd.so 已脱离 adbd 常驻且令牌无清除入口，
+// 而 PrivBatteryProvider 的门控是 canExec()，原先只看"载体存活" → 开关形同虚设。
+ok('PrivShell 持有开关状态并暴露 isEnabled()',
+  /private var enabled = false/.test(PRIV) && /fun isEnabled\(\): Boolean = enabled/.test(PRIV));
+ok('PrivShell.init 从 prefs 读取 ADB_PRIV_ENABLED（进程启动即同步）',
+  /getBoolean\(PrefsKeys\.ADB_PRIV_ENABLED, false\)/.test(PRIV));
+ok('canExec() 开关关闭时恒 false（特权采样的第一道闸）',
+  /suspend fun canExec\(\)[\s\S]{0,200}?if \(!enabled\) return false/.test(PRIV));
+ok('PrivShell.setEnabled 存在且关闭时作废存活缓存',
+  /fun setEnabled\(value: Boolean\)[\s\S]{0,200}?if \(!value\) BfdChannel\.invalidateAlive\(\)/.test(PRIV));
+ok('AdbConnectionManager.setEnabled 同步开关到 PrivShell',
+  /fun setEnabled\(context: Context, value: Boolean\)[\s\S]{0,400}?PrivShell\.setEnabled\(value\)/.test(ACM_SRC));
+ok('配对成功（onPaired）同样同步开关为 true',
+  /fun onPaired\(context: Context\)[\s\S]{0,300}?PrivShell\.setEnabled\(true\)/.test(ACM_SRC));
+ok('关闭开关时回收 daemon（BfdChannel.shutdown）',
+  /BfdChannel\.shutdown\(\)/.test(ACM_SRC) && /suspend fun shutdown\(\)/.test(BFD_SRC));
+ok('shutdown 结束时清空 token 并作废存活缓存',
+  /suspend fun shutdown\(\)[\s\S]{0,1400}?token = null[\s\S]{0,120}?invalidateAlive\(\)/.test(BFD_SRC));
+
+console.log('[修复 S2：ensureEnabled 必须尊重用户主动关闭]');
+// 缺陷成因：先判 isEnabledInSettings 再判 isUserDisabled，导致「系统里还留着启用记录 +
+// 用户在应用内点过关闭」直接走 forceRebind，把用户刚关掉的服务强行绑回来。
+const ensureEnabledBody = (() => {
+  const m = /suspend fun ensureEnabled\(context: Context\): Boolean \{([\s\S]*?)\n    \}/.exec(healer);
+  return m ? m[1] : '';
+})();
+ok('ensureEnabled 第一行就判 isUserDisabled（早于 isEnabledInSettings）', (() => {
+  const iUser = ensureEnabledBody.indexOf('isUserDisabled');
+  const iEnabled = ensureEnabledBody.indexOf('isEnabledInSettings');
+  return iUser > 0 && iEnabled > 0 && iUser < iEnabled;
+})(), `len=${ensureEnabledBody.length}`);
+ok('ensureEnabled 的 forceRebind 分支不夹带用户意图判断（意图已在最前统一处理）',
+  ensureEnabledBody.length > 0 && !/isEnabledInSettings\(ctx\)\) \{[\s\S]{0,700}?isUserDisabled/.test(ensureEnabledBody));
+
+console.log('[修复 S3：下载取消不得把状态卡在 Downloading]');
+// 缺陷成因：CancellationException 是 Exception 子类被通用 catch 吞掉，而下载态下
+// UpdateDownloadDialog 禁用关闭 → 弹窗永久卡死，只能杀进程。
+ok('download 单独捕获 CancellationException 且位于 Exception 分支之前', (() => {
+  const iCancel = DOWN.indexOf('catch (e: CancellationException)');
+  const iGeneric = DOWN.indexOf('catch (e: Exception)', iCancel > 0 ? iCancel : 0);
+  return iCancel > 0 && iGeneric > iCancel;
+})());
+ok('取消分支复位为 Idle 并把异常继续抛出（保持取消语义）',
+  /catch \(e: CancellationException\)[\s\S]{0,900}?_downloadState\.value = DownloadState\.Idle[\s\S]{0,80}?throw e/.test(DOWN));
+ok('取消分支清理半截文件（finally 只关流不删文件）',
+  /catch \(e: CancellationException\)[\s\S]{0,900}?apkFile\(context\)[\s\S]{0,120}?delete\(\)/.test(DOWN));
+ok('CancellationException 已显式 import',
+  /import kotlinx\.coroutines\.CancellationException/.test(DOWN));
+ok('两个调用方都捕获取消异常（避免未捕获异常逃到协程作用域）', (() => {
+  const about = read(path.join(ROOT, PKG, 'ui/AboutScreen.kt'));
+  return /catch \(_: kotlinx\.coroutines\.CancellationException\)/.test(MAIN_SRC) &&
+    /catch \(_: kotlinx\.coroutines\.CancellationException\)/.test(about);
+})());
+
+console.log('[修复 M1：onTaskRemoved 不得保留永不可达的重启分支]');
+// 该方法只在服务存活时回调，isRunning 恒 true → 原 AlarmManager 重启逻辑是死代码。
+ok('onTaskRemoved 不再含 isRunning 提前返回与 AlarmManager 调度', (() => {
+  const m = /override fun onTaskRemoved\([\s\S]*?\n    \}/.exec(fws);
+  if (!m) return false;
+  const body = m[0];
+  return !/if \(isRunning\)/.test(body) &&
+    !/setExactAndAllowWhileIdle/.test(body) &&
+    !/AlarmManager/.test(body) &&
+    /super\.onTaskRemoved/.test(body);
+})());
+
+console.log('[修复 M2：PeerInfo.Type 枚举取值须与 AOSP 一致]');
+// AOSP: enum class Type : uint8_t { kRsaPublicKey = 0, kDeviceGuid = 1 }
+ok('ADB_RSA_PUB_KEY = 0', /ADB_RSA_PUB_KEY\(0\.toByte\(\)\)/.test(PAIR));
+ok('ADB_DEVICE_GUID = 1（曾误写 0，与公钥同值）', /ADB_DEVICE_GUID\(1\.toByte\(\)\)/.test(PAIR));
+
+console.log('[修复 M3：安装前检查「安装未知应用」权限]');
+ok('提供 canRequestPackageInstalls 判定', /canRequestPackageInstalls\(\)/.test(DOWN));
+ok('提供跳转 ACTION_MANAGE_UNKNOWN_APP_SOURCES 的引导',
+  /ACTION_MANAGE_UNKNOWN_APP_SOURCES/.test(DOWN));
+ok('install() 未授权时先引导而非静默失败',
+  /fun install\(context: Context, file: File\)[\s\S]{0,600}?!canInstallUnknownApps\(context\)[\s\S]{0,300}?openInstallPermissionSettings/.test(DOWN));
+ok('MainActivity 两处安装回调均给出失败提示',
+  (MAIN_SRC.match(/canInstallUnknownApps/g) || []).length >= 2);
+
+console.log('[修复 M4：删除无引用的死字符串]');
+ok('strings.xml 不再含 action_confirm / action_cancel', (() => {
+  const s = read(path.join(ROOT, 'app/src/main/res/values/strings.xml'));
+  return !/name="action_confirm"/.test(s) && !/name="action_cancel"/.test(s);
+})());
+
+console.log('[图标：自适应图标替代默认模板位图，与家人定位区分]');
+// 两个项目原先逐字节相同（同一套 AS 模板机器人图标），且 5 张 PNG 共 93.7 KB。
+ok('存在 mipmap-anydpi-v26/ic_launcher.xml 自适应图标',
+  fs.existsSync(path.join(ROOT, 'app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml')));
+ok('自适应图标含 background / foreground / monochrome 三层', (() => {
+  const p = path.join(ROOT, 'app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml');
+  if (!fs.existsSync(p)) return false;
+  const x = read(p);
+  return /<background /.test(x) && /<foreground /.test(x) && /<monochrome /.test(x);
+})());
+ok('旧的 5 套模板 PNG 已删除（minSdk 34 恒解析 anydpi-v26）', (() => {
+  const dirs = ['mipmap-mdpi', 'mipmap-hdpi', 'mipmap-xhdpi', 'mipmap-xxhdpi', 'mipmap-xxxhdpi'];
+  return dirs.every(d => !fs.existsSync(path.join(ROOT, 'app/src/main/res', d, 'ic_launcher.png')));
+})());
+ok('通知小图标使用独立的紧凑 drawable（不复用自适应前景）',
+  /R\.drawable\.ic_notification/.test(read(path.join(ROOT, PKG, 'notif/Notifs.kt'))) &&
+  fs.existsSync(path.join(ROOT, 'app/src/main/res/drawable/ic_notification.xml')));
+
 console.log('\n== 结果: ' + pass + ' 通过 / ' + fail + ' 失败 ==');
 process.exit(fail === 0 ? 0 : 1);
