@@ -1,0 +1,28 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+
+    <!-- 通知栏小图标：必须紧凑铺满 24dp 画布。
+         不能复用 ic_launcher_foreground——那是自适应图标前景，内容只占 108dp 画布的
+         中央安全区（约 66/108），直接用作通知图标会被缩得几乎看不见。
+         系统按 alpha 蒙版渲染为纯白，故此处只用白色填充、不留背景。 -->
+
+    <!-- 正极帽 -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M10,2 h4 a1,1 0 0 1 1,1 v2 h-6 v-2 a1,1 0 0 1 1,-1 z" />
+
+    <!-- 电池主体（描边） -->
+    <path
+        android:fillColor="#00000000"
+        android:pathData="M6,5 h12 a2,2 0 0 1 2,2 v14 a2,2 0 0 1 -2,2 h-12 a2,2 0 0 1 -2,-2 v-14 a2,2 0 0 1 2,-2 z"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="2" />
+
+    <!-- 闪电 -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M13.5,8 L8.5,15 h3.2 v5 l5,-7 h-3.2 z" />
+</vector>

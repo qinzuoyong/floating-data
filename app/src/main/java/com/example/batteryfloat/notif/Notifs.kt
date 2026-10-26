@@ -74,7 +74,7 @@ object Notifs {
             // 初始无采样数据时用占位,与运行后合并标题样式一致(温度+功耗同标题行)
             .setContentTitle(context.getString(R.string.notification_title, "--", "--W"))
             .setContentText(context.getString(R.string.notification_foreground_text))
-            .setSmallIcon(R.drawable.ic_launcher_foreground)
+            .setSmallIcon(R.drawable.ic_notification)
             .setOngoing(true)
             .setPriority(NotificationCompat.PRIORITY_MIN) // 最低优先级
             .setSilent(true) // 静默通知
@@ -94,7 +94,7 @@ object Notifs {
         return NotificationCompat.Builder(context, CHANNEL_BATTERY)
             .setContentTitle(title)
             .setContentText(text)
-            .setSmallIcon(R.drawable.ic_launcher_foreground)
+            .setSmallIcon(R.drawable.ic_notification)
             .setContentIntent(pendingIntent)
             .setOngoing(true)
             .setPriority(NotificationCompat.PRIORITY_LOW)
@@ -115,7 +115,7 @@ object Notifs {
         return NotificationCompat.Builder(context, CHANNEL_BATTERY)
             .setContentTitle("无障碍保活已自动恢复")
             .setContentText("检测到服务被意外关闭,已自动写回")
-            .setSmallIcon(R.drawable.ic_launcher_foreground)
+            .setSmallIcon(R.drawable.ic_notification)
             .setContentIntent(pendingIntent)
             .setAutoCancel(true)
             .setTimeoutAfter(autoDismissAfter()) // 平台语义:绝对时间戳
@@ -128,7 +128,7 @@ object Notifs {
 
     fun pairingSearching(context: Context, stopAction: Notification.Action): Notification =
         Notification.Builder(context, CHANNEL_PAIRING)
-            .setSmallIcon(R.drawable.ic_launcher_foreground)
+            .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle("正在搜索配对服务…")
             .setContentText("请先在系统设置中打开「无线调试 → 使用配对码配对设备」")
             .setOngoing(true)
@@ -137,7 +137,7 @@ object Notifs {
 
     fun pairingInput(context: Context, replyAction: Notification.Action): Notification =
         Notification.Builder(context, CHANNEL_PAIRING)
-            .setSmallIcon(R.drawable.ic_launcher_foreground)
+            .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle("已发现配对服务")
             .setContentText("点击「输入配对码」,直接回复系统弹窗显示的 6 位数字")
             .setOngoing(true)
@@ -146,7 +146,7 @@ object Notifs {
 
     fun pairingWorking(context: Context): Notification =
         Notification.Builder(context, CHANNEL_PAIRING)
-            .setSmallIcon(R.drawable.ic_launcher_foreground)
+            .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle("正在配对…")
             .setOngoing(true)
             .build()
@@ -158,7 +158,7 @@ object Notifs {
         autoDismiss: Boolean
     ): Notification {
         val builder = Notification.Builder(context, CHANNEL_PAIRING)
-            .setSmallIcon(R.drawable.ic_launcher_foreground)
+            .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle(title)
             .setContentText(text)
             .setAutoCancel(true)
